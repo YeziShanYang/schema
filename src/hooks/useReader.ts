@@ -147,6 +147,8 @@ export interface RoadmapsApi {
   byPaper: Map<string, RecordData<RoadmapData>>
   touch: (paper: { paperId: string; arxivId: string; title: string }) => Promise<void>
   setStatus: (paperId: string, status: RoadmapStatus) => Promise<void>
+  /** Records that the reader has read the paper's overview (overviewReadAt), or clears it. */
+  setOverviewRead: (paper: { paperId: string; arxivId: string; title: string }, read: boolean) => Promise<void>
 }
 
 const TOUCH_INTERVAL_MS = 60_000
@@ -190,5 +192,16 @@ export function useRoadmaps(): RoadmapsApi {
     [byPaper, put],
   )
 
-  return { ready: ready && !!userId && status === 'ready', rows, byPaper, touch, setStatus }
+  const setOverviewRead = useCallback<RoadmapsApi['setOverviewRead']>(
+    async ({ paperId, arxivId, title }, read) => {
+      if (!userId) return
+      const overviewReadAt = read ? Date.now() : 0
+      const existing = byPaper.get(paperId)
+      if (existing) await put(existing.recordId, { overviewReadAt })
+      else await create({ userId, paperId, arxivId, title, status: 'reading', lastOpenedAt: Date.now(), finishedAt: 0, overviewReadAt })
+    },
+    [byPaper, create, put, userId],
+  )
+
+  return { ready: ready && !!userId && status === 'ready', rows, byPaper, touch, setStatus, setOverviewRead }
 }

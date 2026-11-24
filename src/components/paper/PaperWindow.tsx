@@ -3,8 +3,11 @@
  * around it. Clicking a branch opens a wide centered panel with the branch's
  * concepts in two columns; links load lazily when a branch opens. A
  * Walkthrough tab lists the paper's sections, and their concept chips open
- * the concept in its branch. Used at /p/[arxivId] (also signed out, in demo
- * mode) and at /w/[id]/p/[arxivId] inside a workspace.
+ * the concept in its branch. The overview window (step 0 of the sequence)
+ * opens on its own the first time a reader sees a paper they have not read
+ * the overview of, and from the center card, the strip and concept cards.
+ * Used at /p/[arxivId] (also signed out, in demo mode) and at
+ * /w/[id]/p/[arxivId] inside a workspace.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -16,6 +19,7 @@ import { arxivAbsUrl, parseArxivId } from '../../lib/arxiv'
 import { usePaper, useFinishPaper } from '../../hooks/usePaper'
 import { useReaderKnowledge } from '../../hooks/useDemoKnowledge'
 import { useRoadmaps } from '../../hooks/useReader'
+import { useOverview } from '../../hooks/useOverview'
 import { useAllowance } from '../../hooks/useAllowance'
 import { useWorkspaces } from '../../hooks/useWorkspaces'
 import { actions } from '../../lib/actions-client'
@@ -25,7 +29,10 @@ import { FloatingGraph } from '../graph/FloatingGraph'
 import { BranchNode, CenterCard } from '../graph/nodes'
 import { BranchPanel } from '../graph/BranchPanel'
 import { ConceptCard } from './ConceptCard'
+import { OverviewWindow, type OverviewConcept } from './OverviewWindow'
+import { SequenceStrip } from './SequenceStrip'
 import { ConceptName, MathText } from '../MathText'
+import { BookIcon } from '../icons'
 
 const STAGES = ['queued', 'text', 'concepts', 'overview', 'explain', 'ready'] as const
 /** Matches retryPaper: a run with no update for this long can be restarted. */
@@ -82,8 +89,18 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const lastOpened = useRef<string | null>(null)
   // What opened the panel when it was not a branch node (a walkthrough chip), so focus returns there.
   const lastTrigger = useRef<HTMLElement | null>(null)
+  const [overviewOpen, setOverviewOpen] = useState(false)
+  const [overviewFocus, setOverviewFocus] = useState('')
+  // Set once this page has decided whether the overview opens on its own (tests wait for it).
+  const [overviewSettled, setOverviewSettled] = useState(false)
+  const overviewTrigger = useRef<HTMLElement | null>(null)
+  const overviewButton = useRef<HTMLButtonElement | null>(null)
+  // When one panel closes because the other opens, the closing one leaves focus to the opening one.
+  const branchHandoff = useRef(false)
+  const overviewHandoff = useRef(false)
 
   const paper = p.paper
+  const ov = useOverview(paper, { signedIn: !!isSignedIn, isDemo: knowledge.isDemo })
   const roadmap = paper ? roadmaps.byPaper.get(paper.recordId) : undefined
   const finished = roadmap?.data.status === 'finished'
 
@@ -135,6 +152,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
     (key: string, concept?: string, trigger?: HTMLElement | null) => {
       lastOpened.current = key
       lastTrigger.current = trigger ?? null
+      branchHandoff.current = false
       setOpenKey(key)
       if (concept) setFocusConcept(concept)
       if (isSignedIn && p.linksForBranch(key) === 'needs-load' && !loadingBranches.has(key)) void loadLinks(key)
@@ -161,6 +179,45 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
       if (c) openBranch(c.data.branchKey, key, trigger)
     },
     [p.conceptByKey, openBranch],
+  )
+
+  // The overview closes the branch panel if one is open, and focus goes back to what opened it.
+  const openOverview = useCallback(
+    (focus?: string, trigger?: HTMLElement | null) => {
+      overviewTrigger.current = trigger ?? null
+      overviewHandoff.current = false
+      setOverviewFocus(focus ?? '')
+      if (openKey) {
+        branchHandoff.current = true
+        setOpenKey(null)
+      }
+      setOverviewOpen(true)
+    },
+    [openKey],
+  )
+  const leaveOverviewFor = useCallback((branchKey: string, concept: string) => {
+    overviewHandoff.current = true
+    setOverviewOpen(false)
+    openBranch(branchKey, concept)
+  }, [openBranch])
+
+  // Open the overview on its own once: the first time this browser shows the paper while it is unread.
+  const autoChecked = useRef('')
+  const { autoOpen, markAutoOpened, known: overviewKnown } = ov
+  useEffect(() => {
+    if (!paper || paper.data.status !== 'ready' || !ov.overview || !overviewKnown || autoChecked.current === paper.recordId) return
+    autoChecked.current = paper.recordId
+    if (autoOpen) {
+      markAutoOpened()
+      openOverview()
+    }
+    setOverviewSettled(true)
+  }, [paper, ov.overview, overviewKnown, autoOpen, markAutoOpened, openOverview])
+
+  const { statusOf } = knowledge
+  const overviewConcepts = useMemo(
+    () => new Map<string, OverviewConcept>(p.sequence.concepts.map((c) => [c.key, { key: c.key, name: c.name, known: statusOf(c.topicKey) === 'known' }])),
+    [p.sequence, statusOf],
   )
 
   const branch = useMemo(() => p.branches.find((b) => b.key === openKey) ?? null, [p.branches, openKey])
@@ -210,6 +267,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const year = d.publishedAt ? d.publishedAt.slice(0, 4) : ''
   const firstAuthor = d.authors?.[0] ? `${d.authors[0].split(' ').slice(-1)[0]}${d.authors.length > 1 ? ' et al.' : ''}` : ''
   const seq = p.sequence
+  const overviewUnread = !!ov.overview && ov.known && !ov.read
   const stepOf = new Map(seq.steps.map((s) => [s.branchKey, s]))
   const branchLinks = branch ? p.linksForBranch(branch.key) : 'ready'
   const branchLoading = branch ? loadingBranches.has(branch.key) || branchLinks === 'loading' : false
@@ -232,7 +290,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   ) : null
 
   const center = (
-    <CenterCard label="Paper" className="w-[320px]">
+    <CenterCard label="Paper" className="w-[320px]" testId="paper-card" onOpen={ov.overview && d.status === 'ready' ? () => openOverview(undefined, overviewButton.current) : undefined}>
       <h2 className="mb-1 mt-1.5 text-[19px] font-semibold leading-tight">{d.title}</h2>
       <p className="mb-3 text-[13px] text-muted-foreground">
         {firstAuthor}{year && ` · ${year}`} · <span className="font-mono">arXiv {d.arxivId}</span>
@@ -270,14 +328,32 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
             <b className="font-semibold text-foreground tabular-nums">{p.progress.known} / {p.progress.total}</b>
           </div>
           <Meter value={p.progress.ratio} />
-          {finishControls && <div className="mt-3.5">{finishControls}</div>}
+          {(ov.overview || ov.generating || finishControls) && (
+            <div className="mt-3.5 flex flex-wrap items-center gap-2">
+              {ov.overview ? (
+                <Button ref={overviewButton} size="sm" variant="outline" onClick={(e) => openOverview(undefined, e.currentTarget)} data-testid="open-overview">
+                  <BookIcon size={14} /> Overview
+                </Button>
+              ) : ov.generating ? (
+                <span className="text-xs text-muted-foreground" data-testid="overview-generating">Writing the overview…</span>
+              ) : null}
+              {finishControls}
+            </div>
+          )}
         </>
       )}
     </CenterCard>
   )
 
   return (
-    <div className="flex min-h-[calc(100vh-48px)] flex-col md:min-h-screen" data-testid="paper-page" data-paper-status={d.status}>
+    <div
+      className="flex min-h-[calc(100vh-48px)] flex-col md:min-h-screen"
+      data-testid="paper-page"
+      data-paper-status={d.status}
+      data-overview={ov.overview ? (ov.known ? (ov.read ? 'read' : 'unread') : 'loading') : 'none'}
+      data-overview-settled={overviewSettled || undefined}
+      data-overview-open={overviewOpen || undefined}
+    >
       {knowledge.isDemo && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent-soft px-5 py-2 text-sm md:px-7" data-testid="demo-banner" role="status">
           <span>Demo: your progress isn't saved. Sign in to keep it.</span>
@@ -320,40 +396,37 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
       </header>
 
       {p.concepts.length > 0 && d.status === 'ready' && (
-        <section className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border bg-surface-2 px-5 py-2.5 md:px-7" aria-label="Recommended sequence" data-testid="sequence-strip">
-          <ol className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px]">
-            {seq.steps.map((s, i) => (
-              <li key={s.branchKey} className="flex items-center gap-1.5">
-                {i > 0 && <span aria-hidden="true" className="text-faint">→</span>}
-                <button
-                  type="button"
-                  onClick={() => openBranch(s.branchKey)}
-                  data-testid="sequence-step"
-                  data-state={s.state}
-                  aria-current={s.state === 'current' ? 'step' : undefined}
-                  className={cn(
-                    'press cursor-pointer rounded-[3px] border px-1.5 py-0.5',
-                    s.state === 'current' ? 'border-primary bg-accent-soft text-primary' : 'border-transparent hover:bg-accent',
-                    s.state === 'done' && 'text-muted-foreground',
-                  )}
-                >
-                  <span className="font-mono text-[11px] tabular-nums">{s.index}</span> {s.name}
-                  {s.state === 'done' ? <span className="ml-1 text-known" aria-label="done">✓</span> : s.known > 0 && <span className="ml-1 text-muted-foreground tabular-nums">({s.known} of {s.total})</span>}
-                </button>
-              </li>
-            ))}
-          </ol>
-          {seq.allKnown ? (
-            <span className="flex items-center gap-2 text-[13px]" data-testid="sequence-done">
-              <span className="font-medium text-known">All concepts known</span>
-              {!finished && isSignedIn && <Button size="sm" onClick={() => setFinishOpen(true)}>Mark finished</Button>}
-            </span>
-          ) : seq.nextUp ? (
-            <Button size="sm" onClick={() => openBranch(seq.nextUp!.branchKey, seq.nextUp!.key)} data-testid="next-up">
-              Next up: <ConceptName name={seq.nextUp.name} />
-            </Button>
-          ) : null}
-        </section>
+        <SequenceStrip
+          steps={overviewUnread ? seq.steps.map((st) => (st.state === 'current' ? { ...st, state: 'upcoming' as const } : st)) : seq.steps}
+          overview={ov.overview ? { state: !ov.known ? 'upcoming' : ov.read ? 'done' : 'current' } : null}
+          onOpenBranch={(key) => openBranch(key)}
+          onOpenOverview={(el) => openOverview(undefined, el)}
+          action={
+            // Step 0 comes first even when every concept is known: the overview still tells the paper's story.
+            ov.overview && !ov.known ? null : overviewUnread ? (
+              <Button size="sm" className="h-[34px] max-[639px]:w-full" onClick={(e) => openOverview(undefined, e.currentTarget)} data-testid="next-up">
+                Next up: Read the overview
+              </Button>
+            ) : seq.allKnown ? (
+              <span className="flex h-[34px] items-center gap-2 text-[13px]" data-testid="sequence-done">
+                <span className="font-medium text-known">All concepts known</span>
+                {!finished && isSignedIn && <Button size="sm" onClick={() => setFinishOpen(true)}>Mark finished</Button>}
+              </span>
+            ) : seq.nextUp ? (
+              <Button
+                size="sm"
+                className="h-[34px] max-w-[min(28rem,40vw)] max-[639px]:w-full max-[639px]:max-w-full"
+                title={`Next up: ${seq.nextUp.name}`}
+                onClick={() => openBranch(seq.nextUp!.branchKey, seq.nextUp!.key)}
+                data-testid="next-up"
+              >
+                <span className="truncate">
+                  Next up: <ConceptName name={seq.nextUp.name} />
+                </span>
+              </Button>
+            ) : null
+          }
+        />
       )}
 
       {view === 'walkthrough' && p.sections.length > 0 ? (
@@ -424,7 +497,9 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
         open={!!branch}
         onClose={() => setOpenKey(null)}
         returnFocus={() =>
-          lastTrigger.current?.isConnected
+          branchHandoff.current
+            ? null
+            : lastTrigger.current?.isConnected
             ? lastTrigger.current
             : lastOpened.current
               ? branchButtons.current.get(lastOpened.current) ?? null
@@ -474,6 +549,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
                 topic={p.topicsByKey.get(c.data.topicKey)?.data}
                 prerequisites={(c.data.dependsOn ?? []).map((k) => ({ key: k, name: p.conceptByKey.get(k)?.data.name ?? k }))}
                 onOpenConcept={openConceptByKey}
+                onSeeInOverview={ov.overview ? () => openOverview(c.data.key, branchButtons.current.get(c.data.branchKey) ?? null) : undefined}
                 status={knowledge.statusOf(c.data.topicKey)}
                 knowledge={knowledge}
                 signedIn={!!isSignedIn}
@@ -485,6 +561,32 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
           </ul>
         )}
       </BranchPanel>
+
+      {ov.overview && (
+        <OverviewWindow
+          open={overviewOpen}
+          onClose={() => setOverviewOpen(false)}
+          returnFocus={() =>
+            overviewHandoff.current
+              ? null
+              : overviewTrigger.current?.isConnected
+                ? overviewTrigger.current
+                : overviewButton.current
+          }
+          paperTitle={d.title}
+          overview={ov.overview}
+          concepts={overviewConcepts}
+          focusKey={overviewFocus || undefined}
+          read={ov.read}
+          onReadChange={(v) => void ov.setRead(v)}
+          nextUpName={seq.nextUp?.name ?? null}
+          onStart={() => (seq.nextUp ? leaveOverviewFor(seq.nextUp.branchKey, seq.nextUp.key) : setOverviewOpen(false))}
+          onOpenConcept={(key) => {
+            const c = p.conceptByKey.get(key)
+            if (c) leaveOverviewFor(c.data.branchKey, key)
+          }}
+        />
+      )}
 
       <Modal open={finishOpen} onClose={() => setFinishOpen(false)} size="sm">
         <Modal.Header>

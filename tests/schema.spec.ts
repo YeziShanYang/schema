@@ -24,9 +24,33 @@ const FIXTURE_ID = '0000.00001'
 const FIXTURE_SLUG = '0000~00001'
 const READY_TIMEOUT = 90_000
 
-/** Drifting nodes never settle for Playwright's stability check, so specs run with the static graph. */
+/**
+ * Drifting nodes never settle for Playwright's stability check, so specs run
+ * with the static graph. The fixture paper's overview is also marked as
+ * already shown in this browser, so it does not open over the graph on its
+ * own (the overview spec checks that without this helper).
+ */
 async function calm(page: Page) {
   await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.addInitScript((id) => localStorage.setItem(`schema:overview-shown:${id}`, '1'), FIXTURE_ID)
+}
+
+/** Wait until the paper's overview and this reader's read mark have loaded. */
+async function overviewState(page: Page): Promise<'read' | 'unread'> {
+  const paperPage = page.getByTestId('paper-page')
+  await expect(paperPage).toHaveAttribute('data-overview', /^(read|unread)$/, { timeout: 30_000 })
+  return (await paperPage.getAttribute('data-overview')) as 'read' | 'unread'
+}
+
+/** Mark the overview read (or unread) through its window, opened from step 0 of the strip. */
+async function setOverviewRead(page: Page, read: boolean) {
+  if ((await overviewState(page)) === (read ? 'read' : 'unread')) return
+  await page.getByTestId('sequence-overview').click()
+  await expect(page.getByTestId('overview-window')).toBeVisible()
+  await page.getByTestId('overview-read').click()
+  await expect(page.getByTestId('paper-page')).toHaveAttribute('data-overview', read ? 'read' : 'unread')
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('overview-window')).toHaveCount(0)
 }
 
 async function openReadyFixturePaper(page: Page) {
@@ -117,11 +141,152 @@ test('analyze a paper end to end: graph, panel, lazy links, sequence, walkthroug
   await page.getByTestId('view-branches').click()
 })
 
+test('overview: opens on its own once, is step 0 until read, the read mark persists, chips open their concept', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  // Static graph, but without calm(): this spec checks the overview opening on its own.
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const paperPage = page.getByTestId('paper-page')
+  const win = page.getByTestId('overview-window')
+  const settled = () => expect(paperPage).toHaveAttribute('data-overview-settled', 'true', { timeout: 30_000 })
+  await page.goto(`/p/${FIXTURE_SLUG}`)
+  await settled()
+  // Start unread. Marking it unread here does not count as having opened on its own.
+  if ((await overviewState(page)) === 'read') {
+    await page.getByTestId('open-overview').click()
+    await page.getByTestId('overview-read').click()
+    await expect(paperPage).toHaveAttribute('data-overview', 'unread')
+    await page.keyboard.press('Escape')
+    await expect(win).toHaveCount(0)
+    await page.reload()
+    await settled()
+  }
+
+  // First visit while unread: it opens on its own, with the story, chips and their lines.
+  await expect(win).toBeVisible()
+  await expect(win.getByTestId('overview-plain')).toContainText('Attention lets a model decide which words matter most')
+  await expect(win.getByTestId('overview-step')).toHaveCount(3)
+  await expect(win.getByTestId('overview-map')).toHaveAttribute('data-layout', 'lines')
+  // c1 feeds s1 and s2, c2 feeds s2 and s3, c3 feeds s3; the unknown key is dropped.
+  await expect(win.getByTestId('overview-lines').locator('path.line')).toHaveCount(5)
+  await expect(win.getByTestId('overview-also').getByTestId('overview-chip')).toHaveAttribute('data-concept-key', 'c4')
+  // Hover and focus light up both ways.
+  await win.locator('[data-testid="overview-chips-left"] [data-concept-key="c2"], [data-testid="overview-chips-right"] [data-concept-key="c2"]').hover()
+  await expect(win.locator('[data-testid="overview-step"][data-hot="true"]')).toHaveCount(2)
+  await expect(win.locator('[data-testid="overview-step"][data-item-id="s1"]')).not.toHaveAttribute('data-hot', 'true')
+  await win.locator('[data-testid="overview-step"][data-item-id="s1"]').hover()
+  await expect(win.locator('[data-testid="overview-lines"] path.line.hot')).toHaveCount(1)
+  await expect(win.locator('[data-testid="overview-map"] [data-testid="overview-chip"][data-hot="true"]')).toHaveAttribute('data-concept-key', 'c1')
+  // The technical line renders through MathText.
+  await win.getByTestId('overview-technical-toggle').first().click()
+  await expect(win.getByTestId('overview-technical').first()).toContainText('softmax over scores')
+
+  // Esc closes it; focus lands on the center card's Overview button.
+  await page.keyboard.press('Escape')
+  await expect(win).toHaveCount(0)
+  await expect(page.getByTestId('open-overview')).toBeFocused()
+
+  // Until it is read it is the current step, and Next up points at it.
+  await expect(page.getByTestId('sequence-overview')).toHaveAttribute('data-state', 'current')
+  await expect(page.getByTestId('next-up')).toHaveText('Next up: Read the overview')
+  await expect(page.getByTestId('sequence-done')).toHaveCount(0)
+  await expect(page.locator('[data-testid="sequence-step"][data-state="current"]')).toHaveCount(0)
+
+  // It opened on its own once: a reload leaves it closed.
+  await page.reload()
+  await settled()
+  await expect(paperPage).not.toHaveAttribute('data-overview-open', 'true')
+  await expect(win).toHaveCount(0)
+
+  // Next up opens it; reading it moves the sequence on.
+  await page.getByTestId('next-up').click()
+  await expect(win).toBeVisible()
+  await expect(page.getByTestId('overview-read')).not.toBeChecked()
+  await page.getByTestId('overview-read').click()
+  await expect(paperPage).toHaveAttribute('data-overview', 'read')
+  await page.keyboard.press('Escape')
+  await expect(win).toHaveCount(0)
+  // Focus returns to Next up, or to the card's Overview button when Next up became "All concepts known".
+  await expect(page.locator('[data-testid="next-up"]:focus, [data-testid="open-overview"]:focus')).toHaveCount(1)
+  await expect(page.getByTestId('sequence-overview')).toHaveAttribute('data-state', 'done')
+  await expect(page.getByTestId('sequence-action')).not.toContainText('Read the overview')
+
+  // The read mark is saved: after a reload step 0 is done and the box stays ticked.
+  await page.reload()
+  expect(await overviewState(page)).toBe('read')
+  await expect(page.getByTestId('sequence-overview')).toHaveAttribute('data-state', 'done')
+  // Clicking the center card (not only its button) opens it.
+  await page.getByTestId('paper-card').locator('h2').click()
+  await expect(win).toBeVisible()
+  await expect(page.getByTestId('overview-read')).toBeChecked()
+
+  // A chip opens its concept's branch panel at that concept.
+  await win.locator('[data-testid="overview-map"] [data-testid="overview-chip"][data-concept-key="c3"]').click()
+  await expect(win).toHaveCount(0)
+  const panel = page.getByTestId('branch-panel')
+  await expect(panel).toBeVisible()
+  await expect(page.locator('[data-testid="branch"][data-branch-key="geometry"]')).toHaveAttribute('aria-expanded', 'true')
+  await expect(card(page, 'c3')).toBeInViewport()
+  await expect(panel.getByTestId('panel-close')).toBeFocused()
+
+  // "Where it fits" shows the plain role; "See in overview" goes back with the concept highlighted.
+  await expect(card(page, 'c3').getByTestId('concept-role')).toContainText('It measures the curve the correction follows.')
+  await card(page, 'c3').getByTestId('see-in-overview').click()
+  await expect(win).toBeVisible()
+  // Move the pointer off the window so a hover does not replace the requested highlight.
+  await page.mouse.move(2, 2)
+  await expect(panel).toHaveCount(0)
+  await expect(win.locator('[data-testid="overview-map"] [data-testid="overview-chip"][data-concept-key="c3"]')).toHaveAttribute('data-hot', 'true')
+  await expect(win.locator('[data-testid="overview-step"][data-item-id="s3"]')).toHaveAttribute('data-hot', 'true')
+  await page.keyboard.press('Escape')
+  await expect(win).toHaveCount(0)
+  await expect(page.locator('[data-testid="branch"][data-branch-key="geometry"]')).toBeFocused()
+})
+
+test('the step strip is one row at 1440 and puts Next up on its own row at 390', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await openReadyFixturePaper(page)
+  await overviewState(page)
+  const strip = page.getByTestId('sequence-strip')
+  const rows = async () =>
+    strip.locator('[data-testid="sequence-overview"], [data-testid="sequence-step"], [data-testid="sequence-action"]').evaluateAll((els) =>
+      els.map((e) => {
+        const r = e.getBoundingClientRect()
+        return { id: e.getAttribute('data-testid'), mid: r.top + r.height / 2, top: r.top, bottom: r.bottom, height: r.height }
+      }),
+    )
+  const wide = await rows()
+  expect(wide.length).toBe(6) // step 0, four branches, and Next up (or All concepts known)
+  for (const r of wide) {
+    expect(Math.abs(r.mid - wide[0].mid)).toBeLessThan(1)
+    expect(r.height).toBe(34)
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(strip.getByTestId('sequence-scroll')).toHaveAttribute('data-fade-right', 'true')
+  const narrow = await rows()
+  const steps = narrow.filter((r) => r.id !== 'sequence-action')
+  const next = narrow.find((r) => r.id === 'sequence-action')!
+  for (const r of steps) expect(Math.abs(r.mid - steps[0].mid)).toBeLessThan(1)
+  expect(next.top).toBeGreaterThan(Math.max(...steps.map((r) => r.bottom)))
+  // The steps scroll sideways instead of wrapping.
+  const scroll = await strip.getByTestId('sequence-scroll').evaluate((e) => ({ sw: e.scrollWidth, cw: e.clientWidth }))
+  expect(scroll.sw).toBeGreaterThan(scroll.cw)
+  await expect(strip.getByTestId('sequence-scroll')).toHaveAttribute('data-fade-right', 'true')
+})
+
 test('recommended sequence: next up follows prerequisites and opens the concept', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada] = await users(['Schema ada'])
   const page = ada.page
   await openReadyFixturePaper(page)
+  // Step 0 comes first; with the overview read, Next up names a concept.
+  await setOverviewRead(page, true)
   // Reset the four fixture topics to "not known".
   for (const [branch, key] of [['foundations', 'c1'], ['attention', 'c2'], ['geometry', 'c3'], ['other', 'c4']] as const) {
     await openBranch(page, branch)
@@ -344,6 +509,7 @@ test('finishing a paper can mark its remaining topics known; Read again reopens 
   await page.getByTestId('finish-toggle').click()
   await page.getByTestId('finish-confirm').click()
   await expect(page.getByTestId('paper-finished')).toBeVisible({ timeout: 15_000 })
+  await setOverviewRead(page, true)
   await expect(page.getByTestId('sequence-done')).toContainText('All concepts known')
   await openBranch(page, 'geometry')
   await expect(card(page, 'c3')).toHaveAttribute('data-status', 'known')
@@ -452,6 +618,10 @@ test('signed-out demo: status changes stay local, links and AI need sign-in', as
   await page.goto(`/p/${FIXTURE_SLUG}`)
   await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'ready', { timeout: 20_000 })
   await expect(page.getByTestId('demo-banner')).toContainText("Demo: your progress isn't saved")
+  // Demo mode keeps the overview's read mark in this browser.
+  await setOverviewRead(page, true)
+  await page.reload()
+  expect(await overviewState(page)).toBe('read')
   await openBranch(page, 'foundations')
   const c1 = card(page, 'c1')
   await expect(c1).toHaveAttribute('data-status', 'unknown')

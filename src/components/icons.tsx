@@ -85,3 +85,8 @@ export const DotIcon = (p: IconProps) => (
     <circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none" />
   </Svg>
 )
+export const ArrowRightIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M5 12h14M13 6l6 6-6 6" />
+  </Svg>
+)

@@ -133,9 +133,40 @@ export function CandidateNode({ title, reason, meta, busy, disabled, onAdd }: { 
   )
 }
 
-export function CenterCard({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+/**
+ * The card at the center of a graph. With `onOpen`, a click anywhere on the
+ * card that is not on one of its own controls calls it; the card's own button
+ * for the same action stays the keyboard and screen-reader path.
+ */
+export function CenterCard({
+  label,
+  children,
+  className,
+  onOpen,
+  testId,
+}: {
+  label: string
+  children: ReactNode
+  className?: string
+  onOpen?: () => void
+  testId?: string
+}) {
   return (
-    <div className={cn('graph-center w-[300px] max-w-[calc(100vw-48px)] rounded-lg border border-transparent bg-card px-5 py-[18px] shadow-[var(--shadow-ring-hi)]', className)}>
+    <div
+      data-testid={testId}
+      onClick={
+        onOpen
+          ? (e) => {
+              if (!(e.target as HTMLElement).closest('button, a, input, label, select, textarea')) onOpen()
+            }
+          : undefined
+      }
+      className={cn(
+        'graph-center w-[300px] max-w-[calc(100vw-48px)] rounded-lg border border-transparent bg-card px-5 py-[18px] shadow-[var(--shadow-ring-hi)]',
+        onOpen && 'cursor-pointer',
+        className,
+      )}
+    >
       <div className="label">{label}</div>
       {children}
     </div>

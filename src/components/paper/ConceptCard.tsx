@@ -23,6 +23,8 @@ interface Props {
   topic: TopicData | undefined
   prerequisites: { key: string; name: string }[]
   onOpenConcept?: (key: string) => void
+  /** Opens the paper overview with this concept highlighted. */
+  onSeeInOverview?: () => void
   status: KnowledgeStatus | null
   knowledge: KnowledgeApi
   signedIn: boolean
@@ -35,7 +37,7 @@ interface Props {
   nextUp?: boolean
 }
 
-export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcept, status, knowledge, signedIn, explainLeft, linksState, onSignIn, stepIndex, nextUp }: Props) {
+export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcept, onSeeInOverview, status, knowledge, signedIn, explainLeft, linksState, onSignIn, stepIndex, nextUp }: Props) {
   const c = concept.data
   const from = { paperId: paper.recordId, arxivId: paper.data.arxivId }
   const [choice, setChoice] = useState<number | null>(null)
@@ -94,8 +96,20 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
           </span>
         </div>
 
-        <div className="mt-1.5">
-        </div>
+        {c.plainRole && (
+          <p className="mt-1.5 text-[13px] leading-[1.45]" data-testid="concept-role">
+            <span className="label mr-1.5">Where it fits</span>
+            <MathText text={c.plainRole} />
+            {onSeeInOverview && (
+              <>
+                {' '}
+                <button type="button" onClick={onSeeInOverview} className="cursor-pointer whitespace-nowrap font-medium text-primary hover:underline" data-testid="see-in-overview">
+                  See in overview
+                </button>
+              </>
+            )}
+          </p>
+        )}
 
         {prerequisites.length > 0 && (
           <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">

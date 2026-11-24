@@ -386,6 +386,46 @@
 }
 .graph-links path.hot { stroke: var(--color-primary); }
 .graph-node[data-dragging="true"] { cursor: grabbing; }
+
+/* ---------- Sequence strip ----------
+   Steps never wrap; an overflowing row fades out at the edge that has more. */
+.strip-scroll { scrollbar-width: none; }
+.strip-scroll::-webkit-scrollbar { display: none; }
+.strip-scroll[data-fade-right="true"] { mask-image: linear-gradient(to right, black calc(100% - 40px), transparent); }
+.strip-scroll[data-fade-left="true"] { mask-image: linear-gradient(to right, transparent, black 40px); }
+.strip-scroll[data-fade-left="true"][data-fade-right="true"] {
+  mask-image: linear-gradient(to right, transparent, black 40px, black calc(100% - 40px), transparent);
+}
+
+/* ---------- Paper overview ----------
+   Connector lines match the graph's dashed links. They are revealed through a
+   mask whose solid strokes draw once on open (400ms ease-out), so the dashes
+   themselves never move; under reduced motion they appear at once. While a
+   sentence or chip is hot, its lines turn accent and the rest recede. */
+.overview-links .line {
+  fill: none;
+  stroke: var(--color-link);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  transition-property: stroke, opacity;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+.overview-links[data-active="true"] .line { opacity: 0.4; }
+.overview-links[data-active="true"] .line.hot { opacity: 1; stroke: var(--color-primary); stroke-width: 1.5; }
+.overview-links .draw { fill: none; stroke: white; stroke-width: 8; }
+@media (prefers-reduced-motion: no-preference) {
+  .overview-links .draw {
+    stroke-dasharray: 1 1;
+    animation: overview-draw 400ms ease-out both;
+  }
+}
+@keyframes overview-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+/* A known chip keeps the shared green outline; when hot it takes the accent fill too. */
+.overview-chip.known-outline[data-hot="true"] { background-color: var(--color-accent-soft); }
 .graph-node[data-dragging="true"] > * > * { box-shadow: var(--shadow-ring-hi); }
 
 /* ---------- Centered branch panel ----------
