@@ -21,6 +21,8 @@ import { demoSnapshot } from '../data/demo'
 import { DAILY_PAPER_CAP } from '../lib/cap'
 import { arxivSlug } from '../lib/arxiv'
 import { seo } from '../seo'
+import { MathText } from '../components/MathText'
+import { HeroSheet } from '../components/HeroSheet'
 
 const STEPS = [
   ['Pick a paper', 'Paste an arXiv link, or create a workspace for a subject and get three recommended papers.'],
@@ -75,23 +77,26 @@ export default function Landing() {
         </header>
 
         <main>
-          <section className="dot-grid border-b border-border">
-            <div className="mx-auto max-w-6xl px-4 py-14 md:px-6 md:py-20">
-              <p className="label enter" style={{ ['--i' as string]: 0 }}>Learning roadmaps for arXiv papers</p>
-              <h1 className="enter mt-3 max-w-3xl text-[34px] font-semibold leading-[1.1] tracking-[-0.01em] text-balance md:text-[44px]" style={{ ['--i' as string]: 1 }}>
-                See every idea a research paper relies on, and learn the ones you're missing.
-              </h1>
-              <p className="enter mt-4 max-w-2xl text-[15px] leading-relaxed text-muted-foreground text-pretty" style={{ ['--i' as string]: 2 }}>
-                Schema reads an arXiv paper once and lists the concepts it builds on, from foundations to the paper's own ideas, grouped into branches and ordered by prerequisite. You mark what you already know, and the rest comes with the passage that uses it, explainer links and an optional AI explanation. Your knowledge carries over from paper to paper.
-              </p>
-              <div className="enter mt-7 flex flex-wrap gap-2" style={{ ['--i' as string]: 3 }}>
-                <Link to={demoHref} className="press inline-flex h-10 items-center rounded bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-[color-mix(in_oklab,var(--color-primary)_88%,black)]" data-testid="landing-demo">
-                  Open the full demo
-                </Link>
-                <Link to="/home?signin=1" className="press inline-flex h-10 items-center rounded border border-border bg-card px-5 text-sm font-medium hover:bg-surface-2" data-testid="landing-start">
-                  Sign in to start a workspace
-                </Link>
+          <section className="dot-grid overflow-x-clip border-b border-border">
+            <div className="mx-auto max-w-6xl px-4 pt-14 md:px-6 md:pt-20 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-12">
+              <div className="lg:self-center lg:pb-14">
+                <p className="label enter" style={{ ['--i' as string]: 0 }}>Learning roadmaps for arXiv papers</p>
+                <h1 className="enter mt-3 max-w-3xl text-[34px] font-semibold leading-[1.1] tracking-[-0.01em] text-balance md:text-[44px]" style={{ ['--i' as string]: 1 }}>
+                  See every idea a research paper relies on, and learn the ones you're missing.
+                </h1>
+                <p className="enter mt-4 max-w-2xl text-[15px] leading-relaxed text-muted-foreground text-pretty" style={{ ['--i' as string]: 2 }}>
+                  Schema reads an arXiv paper once and lists the concepts it builds on, from foundations to the paper's own ideas, grouped into branches and ordered by prerequisite. You mark what you already know, and the rest comes with the passage that uses it, explainer links and an optional AI explanation. Your knowledge carries over from paper to paper.
+                </p>
+                <div className="enter mt-7 flex flex-wrap gap-2" style={{ ['--i' as string]: 3 }}>
+                  <Link to={demoHref} className="press inline-flex h-10 items-center rounded bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-[color-mix(in_oklab,var(--color-primary)_88%,black)]" data-testid="landing-demo">
+                    Open the full demo
+                  </Link>
+                  <Link to="/home?signin=1" className="press inline-flex h-10 items-center rounded border border-border bg-card px-5 text-sm font-medium hover:bg-surface-2" data-testid="landing-start">
+                    Sign in to start a workspace
+                  </Link>
+                </div>
               </div>
+              <HeroSheet snap={snap} className="mt-8 lg:mt-0 lg:self-end" />
             </div>
           </section>
 
@@ -175,7 +180,7 @@ export default function Landing() {
                           <p className="mt-1 text-[13px] text-muted-foreground">{c.whyNeeded}</p>
                           {c.quote && (
                             <blockquote className="mt-2 rounded-r border-l-2 border-border bg-surface-2 px-2.5 py-2 text-[12.5px] text-muted-foreground">
-                              “{c.quote}” <cite className="label mt-1 block not-italic text-faint">{c.section}</cite>
+                              “{c.quoteDisplay ? <MathText text={c.quoteDisplay} /> : c.quote}” <cite className="label mt-1 block not-italic text-faint">{c.section}</cite>
                             </blockquote>
                           )}
                           {topic?.resource && (

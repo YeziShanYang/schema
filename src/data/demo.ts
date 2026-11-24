@@ -14,6 +14,8 @@ export interface DemoConcept {
   tier: number
   whyNeeded: string
   quote: string
+  /** `quote` with its formulas as LaTeX; empty when the paper has none (see ConceptData.quoteDisplay). */
+  quoteDisplay?: string
   section: string
   topicKey: string
   explanation: string
