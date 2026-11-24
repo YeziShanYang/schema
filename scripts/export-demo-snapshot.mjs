@@ -3,13 +3,15 @@
  * page (src/data/demo-snapshot.json): metadata and the overview, branches
  * with their concepts (with the order and dependencies the recommended
  * sequence needs), one explainer link per topic, and any cached AI
- * explanations. Reads the
- * deployed app's public collections through the owner's agent tools.
+ * explanations, plus the abstract and the first page's text for the landing
+ * illustration. Reads the deployed app's public collections through the
+ * owner's agent tools, and the paper's extracted PDF text from the app's
+ * files.
  *
  *   node scripts/export-demo-snapshot.mjs [arxivId] [app]
  */
 import { writeFileSync } from 'node:fs'
-import { conceptsOf, query } from './agent.mjs'
+import { appFileText, conceptsOf, query } from './agent.mjs'
 
 const arxivId = process.argv[2] ?? '1706.03762'
 const app = process.argv[3] ?? 'schema'
@@ -26,6 +28,24 @@ const topics = Object.fromEntries(
     .map((t) => [t.data.key, { name: t.data.name, level: t.data.level, description: t.data.description, resource: (t.data.resources ?? [])[0] ?? null }]),
 )
 
+/**
+ * Verbatim pieces of the paper's first page from the stored PDF text: the
+ * arXiv stamp, the introduction (lines joined) and Figure 1's caption.
+ * Null when the text file can't be read; the landing then draws less.
+ */
+function firstPage(text) {
+  if (!text) return null
+  const flat = (s) => s.replace(/\s+/g, ' ').trim()
+  const start = text.search(/\n1\s*\n+\s*Introduction\s*\n/)
+  const end = text.search(/\n2\s*\n+\s*Background\s*\n/)
+  const introduction = start >= 0 && end > start ? flat(text.slice(start, end).replace(/^\s*1\s+Introduction\s*/, '')) : ''
+  return {
+    stamp: text.match(/^arXiv:\S+[^\n]*$/m)?.[0].trim() ?? '',
+    introduction,
+    figureCaption: text.match(/Figure 1: [^\n]+/)?.[0].trim() ?? '',
+  }
+}
+
 const snapshot = {
   note: `Real pipeline output for arXiv ${arxivId}, exported by scripts/export-demo-snapshot.mjs.`,
   exportedAt: new Date().toISOString().slice(0, 10),
@@ -35,6 +55,8 @@ const snapshot = {
     authors: (paper.data.authors ?? []).slice(0, 8),
     year: (paper.data.publishedAt ?? '').slice(0, 4),
     mainContribution: paper.data.mainContribution,
+    abstract: paper.data.abstract ?? '',
+    firstPage: firstPage(paper.data.textKey ? appFileText(app, paper.data.textKey) : ''),
     overview: paper.data.overview ?? null,
   },
   branches: (paper.data.branches ?? []).map((b) => ({

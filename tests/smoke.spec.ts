@@ -55,12 +55,17 @@ test.describe('Smoke tests', () => {
 
   test('landing hero draws its tags and phrases from the bundled snapshot', async ({ page }) => {
     const snap = JSON.parse(readFileSync(new URL('../src/data/demo-snapshot.json', import.meta.url), 'utf8')) as {
+      paper: { abstract: string; firstPage: { introduction: string; figureCaption: string } | null }
       branches: { key: string; concepts: { key: string; name: string; quote: string; quoteDisplay?: string }[] }[]
     }
     const concepts = new Map(snap.branches.flatMap((b) => b.concepts).map((c) => [c.key, c]))
     await page.emulateMedia({ reducedMotion: 'reduce' })
     await page.goto('/')
     await expect(page.getByTestId('hero-art')).toBeVisible()
+    // The sheet's body is the paper's real first page from the snapshot.
+    await expect(page.getByTestId('hero-art')).toContainText(snap.paper.abstract.slice(0, 60))
+    await expect(page.getByTestId('hero-art')).toContainText(snap.paper.firstPage!.introduction.slice(0, 60))
+    await expect(page.getByTestId('hero-art')).toContainText(snap.paper.firstPage!.figureCaption)
 
     const tags = page.getByTestId('hero-tag')
     const count = await tags.count()
