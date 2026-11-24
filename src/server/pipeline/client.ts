@@ -1,0 +1,47 @@
+/**
+ * The pipeline's only door to paid services. Real mode goes through the
+ * DeepSpace integration proxy, billed to the app owner (developer billing);
+ * fixture mode answers from canned data for local tests.
+ */
+
+import { buildCronContext } from 'deepspace/worker'
+import type { CronContext } from 'deepspace/worker'
+import type { Env } from '../../../worker'
+import { isFixtureId } from '../../lib/arxiv'
+import { fixtureIntegration, fixtureText } from './fixtures'
+
+export interface PipelineClient {
+  readonly fixtures: boolean
+  /** Returns the integration's `data`; throws on any failure. */
+  call(endpoint: string, body: Record<string, unknown>, hint?: string): Promise<unknown>
+  /** Download a text file (e.g. CloudConvert's export URL). */
+  fetchText(url: string, signal?: AbortSignal): Promise<string>
+}
+
+/** Fixture mode is possible only in local dev/test runs, and only for fixture ids. */
+export function fixturesAllowed(env: Env, arxivId: string): boolean {
+  return env.ALLOW_DEBUG_ROUTES === 'true' && isFixtureId(arxivId)
+}
+
+export function ownerContext(env: Env): CronContext {
+  return buildCronContext(env, env.OWNER_USER_ID, `app:${env.DEEPSPACE_APP_ID}`)
+}
+
+export function createPipelineClient(env: Env, arxivId: string, ctx: CronContext): PipelineClient {
+  if (fixturesAllowed(env, arxivId)) {
+    return {
+      fixtures: true,
+      call: async (endpoint, body, hint) => fixtureIntegration(endpoint, body, hint),
+      fetchText: async (url) => fixtureText(url),
+    }
+  }
+  return {
+    fixtures: false,
+    call: (endpoint, body) => ctx.integrations.call(endpoint, body),
+    fetchText: async (url, signal) => {
+      const res = await fetch(url, { signal: signal ?? AbortSignal.timeout(60_000) })
+      if (!res.ok) throw new Error(`Download failed with status ${res.status}`)
+      return res.text()
+    },
+  }
+}

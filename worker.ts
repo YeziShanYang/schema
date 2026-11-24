@@ -69,10 +69,13 @@ export class AppCronRoom extends CronRoom<Env> {
 export class AppJobRoom extends JobRoom<Env> {
   constructor(state: DurableObjectState, env: Env) {
     super(state, env, {
+      // Analyze jobs spend owner credits, so only the owner (admin) may
+      // enqueue, cancel or retry over the socket. Readers start jobs through
+      // the analyzePaper action, which enforces sign-in and the daily cap.
       authorizeWrite: async (user) => {
         if (user.userId.startsWith('anon-')) return false
         const role = await resolveAppRole(env, user.userId)
-        return role === 'member' || role === 'admin'
+        return role === 'admin'
       },
     })
   }
