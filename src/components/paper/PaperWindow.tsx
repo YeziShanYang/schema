@@ -193,14 +193,15 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const autoChecked = useRef('')
   const { autoOpen, markAutoOpened, known: overviewKnown } = ov
   useEffect(() => {
-    if (!paper || paper.data.status !== 'ready' || !ov.overview || !overviewKnown || autoChecked.current === paper.recordId) return
+    // Wait for the progress view's cross-fade to finish before opening it.
+    if (!paper || paper.data.status !== 'ready' || analysis !== 'off' || !ov.overview || !overviewKnown || autoChecked.current === paper.recordId) return
     autoChecked.current = paper.recordId
     if (autoOpen) {
       markAutoOpened()
       openOverview()
     }
     setOverviewSettled(true)
-  }, [paper, ov.overview, overviewKnown, autoOpen, markAutoOpened, openOverview])
+  }, [paper, analysis, ov.overview, overviewKnown, autoOpen, markAutoOpened, openOverview])
 
   const { statusOf } = knowledge
   const overviewConcepts = useMemo(

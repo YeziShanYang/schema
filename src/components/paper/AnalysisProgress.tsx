@@ -53,7 +53,7 @@ const STAGES: { key: JobStage; label: string; quiet: string[] }[] = [
   { key: 'text', label: 'Reading the PDF', quiet: ['Preparing', 'Converting the PDF to text'] },
   { key: 'concepts', label: 'Finding concepts', quiet: ['Finding the concepts this paper relies on'] },
   { key: 'overview', label: 'Writing the overview', quiet: ['Writing a plain-language overview'] },
-  { key: 'explain', label: 'Writing the walkthrough and check questions', quiet: ['Writing the section walkthrough and check questions'] },
+  { key: 'explain', label: 'Writing the walkthrough', quiet: ['Writing the section walkthrough and check questions', 'Writing the section walkthrough'] },
 ]
 const STAGE_KEYS = STAGES.map((s) => s.key)
 const STATE_WORDS: Record<StageState, string> = { done: 'done', active: 'in progress', waiting: 'waiting', failed: 'failed' }
@@ -509,7 +509,7 @@ function PaperSheet({ title, reached, moving }: { title: string; reached: number
           {/* While the overview is written: a bracket by the abstract and a tick in the right margin. */}
           <path className="note-a" style={{ ['--n' as string]: 0 }} pathLength={1} d="M8 46q-3 0-3 3v8q0 3 3 3" />
           <path className="note-a" style={{ ['--n' as string]: 1 }} pathLength={1} d="M134.5 105.5l2 2.5 4.5-5.5" />
-          {/* While the walkthrough and check questions are written: a question mark and a squiggle. */}
+          {/* While the walkthrough is written: a question mark and a squiggle. */}
           <path className="note-b" style={{ ['--n' as string]: 0 }} pathLength={1} d="M135.5 145.5q0-3.2 3-3.2t3 2.9q0 1.9-3 3.1v1.4M138.5 152.9v.2" />
           <path className="note-b" style={{ ['--n' as string]: 1 }} pathLength={1} d="M5.5 122.5q-1.6 2.2 0 4.4t0 4.4 0 4.4" />
         </svg>
