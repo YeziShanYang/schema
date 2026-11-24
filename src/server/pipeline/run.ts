@@ -4,8 +4,9 @@
  * `ctx.continue`, so no single run comes near the Worker subrequest limit and
  * a restart resumes from the last checkpoint instead of starting over.
  *
- * Steps: seed starter topics -> text -> concepts -> resources (chunked) ->
- * explain -> finish. Record writes produced by a step are queued in the
+ * Steps: seed starter topics -> text -> concepts -> explain -> finish.
+ * Explainer links are not fetched here; readers load them per branch on
+ * demand (src/server/branch-resources.ts). Record writes produced by a step are queued in the
  * checkpoint and flushed WRITES_PER_TICK at a time before the next step runs.
  *
  * Failures never throw out of the handler. A failing step is retried once
@@ -17,7 +18,7 @@
 import { appFiles } from 'deepspace/worker'
 import type { CronContext, Job, JobContext } from 'deepspace/worker'
 import type { Env } from '../../../worker'
-import type { ConceptDepth, Envelope, PaperData, TopicData, TopicLevel, TopicResource } from '../../types'
+import type { ConceptDepth, Envelope, PaperData, TopicData, TopicLevel } from '../../types'
 import { arxivPdfUrl, arxivSlug } from '../../lib/arxiv'
 import { preparePaperText } from '../../lib/paper-text'
 import { normalizeForMatch, isQuoteVerified } from '../../lib/quotes'
@@ -26,24 +27,17 @@ import { asString, asStringArray } from '../../lib/json'
 import { normalizeLevel, normalizeTopicKey, STARTER_TOPICS } from '../../lib/topics'
 import { cleanBranches } from '../../lib/branches'
 import { createPipelineClient, fixturesAllowed, ownerContext } from './client'
+import { refundAnalyze } from '../usage'
 import type { PipelineClient } from './client'
 import { callModelJson } from './llm'
-import {
-  CONCEPTS_SYSTEM,
-  conceptsUser,
-  EXPLAIN_SYSTEM,
-  explainUser,
-  RESOURCES_SYSTEM,
-  resourcesUser,
-  type Candidate,
-} from './prompts'
+import { CONCEPTS_SYSTEM, conceptsUser, EXPLAIN_SYSTEM, explainUser } from './prompts'
 
 export interface AnalyzePayload {
   paperId: string
   arxivId: string
 }
 
-type Step = 'seed' | 'text' | 'concepts' | 'resources' | 'explain' | 'finish'
+type Step = 'seed' | 'text' | 'concepts' | 'explain' | 'finish'
 
 interface PendingWrite {
   op: 'create' | 'update' | 'delete'
@@ -54,25 +48,14 @@ interface PendingWrite {
   ignoreDuplicate?: boolean
 }
 
-interface TopicInfo {
-  name: string
-  description: string
-  searchQuery: string
-}
-
 export interface AnalyzeState {
   step: Step
   text: string
   writes: PendingWrite[]
-  topicQueue: string[]
-  topicTotal: number
-  topicInfo: Record<string, TopicInfo>
   failures: number
-  exaFailures: number
 }
 
 const WRITES_PER_TICK = 20
-const TOPICS_PER_TICK = 5
 const MAX_CONCEPTS = 22
 const MAX_TOPICS_IN_PROMPT = 400
 /** Non-whitespace characters below which a PDF is treated as scanned or empty; real papers have tens of thousands. */
@@ -81,7 +64,7 @@ const MIN_TEXT_CHARS = 600
 class PermanentError extends Error {}
 
 function initialState(): AnalyzeState {
-  return { step: 'seed', text: '', writes: [], topicQueue: [], topicTotal: 0, topicInfo: {}, failures: 0, exaFailures: 0 }
+  return { step: 'seed', text: '', writes: [], failures: 0 }
 }
 
 function errMsg(e: unknown): string {
@@ -101,6 +84,7 @@ export async function runAnalyzeTick(job: Job, jobCtx: JobContext, env: Env): Pr
 
   if (jobCtx.signal.aborted) {
     await updatePaper(ctx, paper.recordId, { status: 'failed', stage: 'failed', error: 'Analysis was canceled.' })
+    await refundAnalyze(ctx.records, paper.recordId)
     return { canceled: true }
   }
 
@@ -129,6 +113,12 @@ export async function runAnalyzeTick(job: Job, jobCtx: JobContext, env: Env): Pr
       return
     }
     await updatePaper(ctx, paper.recordId, { status: 'failed', stage: 'failed', error: message, progressMessage: '' })
+    // A failed analysis does not use up the requester's daily slot.
+    try {
+      await refundAnalyze(ctx.records, paper.recordId)
+    } catch (refundError) {
+      console.error(`[analyze] refund failed for ${payload.arxivId}: ${errMsg(refundError)}`)
+    }
     return { ok: false, error: message }
   }
 }
@@ -143,6 +133,8 @@ interface StepCtx {
 
 /** Runs the current step. Returns true when the whole job is finished. */
 async function runStep(state: AnalyzeState, s: StepCtx): Promise<boolean> {
+  // Checkpoints saved before links became lazy may still name the old step.
+  if ((state.step as string) === 'resources') state.step = 'explain'
   switch (state.step) {
     case 'seed':
       await stepSeed(state, s)
@@ -152,9 +144,6 @@ async function runStep(state: AnalyzeState, s: StepCtx): Promise<boolean> {
       return false
     case 'concepts':
       await stepConcepts(state, s)
-      return false
-    case 'resources':
-      await stepResources(state, s)
       return false
     case 'explain':
       await stepExplain(state, s)
@@ -185,7 +174,7 @@ async function stepSeed(state: AnalyzeState, { ctx, paper }: StepCtx) {
       op: 'create',
       collection: 'topics',
       ignoreDuplicate: true,
-      data: { ...t, searchQuery: `${t.name} tutorial for beginners`, resources: [], resourcesStatus: 'none', origin: 'starter' },
+      data: { ...t, searchQuery: `${t.name} tutorial for beginners`, resources: [], resourcesStatus: 'none', resourcesLoadingAt: 0, origin: 'starter' },
     })
   }
   state.step = 'text'
@@ -329,6 +318,7 @@ async function stepConcepts(state: AnalyzeState, { ctx, client, paper }: StepCtx
       searchQuery: asString(c.topic.search_query, 200) || `${name} explained for beginners`,
       resources: [],
       resourcesStatus: 'none',
+      resourcesLoadingAt: 0,
       origin: 'paper',
     })
   }
@@ -368,114 +358,15 @@ async function stepConcepts(state: AnalyzeState, { ctx, client, paper }: StepCtx
     })
   }
 
-  // Topics that still need learning resources (shared across papers).
-  const needed = [...new Set(Object.values(topicFor))].filter((k) => byKey.get(k)?.data.resourcesStatus !== 'ready')
-  state.topicQueue = needed
-  state.topicTotal = needed.length
-  state.topicInfo = {}
-  for (const k of needed) {
-    const t = byKey.get(k)?.data ?? newTopics.get(k)
-    if (t) state.topicInfo[k] = { name: t.name, description: t.description, searchQuery: t.searchQuery || t.name }
-  }
-
-  state.step = 'resources'
+  state.step = 'explain'
   await updatePaper(ctx, paper.recordId, {
-    stage: 'resources',
-    progress: 0.4,
+    stage: 'explain',
+    progress: 0.6,
     mainContribution: asString(json.main_contribution, 800),
     conceptCount: graph.ids.length,
     branches,
-    progressMessage: needed.length ? `Finding explainers for ${needed.length} topics` : 'Writing the walkthrough',
-  })
-}
-
-function extractCandidates(v: unknown): Candidate[] {
-  const results = v && typeof v === 'object' ? (v as { results?: unknown }).results : null
-  if (!Array.isArray(results)) return []
-  const out: Candidate[] = []
-  for (const r of results) {
-    if (!r || typeof r !== 'object') continue
-    const o = r as Record<string, unknown>
-    const url = asString(o.url, 500)
-    if (!/^https?:\/\//.test(url)) continue
-    out.push({
-      title: asString(o.title, 200) || url,
-      url,
-      snippet: asString(o.text ?? o.summary ?? o.highlights, 4000).replace(/\s+/g, ' ').slice(0, 280),
-    })
-  }
-  return out.slice(0, 5)
-}
-
-async function stepResources(state: AnalyzeState, { ctx, client, paper }: StepCtx) {
-  if (state.topicQueue.length === 0) {
-    state.step = 'explain'
-    await updatePaper(ctx, paper.recordId, { stage: 'explain', progress: 0.8, progressMessage: 'Writing the section walkthrough and check questions' })
-    return
-  }
-  const batch = state.topicQueue.slice(0, TOPICS_PER_TICK)
-  const items: { key: string; name: string; description: string; candidates: Candidate[] }[] = []
-  for (const key of batch) {
-    const info = state.topicInfo[key] ?? { name: key, description: '', searchQuery: key }
-    let candidates: Candidate[] = []
-    // Two failed searches in a row means the provider is down; stop paying for more.
-    if (state.exaFailures < 2) {
-      try {
-        candidates = extractCandidates(await client.call('exa/search', { query: info.searchQuery, numResults: 5 }, 'search'))
-        state.exaFailures = 0
-      } catch (e) {
-        state.exaFailures += 1
-        console.warn(`[analyze] exa search failed for ${key}: ${errMsg(e)}`)
-      }
-    }
-    items.push({ key, name: info.name, description: info.description, candidates })
-  }
-
-  const picks: Record<string, TopicResource[]> = {}
-  const withResults = items.filter((i) => i.candidates.length > 0)
-  if (withResults.length > 0) {
-    const json = await callModelJson(client, {
-      system: RESOURCES_SYSTEM,
-      user: resourcesUser(withResults),
-      maxTokens: 6000,
-      hint: 'resources',
-    })
-    const topics = Array.isArray(json.topics) ? json.topics : []
-    for (const t of topics) {
-      if (!t || typeof t !== 'object') continue
-      const key = asString((t as Record<string, unknown>).key, 120)
-      const item = withResults.find((i) => i.key === key)
-      if (!item) continue
-      const resources = Array.isArray((t as Record<string, unknown>).resources) ? ((t as Record<string, unknown>).resources as unknown[]) : []
-      picks[key] = []
-      for (const r of resources.slice(0, 2)) {
-        if (!r || typeof r !== 'object') continue
-        const url = asString((r as Record<string, unknown>).url, 500)
-        const cand = item.candidates.find((c) => c.url === url)
-        if (!cand) continue // never store a URL the search did not return
-        picks[key].push({ title: cand.title, url: cand.url, why: asString((r as Record<string, unknown>).why, 300) })
-      }
-    }
-  }
-
-  for (const it of items) {
-    const rows = (await ctx.records.query('topics', { where: { key: it.key }, limit: 1 })) as Envelope<TopicData>[]
-    const row = rows[0]
-    if (!row) continue
-    const resources = picks[it.key] ?? []
-    state.writes.push({
-      op: 'update',
-      collection: 'topics',
-      recordId: row.recordId,
-      data: { resources, resourcesStatus: resources.length > 0 ? 'ready' : 'failed' },
-    })
-  }
-
-  state.topicQueue = state.topicQueue.slice(batch.length)
-  const done = state.topicTotal - state.topicQueue.length
-  await updatePaper(ctx, paper.recordId, {
-    progress: 0.4 + 0.4 * (state.topicTotal ? done / state.topicTotal : 1),
-    progressMessage: `Found explainers for ${done} of ${state.topicTotal} topics`,
+    topicKeys: [...new Set(Object.values(topicFor))],
+    progressMessage: 'Writing the section walkthrough and check questions',
   })
 }
 

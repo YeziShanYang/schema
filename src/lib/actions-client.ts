@@ -40,13 +40,44 @@ export interface AnalyzeResult {
   status: string
 }
 
+export interface Allowance {
+  used: number
+  remaining: number
+  allowed: boolean
+  nextSlotAt: number
+}
+
+export interface Allowances {
+  analyze: Allowance
+  recommend: Allowance
+  explain: Allowance
+  branch: Allowance
+}
+
+/** Fired after a metered action so allowance displays refresh. */
+export const USAGE_EVENT = 'schema:usage'
+
+async function metered<T>(p: Promise<ActionResponse<T>>): Promise<ActionResponse<T>> {
+  const r = await p
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(USAGE_EVENT))
+  return r
+}
+
 export const actions = {
+  myAllowance: () => callAction<Allowances>('myAllowance'),
   analyzePaper: (input: string, workspaceId?: string) =>
-    callAction<AnalyzeResult>('analyzePaper', workspaceId ? { input, workspaceId } : { input }),
-  retryPaper: (paperId: string) => callAction<{ paperId: string }>('retryPaper', { paperId }),
+    metered(callAction<AnalyzeResult>('analyzePaper', workspaceId ? { input, workspaceId } : { input })),
+  retryPaper: (paperId: string) => metered(callAction<{ paperId: string }>('retryPaper', { paperId })),
   seedTopics: () => callAction<{ remaining: number }>('seedTopics'),
   recommendPapers: (workspaceId: string) =>
-    callAction<{ suggestions: Suggestion[]; remaining: number }>('recommendPapers', { workspaceId }),
+    metered(callAction<{ suggestions: Suggestion[]; remaining: number }>('recommendPapers', { workspaceId })),
   explainConcept: (conceptId: string) =>
-    callAction<{ explanation: string; cached: boolean }>('explainConcept', { conceptId }),
+    metered(callAction<{ explanation: string; cached: boolean }>('explainConcept', { conceptId })),
+  loadBranchResources: (paperId: string, branchKey: string) =>
+    metered(
+      callAction<{ loaded: number; failed: number; remaining: number; busy: number; allowanceLeft: number }>('loadBranchResources', {
+        paperId,
+        branchKey,
+      }),
+    ),
 }

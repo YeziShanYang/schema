@@ -46,8 +46,8 @@ export const papersSchema: CollectionSchema = {
     { name: 'textChars', storage: 'number', interpretation: 'plain' },
     { name: 'textKey', storage: 'text', interpretation: 'plain' },
     { name: 'conceptCount', storage: 'number', interpretation: 'plain' },
-    { name: 'requestedBy', storage: 'text', interpretation: 'plain' },
     { name: 'branches', storage: 'text', interpretation: { kind: 'json' } },
+    { name: 'topicKeys', storage: 'text', interpretation: { kind: 'json' } },
   ],
   uniqueOn: ['arxivId'],
   permissions: readOnlyForEveryone,
@@ -69,8 +69,9 @@ export const topicsSchema: CollectionSchema = {
     {
       name: 'resourcesStatus',
       storage: 'text',
-      interpretation: { kind: 'select', options: ['none', 'ready', 'failed'] },
+      interpretation: { kind: 'select', options: ['none', 'loading', 'ready', 'failed'] },
     },
+    { name: 'resourcesLoadingAt', storage: 'number', interpretation: 'plain' },
     {
       name: 'origin',
       storage: 'text',

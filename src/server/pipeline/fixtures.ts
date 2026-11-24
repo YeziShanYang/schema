@@ -125,7 +125,10 @@ function message(text: string) {
 
 /** Respond like the real integration would, keyed by endpoint and a stage hint. */
 export function fixtureIntegration(endpoint: string, body: Record<string, unknown>, hint?: string): unknown {
-  if (endpoint === 'cloudconvert/convert-file') return { downloadUrl: 'fixture://paper.txt' }
+  if (endpoint === 'cloudconvert/convert-file') {
+    // Fixture ids ending in 9999 behave like a scanned PDF with no text, so the analysis fails.
+    return { downloadUrl: String(body.url ?? '').endsWith('9999') ? 'fixture://scanned.txt' : 'fixture://paper.txt' }
+  }
   if (endpoint === 'exa/search' && Array.isArray(body.includeDomains) && body.includeDomains.includes('arxiv.org')) {
     return {
       results: [
@@ -169,5 +172,6 @@ export function fixtureIntegration(endpoint: string, body: Record<string, unknow
 
 export function fixtureText(url: string): string {
   if (url === 'fixture://paper.txt') return FIXTURE_PAPER_TEXT
+  if (url === 'fixture://scanned.txt') return '   \f  '
   throw new Error(`No fixture text for ${url}`)
 }

@@ -10,7 +10,18 @@ import { Button, Input } from './ui'
 import { actions } from '../lib/actions-client'
 import { arxivSlug } from '../lib/arxiv'
 
-export function AnalyzeForm({ workspaceId, placeholder }: { workspaceId?: string; placeholder?: string }) {
+export function AnalyzeForm({
+  workspaceId,
+  placeholder,
+  stay,
+  onAdded,
+}: {
+  workspaceId?: string
+  placeholder?: string
+  /** Stay on the current page after adding (workspace view) instead of opening the paper. */
+  stay?: boolean
+  onAdded?: (arxivId: string) => void
+}) {
   const { isSignedIn } = useAuth()
   const navigate = useNavigate()
   const [input, setInput] = useState('')
@@ -27,7 +38,9 @@ export function AnalyzeForm({ workspaceId, placeholder }: { workspaceId?: string
     const r = await actions.analyzePaper(input, workspaceId)
     setBusy(false)
     if (!r.success) return setError(r.error)
-    navigate(`/p/${arxivSlug(r.data.arxivId)}`)
+    setInput('')
+    onAdded?.(r.data.arxivId)
+    if (!stay) navigate(`/p/${arxivSlug(r.data.arxivId)}`)
   }
 
   return (
@@ -41,7 +54,7 @@ export function AnalyzeForm({ workspaceId, placeholder }: { workspaceId?: string
           data-testid="analyze-input"
         />
         <Button type="submit" loading={busy} data-testid="analyze-submit">
-          Analyze
+          {workspaceId ? 'Add paper' : 'Open paper'}
         </Button>
       </div>
       {error && (

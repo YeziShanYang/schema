@@ -23,8 +23,9 @@ export interface PaperData {
   textChars: number
   textKey: string
   conceptCount: number
-  requestedBy: string
   branches: Branch[]
+  /** Distinct topic keys of this paper's concepts, for progress without loading concepts. */
+  topicKeys: string[]
 }
 
 /** A thematic group of concepts in one paper (reader-independent). */
@@ -36,7 +37,7 @@ export interface Branch {
 
 export type TopicLevel = 'foundation' | 'core' | 'specialized'
 export type TopicOrigin = 'starter' | 'paper'
-export type ResourcesStatus = 'none' | 'ready' | 'failed'
+export type ResourcesStatus = 'none' | 'loading' | 'ready' | 'failed'
 
 export interface TopicResource {
   title: string
@@ -52,6 +53,8 @@ export interface TopicData {
   searchQuery: string
   resources: TopicResource[]
   resourcesStatus: ResourcesStatus
+  /** When a branch load marked this topic `loading` (ms epoch); a mark older than 5 minutes is stale. */
+  resourcesLoadingAt: number
   origin: TopicOrigin
 }
 
@@ -118,7 +121,8 @@ export interface RoadmapData {
   finishedAt: number
 }
 
-export type WorkspacePaperStatus = 'current' | 'finished' | 'previous'
+/** "current" and "previous" are legacy values from the single-target model and read as "active". */
+export type WorkspacePaperStatus = 'active' | 'finished' | 'current' | 'previous'
 
 export interface WorkspacePaper {
   paperId: string
@@ -139,6 +143,7 @@ export interface WorkspaceData {
   userId: string
   name: string
   description: string
+  /** The paper opened most recently from this workspace. */
   currentPaperId: string
   papers: WorkspacePaper[]
   suggestions: Suggestion[]
@@ -146,12 +151,15 @@ export interface WorkspaceData {
   lastOpenedAt: number
 }
 
-export type UsageKind = 'recommend' | 'explain'
+export type UsageKind = 'analyze' | 'recommend' | 'explain' | 'branch'
+export type UsageState = 'counted' | 'refunded'
 
 export interface UsageEventData {
   userId: string
   kind: UsageKind
   ref: string
+  /** Absent on rows written before refunds existed; treated as counted. */
+  state?: UsageState
 }
 
 /** Envelope as returned by worker-side record queries. */

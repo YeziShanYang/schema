@@ -4,6 +4,9 @@ export const APP_NAME = 'schema'
 /** Name shown in the UI. */
 export const APP_DISPLAY_NAME = 'Schema'
 
+/** The paper the signed-out demo and the landing example use (Attention Is All You Need). */
+export const DEMO_ARXIV_ID = '1706.03762'
+
 /** Immutable app identity — data scope keys to this, so renames never
  *  strand your records.
  *

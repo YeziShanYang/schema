@@ -4,12 +4,12 @@
  * External services are mocked at the integration boundary: in a local test
  * run (ALLOW_DEBUG_ROUTES=true) papers whose id starts with "0000." and
  * workspaces named "[fixture] …" get canned CloudConvert / Claude / Exa /
- * arXiv responses (src/server/pipeline/fixtures.ts). The server actions, the
- * analyze job, the record rooms, RBAC and the UI all run for real.
+ * arXiv responses (src/server/pipeline/fixtures.ts). Fixture ids ending in
+ * 9999 behave like a scanned PDF and fail. The server actions, the analyze
+ * job, the record rooms, RBAC and the UI all run for real.
  *
- * The specs are written to be re-runnable against a persisted local state:
- * a fixture paper analyzed in an earlier run is reused, and assertions reset
- * the state they depend on first.
+ * The specs are re-runnable against persisted local state: a fixture paper
+ * analyzed earlier is reused, and each spec resets the state it checks.
  */
 import { test, expect, loadAllTestAccounts } from 'deepspace/testing'
 import type { Page } from '@playwright/test'
@@ -28,7 +28,6 @@ async function openReadyFixturePaper(page: Page) {
   await page.getByTestId('analyze-input').fill(FIXTURE_ID)
   await page.getByTestId('analyze-submit').click()
   await expect(page).toHaveURL(new RegExp(`/p/${FIXTURE_SLUG}$`), { timeout: 15_000 })
-  // A failed earlier run is retried through the UI (the requester sees Retry).
   const paperPage = page.getByTestId('paper-page')
   await expect(paperPage).toHaveAttribute('data-paper-status', /ready|failed/, { timeout: READY_TIMEOUT })
   if ((await paperPage.getAttribute('data-paper-status')) === 'failed') {
@@ -45,60 +44,75 @@ async function openBranch(page: Page, key: string) {
   await page.locator(`[data-testid="branch"][data-branch-key="${key}"]`).click()
 }
 
-test('analyze a paper end to end: branches, tiers, quotes, resources, walkthrough', async ({ users }) => {
+/** Put a concept's topic back to "not known" through the UI. */
+async function resetStatus(page: Page, key: string) {
+  const c = card(page, key)
+  const s = await c.getAttribute('data-status')
+  if (s === 'known') await c.getByTestId('status-known').click()
+  else if (s === 'learning') await c.getByTestId('status-learning').click()
+  await expect(c).toHaveAttribute('data-status', 'unknown')
+}
+
+test('analyze a paper end to end: branches, quotes, lazy links, walkthrough chips', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada] = await users(['Schema ada'])
   const page = ada.page
   await openReadyFixturePaper(page)
 
   await expect(page.getByTestId('paper-title')).toHaveText('A Fixture Paper on Curvature-Aware Attention')
-  // Three model branches plus "Other concepts" for the concept with an unknown branch key.
   const branchKeys = await page.getByTestId('branch').evaluateAll((els) => els.map((e) => e.getAttribute('data-branch-key')))
   expect(branchKeys).toEqual(['foundations', 'attention', 'geometry', 'other'])
 
   await openBranch(page, 'foundations')
-  await expect(card(page, 'c1')).toBeVisible()
   await expect(card(page, 'c1').locator('blockquote')).toContainText('The softmax function turns a vector')
+
+  // Links are loaded per branch on demand (cached afterwards).
+  const load = page.getByTestId('load-links')
+  if (await load.isVisible()) await load.click()
+  await expect(page.getByTestId('branch-links')).toHaveAttribute('data-links', 'ready', { timeout: 20_000 })
   await expect(card(page, 'c1').getByTestId('concept-resources')).toBeVisible()
 
   // The invented quote failed verification, so it is not shown.
   await openBranch(page, 'other')
-  await expect(card(page, 'c4')).toBeVisible()
   await expect(card(page, 'c4').locator('blockquote')).toHaveCount(0)
 
-  // c3 depended on a missing concept (c9); only the real prerequisite remains.
+  // Prerequisite chips open the concept they name.
   await openBranch(page, 'geometry')
-  await expect(card(page, 'c3')).toContainText('Learn first: Attention as a weighted average')
+  await card(page, 'c3').getByRole('button', { name: 'Attention as a weighted average' }).click()
+  await expect(page.locator('[data-testid="branch"][data-branch-key="attention"]')).toHaveAttribute('aria-pressed', 'true')
 
+  // Walkthrough chips open the concept too.
   await page.getByTestId('view-walkthrough').click()
   await expect(page.getByTestId('walkthrough').locator('li')).toHaveCount(3)
+  await page.getByTestId('walkthrough-chip').filter({ hasText: 'Second fundamental form' }).first().click()
+  await expect(card(page, 'c3')).toBeVisible()
+  await expect(page.locator('[data-testid="branch"][data-branch-key="geometry"]')).toHaveAttribute('aria-pressed', 'true')
 })
 
-test('knowledge is private per reader while the paper is shared', async ({ users }) => {
+test('three-state status control, saved per reader; the paper is shared', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada, bob] = await users(['Schema ada', 'Schema bob'])
   await openReadyFixturePaper(ada.page)
   await openBranch(ada.page, 'foundations')
   const c1 = card(ada.page, 'c1')
+  await resetStatus(ada.page, 'c1')
+  const progress = ada.page.locator('[data-branch-key="foundations"] [data-testid="branch-progress"]')
+  await expect(progress).toHaveText('0/1')
 
-  // Reset, then mark known.
-  if (await c1.getByTestId('mark-clear').isVisible()) await c1.getByTestId('mark-clear').click()
-  await expect(c1).toHaveAttribute('data-status', 'unknown')
-  await expect(ada.page.locator('[data-branch-key="foundations"] [data-testid="branch-progress"]')).toHaveText('0/1')
-  await c1.getByTestId('mark-known').click()
+  await c1.getByTestId('status-learning').click()
+  await expect(c1).toHaveAttribute('data-status', 'learning')
+  await expect(progress).toHaveText('0/1')
+  await c1.getByTestId('status-known').click()
   await expect(c1).toHaveAttribute('data-status', 'known')
-  await expect(ada.page.locator('[data-branch-key="foundations"] [data-testid="branch-progress"]')).toHaveText('1/1')
+  await expect(progress).toHaveText('1/1')
 
-  // Persists across a reload.
   await ada.page.reload()
   await openBranch(ada.page, 'foundations')
   await expect(card(ada.page, 'c1')).toHaveAttribute('data-status', 'known', { timeout: 15_000 })
 
-  // Shows up in Ada's knowledge profile.
   await ada.page.goto('/knowledge')
   await expect(ada.page.locator('[data-testid="knowledge-item"][data-topic-key="softmax-function"]')).toBeVisible()
 
-  // Bob sees the same paper but none of Ada's progress.
   await bob.page.goto(`/p/${FIXTURE_SLUG}`)
   await expect(bob.page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'ready', { timeout: 20_000 })
   await openBranch(bob.page, 'foundations')
@@ -115,10 +129,9 @@ test('a correct check answer marks the topic known; Explain with AI is cached on
   await openReadyFixturePaper(page)
   await openBranch(page, 'attention')
   const c2 = card(page, 'c2')
-  if (await c2.getByTestId('mark-clear').isVisible()) await c2.getByTestId('mark-clear').click()
-  await expect(c2).toHaveAttribute('data-status', 'unknown')
+  await resetStatus(page, 'c2')
 
-  await c2.getByTestId('concept-check').locator('summary').click()
+  await c2.getByTestId('check-toggle').click()
   await c2.getByTestId('check-choice').nth(1).click() // "Value vectors" is the fixture's correct answer
   await expect(c2.getByTestId('check-result')).toContainText('Correct')
   await expect(c2).toHaveAttribute('data-status', 'known')
@@ -128,12 +141,13 @@ test('a correct check answer marks the topic known; Explain with AI is cached on
   await expect(c2.getByTestId('concept-explanation')).toContainText('Worked example', { timeout: 15_000 })
 })
 
-test('workspace: recommend papers, pick one, it becomes the target', async ({ users }) => {
+test('workspace: create, recommend, add two papers, open one, finish and reopen', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada] = await users(['Schema ada'])
   const page = ada.page
   await page.goto('/home')
   const name = `[fixture] Attention basics ${Date.now()}`
+  await page.getByTestId('new-workspace').click()
   await page.getByLabel('Workspace name').fill(name)
   await page.getByRole('button', { name: 'Create workspace' }).click()
   await expect(page.getByTestId('workspace-name')).toHaveText(name, { timeout: 15_000 })
@@ -141,40 +155,75 @@ test('workspace: recommend papers, pick one, it becomes the target', async ({ us
   await page.getByTestId('recommend-button').click()
   // The fixture ranking picks results 1, 2 and an invented number 9; only the two real ones survive.
   await expect(page.getByTestId('suggestion')).toHaveCount(2, { timeout: 15_000 })
-  await expect(page.getByTestId('suggestion').first()).toContainText('arXiv 0000.00011')
 
+  // Adding both keeps both: a workspace holds several papers at once.
   await page.getByTestId('pick-suggestion').first().click()
-  await expect(page).toHaveURL(/\/p\/0000~00011$/, { timeout: 15_000 })
-  await page.goBack()
-  await expect(page.getByTestId('target-link')).toBeVisible({ timeout: 15_000 })
-  await expect(page.getByTestId('workspace-history')).toContainText('current')
+  await expect(page.getByTestId('workspace-paper')).toHaveCount(1, { timeout: 15_000 })
+  await page.getByTestId('pick-suggestion').first().click()
+  await expect(page.getByTestId('workspace-paper')).toHaveCount(2, { timeout: 15_000 })
+  await expect(page.getByTestId('suggestion')).toHaveCount(0)
+  await page.getByTestId('analyze-input').fill(FIXTURE_ID)
+  await page.getByTestId('analyze-submit').click()
+  await expect(page.getByTestId('workspace-paper')).toHaveCount(3, { timeout: 15_000 })
+
+  const row = page.locator(`[data-testid="workspace-paper"][data-arxiv="${FIXTURE_ID}"]`)
+  await row.getByTestId('workspace-paper-toggle').click()
+  await expect(row).toHaveAttribute('data-status', 'finished')
+  await row.getByTestId('workspace-paper-toggle').click()
+  await expect(row).toHaveAttribute('data-status', 'active')
+
+  await row.getByTestId('workspace-paper-link').click()
+  await expect(page).toHaveURL(new RegExp(`/p/${FIXTURE_SLUG}$`))
+  await expect(page.getByTestId('sidebar-workspaces')).toContainText(name)
 })
 
-test('finishing a paper can mark its remaining topics known and moves it to Finished', async ({ users }) => {
+test('finishing a paper can mark its remaining topics known; Read again reopens it', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada] = await users(['Schema ada'])
   const page = ada.page
   await openReadyFixturePaper(page)
-  if (await page.getByTestId('finish-toggle').isVisible()) {
-    await page.getByTestId('finish-toggle').click()
-    await page.getByTestId('finish-confirm').click()
-  }
+  if (await page.getByTestId('read-again').isVisible()) await page.getByTestId('read-again').click()
+  await page.getByTestId('finish-toggle').click()
+  await page.getByTestId('finish-confirm').click()
   await expect(page.getByTestId('paper-finished')).toBeVisible({ timeout: 15_000 })
   await openBranch(page, 'geometry')
   await expect(card(page, 'c3')).toHaveAttribute('data-status', 'known')
+
   await page.goto('/library')
   await page.getByRole('button', { name: 'Finished' }).click()
-  await expect(page.locator('[data-testid="library-row"][data-status="finished"]').first()).toBeVisible()
+  const row = page.locator('[data-testid="library-row"][data-status="finished"]').filter({ hasText: `arXiv ${FIXTURE_ID}` })
+  await expect(row).toBeVisible()
+  await row.getByTestId('library-read-again').click()
+  await page.getByRole('button', { name: 'In progress' }).click()
+  await expect(page.locator('[data-testid="library-row"][data-status="reading"]').filter({ hasText: `arXiv ${FIXTURE_ID}` })).toBeVisible()
+})
+
+test('a failed analysis does not use up a daily slot', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await page.goto('/home')
+  const allowance = page.getByTestId('sidebar-allowance')
+  await expect(allowance).toHaveAttribute('data-remaining', /\d+/, { timeout: 15_000 })
+  const before = Number(await allowance.getAttribute('data-remaining'))
+  test.skip(before === 0, 'Ada is at the daily cap in this local state')
+
+  const failing = `0000.${Math.floor(1 + Math.random() * 8)}9999`
+  await page.getByTestId('analyze-input').fill(failing)
+  await page.getByTestId('analyze-submit').click()
+  await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'failed', { timeout: READY_TIMEOUT })
+  await expect(page.getByTestId('paper-failed')).toContainText('almost no extractable text')
+  await page.goto('/home')
+  await expect(page.getByTestId('sidebar-allowance')).toHaveAttribute('data-remaining', String(before), { timeout: 15_000 })
 })
 
 test('the daily cap refuses a sixth new paper', async ({ users }) => {
   test.setTimeout(150_000)
   const [, bob] = await users(['Schema ada', 'Schema bob'])
   const page = bob.page
-  await page.goto('/home')
   let refused = ''
   for (let i = 0; i < 6 && !refused; i++) {
-    const id = `0000.${String(Math.floor(10000 + Math.random() * 89999))}`
+    const id = `0000.${String(Math.floor(10000 + Math.random() * 89990))}`
     await page.goto('/home')
     await page.getByTestId('analyze-input').fill(id)
     await page.getByTestId('analyze-submit').click()
@@ -187,13 +236,23 @@ test('the daily cap refuses a sixth new paper', async ({ users }) => {
   expect(refused).toContain('daily limit')
 })
 
-test('signed-out visitors can read an analyzed paper but get no progress controls', async ({ page }) => {
+test('signed-out demo: status changes stay local, links and AI need sign-in', async ({ page }) => {
   await page.goto(`/p/${FIXTURE_SLUG}`)
   await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'ready', { timeout: 20_000 })
-  await expect(page.getByTestId('branch').first()).toBeVisible()
-  await expect(page.getByTestId('concept-card').first()).toBeVisible()
-  await expect(page.getByTestId('concept-status-controls')).toHaveCount(0)
-  await expect(page.getByTestId('paper-progress-count')).toContainText('concepts')
+  await expect(page.getByTestId('demo-banner')).toContainText("Demo: your progress isn't saved")
+  await openBranch(page, 'foundations')
+  const c1 = card(page, 'c1')
+  await expect(c1).toHaveAttribute('data-status', 'unknown')
+  await c1.getByTestId('status-known').click()
+  await expect(c1).toHaveAttribute('data-status', 'known')
+  await expect(page.locator('[data-branch-key="foundations"] [data-testid="branch-progress"]')).toHaveText('1/1')
+  // Nothing was saved: a reload starts over.
+  await page.reload()
+  await openBranch(page, 'foundations')
+  await expect(card(page, 'c1')).toHaveAttribute('data-status', 'unknown', { timeout: 15_000 })
+  // c3 has no cached explanation, so generating one asks for sign-in.
+  await openBranch(page, 'geometry')
+  await expect(card(page, 'c3').getByTestId('explain-signin')).toBeVisible()
 })
 
 test('bad input shows a clear error', async ({ users }) => {

@@ -95,9 +95,11 @@ export const workspacesSchema: CollectionSchema = {
 }
 
 /**
- * Audit trail for metered AI actions (recommendations, explanations), used
- * for per-user daily caps. Written only by server actions; no client role can
- * read or write it except admins reading for audit.
+ * Metered actions per user (paper analyses, recommendations, explanations),
+ * used for the daily caps and, for analyses, as the record of who requested
+ * a paper. Written only by server code; no client role can read or write it
+ * except admins reading for audit. A failed analysis is marked refunded so
+ * it does not use up a daily slot.
  */
 export const usageEventsSchema: CollectionSchema = {
   name: 'usage_events',
@@ -106,9 +108,14 @@ export const usageEventsSchema: CollectionSchema = {
     {
       name: 'kind',
       storage: 'text',
-      interpretation: { kind: 'select', options: ['recommend', 'explain'] },
+      interpretation: { kind: 'select', options: ['analyze', 'recommend', 'explain', 'branch'] },
     },
     { name: 'ref', storage: 'text', interpretation: 'plain' },
+    {
+      name: 'state',
+      storage: 'text',
+      interpretation: { kind: 'select', options: ['counted', 'refunded'] },
+    },
   ],
   permissions: {
     '*': { read: false, create: false, update: false, delete: false },

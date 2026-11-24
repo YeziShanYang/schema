@@ -1,75 +1,7 @@
 /*
- * Theme overrides — applied via <html data-theme="<id>">.
- *
- * Default values live in `styles.css` (@theme block, slate — a neutral
- * placeholder, not a design choice). Every app should define its OWN theme
- * before first deploy: copy the example block below, rename the selector,
- * and set colors that fit the product. Shape comes from `--radius`.
- *
- * To add a theme:
- *   1. Add a `[data-theme="my-id"] { ... }` block overriding the shadcn
- *      tokens below. If the theme is light, include `color-scheme: light;`
- *      so native form controls (calendar icons, scrollbars) match.
- *   2. Add an entry to `src/themes.ts` so it shows up in the typed catalog.
- *   3. Add the theme's --color-background to the first-paint <style> block
- *      in index.html so the pre-CSS frame matches (no white flash).
- *   4. Switch to it via `data-theme` on <html> in index.html.
+ * Schema ships one theme, Blueprint, defined in the @theme block of
+ * styles.css. It is light only, so there are no override blocks here.
  */
-
-/* Paper — light example theme; shows the full token contract incl.
- * `color-scheme: light`. Replace or delete it once the app has its own. */
-[data-theme="paper"] {
+[data-theme="blueprint"] {
   color-scheme: light;
-  --color-background: #ffffff;
-  --color-foreground: #0a0a0a;
-  --color-card: #fafafa;
-  --color-card-foreground: #0a0a0a;
-  --color-popover: #ffffff;
-  --color-popover-foreground: #0a0a0a;
-  --color-primary: #171717;
-  --color-primary-foreground: #ffffff;
-  --color-secondary: #f5f5f5;
-  --color-secondary-foreground: #0a0a0a;
-  --color-muted: #f5f5f5;
-  --color-muted-foreground: #525252;
-  --color-accent: #e5e5e5;
-  --color-accent-foreground: #0a0a0a;
-  --color-destructive: #dc2626;
-  --color-destructive-foreground: #ffffff;
-  --color-border: #e5e5e5;
-  --color-input: #e5e5e5;
-  --color-ring: #171717;
-  --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.016);
-  --shadow-card-hover: 0 2px 8px 0 rgba(0, 0, 0, 0.032);
-  --color-shell: #fafafa;
-  --color-shell-panel: #ffffff;
-}
-
-/* Schema — warm paper with a teal accent. Functional placeholder until the
- * visual design pass. */
-[data-theme="schema"] {
-  color-scheme: light;
-  --color-background: #faf9f6;
-  --color-foreground: #1c1b18;
-  --color-card: #ffffff;
-  --color-card-foreground: #1c1b18;
-  --color-popover: #ffffff;
-  --color-popover-foreground: #1c1b18;
-  --color-primary: #0f766e;
-  --color-primary-foreground: #ffffff;
-  --color-secondary: #f1efe9;
-  --color-secondary-foreground: #1c1b18;
-  --color-muted: #f1efe9;
-  --color-muted-foreground: #5f5b52;
-  --color-accent: #e7f3f1;
-  --color-accent-foreground: #0b3f3a;
-  --color-destructive: #b91c1c;
-  --color-destructive-foreground: #ffffff;
-  --color-border: #e4e0d6;
-  --color-input: #dcd7cb;
-  --color-ring: #0f766e;
-  --shadow-card: 0 1px 2px 0 rgba(28, 27, 24, 0.04);
-  --shadow-card-hover: 0 2px 8px 0 rgba(28, 27, 24, 0.07);
-  --color-shell: #f4f2ec;
-  --color-shell-panel: #ffffff;
 }

@@ -1,39 +1,50 @@
 /**
- * One concept: why the paper needs it, the supporting quote, topic resources,
- * the reader's status, a check question and on-demand AI explanation.
+ * One concept: status, why the paper needs it, the verified quote, topic
+ * description and explainer links, a check question and the AI explanation.
+ * Works with the real knowledge profile or the signed-out demo adapter.
  */
 
 import { useState } from 'react'
 import type { RecordData } from 'deepspace'
-import { Badge, Button } from '../ui'
+import { Button } from '../ui'
 import type { ConceptData, KnowledgeStatus, PaperData, TopicData } from '../../types'
 import type { KnowledgeApi } from '../../hooks/useReader'
 import { actions } from '../../lib/actions-client'
+import { KnownToggle, LearningToggle } from '../StatusControl'
+import { Chip } from '../blueprint'
+import { ExternalIcon, SparkIcon } from '../icons'
 
 interface Props {
   concept: RecordData<ConceptData>
   paper: RecordData<PaperData>
   topic: TopicData | undefined
-  prerequisites: string[]
+  prerequisites: { key: string; name: string }[]
+  onOpenConcept?: (key: string) => void
   status: KnowledgeStatus | null
   knowledge: KnowledgeApi
   signedIn: boolean
+  explainLeft?: number
 }
 
-export function ConceptCard({ concept, paper, topic, prerequisites, status, knowledge, signedIn }: Props) {
+export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcept, status, knowledge, signedIn, explainLeft }: Props) {
   const c = concept.data
   const from = { paperId: paper.recordId, arxivId: paper.data.arxivId }
   const [choice, setChoice] = useState<number | null>(null)
+  const [showCheck, setShowCheck] = useState(false)
+  const [showExplain, setShowExplain] = useState(true)
   const [explaining, setExplaining] = useState(false)
   const [explainError, setExplainError] = useState('')
   const answered = choice !== null && c.check
   const correct = answered && choice === c.check!.answerIndex
 
+  async function setStatus(next: KnowledgeStatus | null) {
+    if (next === null) await knowledge.clear(c.topicKey)
+    else await knowledge.set(c.topicKey, next, next === 'known' ? 'self' : 'paper', from)
+  }
+
   async function answer(i: number) {
     setChoice(i)
-    if (c.check && i === c.check.answerIndex && signedIn) {
-      await knowledge.set(c.topicKey, 'known', 'check', from)
-    }
+    if (c.check && i === c.check.answerIndex) await knowledge.set(c.topicKey, 'known', 'check', from)
   }
 
   async function explain() {
@@ -45,101 +56,126 @@ export function ConceptCard({ concept, paper, topic, prerequisites, status, know
   }
 
   return (
-    <article
+    <li
       id={`concept-${c.key}`}
       data-testid="concept-card"
       data-concept-key={c.key}
       data-status={status ?? 'unknown'}
-      className="rounded-lg border border-border bg-card p-4"
+      className="grid grid-cols-[28px_minmax(0,1fr)] gap-2.5 border-b border-border px-2 py-3.5 last:border-b-0"
     >
-      <header className="flex flex-wrap items-center gap-2">
-        <h3 className="font-semibold">{c.name}</h3>
-        <Badge variant="outline">tier {c.tier + 1}</Badge>
-        <Badge variant="secondary">{c.depth}</Badge>
-        {topic && <Badge variant="outline">{topic.level}</Badge>}
-        {status && <Badge variant={status === 'known' ? 'success' : 'info'}>{status}</Badge>}
-      </header>
-      {topic && topic.name !== c.name && <p className="mt-1 text-xs text-muted-foreground">Topic: {topic.name}</p>}
-      <p className="mt-2 text-sm">{c.whyNeeded}</p>
-      {c.quote && c.quoteVerified && (
-        <blockquote className="mt-2 border-l-2 border-border pl-3 text-sm italic text-muted-foreground">
-          “{c.quote}” <span className="not-italic">({c.section})</span>
-        </blockquote>
-      )}
-      {prerequisites.length > 0 && (
-        <p className="mt-2 text-xs text-muted-foreground">Learn first: {prerequisites.join(', ')}</p>
-      )}
+      <KnownToggle status={status} name={c.name} disabled={!knowledge.ready} onChange={setStatus} className="mt-px" />
+      <div className="min-w-0">
+        <div className="flex items-baseline justify-between gap-2.5">
+          <span className={status === 'known' ? 'font-semibold leading-snug text-muted-foreground' : 'font-semibold leading-snug'}>{c.name}</span>
+          <Chip tone={c.depth === 'deep' ? 'accent' : 'plain'}>{c.depth}</Chip>
+        </div>
 
-      {topic && topic.resources?.length > 0 && (
-        <ul className="mt-3 space-y-1 text-sm" data-testid="concept-resources">
-          {topic.resources.map((r) => (
-            <li key={r.url}>
-              <a href={r.url} target="_blank" rel="noreferrer" className="text-primary underline-offset-2 hover:underline">
-                {r.title}
-              </a>
-              {r.why && <span className="text-muted-foreground"> — {r.why}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
+        <div className="mt-1.5">
+          <LearningToggle status={status} name={c.name} disabled={!knowledge.ready} onChange={setStatus} />
+        </div>
 
-      {signedIn && (
-        <div className="mt-3 flex flex-wrap gap-2" data-testid="concept-status-controls">
-          <Button size="sm" variant={status === 'known' ? 'default' : 'outline'} disabled={!knowledge.ready}
-            onClick={() => knowledge.set(c.topicKey, 'known', 'self', from)} data-testid="mark-known">
-            I know this
-          </Button>
-          <Button size="sm" variant={status === 'learning' ? 'default' : 'outline'} disabled={!knowledge.ready}
-            onClick={() => knowledge.set(c.topicKey, 'learning', 'paper', from)} data-testid="mark-learning">
-            Learning
-          </Button>
-          <Button size="sm" variant="outline" disabled={!knowledge.ready || status === 'known'}
-            onClick={() => knowledge.set(c.topicKey, 'known', 'paper', from)} data-testid="mark-done">
-            Done
-          </Button>
-          {status && (
-            <Button size="sm" variant="ghost" disabled={!knowledge.ready} onClick={() => knowledge.clear(c.topicKey)} data-testid="mark-clear">
-              Reset
+        {prerequisites.length > 0 && (
+          <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="label">Learn first</span>
+            {prerequisites.map((p) => (
+              <button key={p.key} type="button" onClick={() => onOpenConcept?.(p.key)} className="press cursor-pointer rounded-[3px] bg-surface-2 px-1.5 py-0.5 text-xs text-foreground shadow-[inset_0_0_0_1px_var(--color-border)] hover:bg-accent-soft">
+                {p.name}
+              </button>
+            ))}
+          </p>
+        )}
+
+        <p className="mb-2 mt-1.5 text-[13px] leading-[1.45] text-muted-foreground">{c.whyNeeded}</p>
+        {topic?.description && <p className="mb-2 text-xs text-faint">Topic: {topic.name}. {topic.description}</p>}
+
+        {c.quote && c.quoteVerified && (
+          <blockquote className="mb-2.5 rounded-r border-l-2 border-border bg-surface-2 px-2.5 py-2 text-[12.5px] text-muted-foreground">
+            “{c.quote}”
+            <cite className="label mt-1 block not-italic text-faint">{c.section}</cite>
+          </blockquote>
+        )}
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          {topic?.resourcesStatus === 'ready' && topic.resources?.length > 0 && (
+            <ul className="flex w-full flex-col gap-1.5" data-testid="concept-resources">
+              {topic.resources.map((r) => (
+                <li key={r.url} className="text-[12.5px]">
+                  <a href={r.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded bg-surface-2 px-2 py-1 text-foreground shadow-[inset_0_0_0_1px_var(--color-border)] transition-[background-color] duration-150 hover:bg-accent-soft">
+                    {r.title}
+                    <ExternalIcon size={13} />
+                  </a>
+                  {r.why && <span className="ml-1.5 text-muted-foreground">{r.why}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {topic?.resourcesStatus === 'loading' && <span className="text-xs text-muted-foreground" data-testid="concept-links-loading">Finding explainers…</span>}
+          {topic?.resourcesStatus === 'failed' && <span className="text-xs text-faint">No explainers found for this topic.</span>}
+
+          {c.explanation ? (
+            <button type="button" aria-expanded={showExplain} onClick={() => setShowExplain((v) => !v)} className="press inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-[12.5px] font-medium text-primary hover:bg-accent-soft">
+              <SparkIcon size={13} /> {showExplain ? 'Hide explanation' : 'Show explanation'}
+            </button>
+          ) : signedIn ? (
+            <Button size="sm" variant="ghost" className="text-primary" loading={explaining} onClick={explain} data-testid="explain-button">
+              <SparkIcon size={13} /> Explain with AI
+              {explainLeft !== undefined && <span className="font-normal text-faint tabular-nums">· {explainLeft} left today</span>}
             </Button>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-1.5 text-[12.5px] text-faint" data-testid="explain-signin">
+              <SparkIcon size={13} /> Sign in to generate an AI explanation
+            </span>
+          )}
+
+          {c.check && (
+            <button type="button" aria-expanded={showCheck} onClick={() => setShowCheck((v) => !v)} className="press inline-flex cursor-pointer items-center rounded px-1.5 py-1 text-[12.5px] font-medium text-foreground hover:bg-accent" data-testid="check-toggle">
+              Check yourself
+            </button>
           )}
         </div>
-      )}
+        {explainError && <p role="alert" className="mt-1 text-xs text-destructive">{explainError}</p>}
 
-      {c.check && (
-        <details className="mt-3" data-testid="concept-check">
-          <summary className="cursor-pointer text-sm font-medium">Check question</summary>
-          <p className="mt-2 text-sm">{c.check.question}</p>
-          <div className="mt-2 flex flex-col gap-1">
-            {c.check.choices.map((ch, i) => (
-              <Button key={i} size="sm" variant={choice === i ? (correct ? 'default' : 'destructive') : 'outline'}
-                className="justify-start whitespace-normal text-left" onClick={() => answer(i)} data-testid="check-choice">
-                {ch}
-              </Button>
-            ))}
+        {c.explanation && showExplain && (
+          <div className="enter mt-2.5 rounded bg-accent-soft px-3 py-2.5 text-[13px] leading-normal" data-testid="concept-explanation">
+            <span className="label mb-1 block text-primary">Explained for this paper</span>
+            <div className="whitespace-pre-wrap">{c.explanation}</div>
           </div>
-          {answered && (
-            <p className="mt-2 text-sm" data-testid="check-result">
-              {correct ? 'Correct. ' : 'Not quite. '}
-              {c.check.explanation}
-              {correct && signedIn && ' Marked as known.'}
-            </p>
-          )}
-        </details>
-      )}
+        )}
 
-      <div className="mt-3">
-        {c.explanation ? (
-          <details open data-testid="concept-explanation">
-            <summary className="cursor-pointer text-sm font-medium">AI explanation</summary>
-            <div className="mt-2 whitespace-pre-wrap text-sm">{c.explanation}</div>
-          </details>
-        ) : signedIn ? (
-          <Button size="sm" variant="secondary" loading={explaining} onClick={explain} data-testid="explain-button">
-            Explain with AI
-          </Button>
-        ) : null}
-        {explainError && <p role="alert" className="mt-1 text-sm text-destructive">{explainError}</p>}
+        {c.check && showCheck && (
+          <div className="mt-2.5 rounded bg-surface-2 p-3 shadow-[inset_0_0_0_1px_var(--color-border)]" data-testid="concept-check">
+            <p className="text-sm font-medium">{c.check.question}</p>
+            <div className="mt-2 flex flex-col gap-1.5">
+              {c.check.choices.map((ch, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => answer(i)}
+                  data-testid="check-choice"
+                  aria-pressed={choice === i}
+                  className={
+                    'press cursor-pointer rounded border px-2.5 py-1.5 text-left text-[13px] ' +
+                    (choice === i
+                      ? correct
+                        ? 'border-known bg-[color-mix(in_oklab,var(--color-known)_10%,white)]'
+                        : 'border-destructive bg-[color-mix(in_oklab,var(--color-destructive)_8%,white)]'
+                      : 'border-border bg-card hover:bg-accent')
+                  }
+                >
+                  {ch}
+                </button>
+              ))}
+            </div>
+            {answered && (
+              <p className="mt-2 text-[13px]" data-testid="check-result">
+                <b className={correct ? 'text-known' : 'text-destructive'}>{correct ? 'Correct. ' : 'Not quite. '}</b>
+                {c.check.explanation}
+                {correct && ' Marked as known.'}
+              </p>
+            )}
+          </div>
+        )}
       </div>
-    </article>
+    </li>
   )
 }

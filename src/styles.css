@@ -6,92 +6,69 @@
 @source "../node_modules/deepspace/dist/**/*.js";
 
 /*
- * Theming — pure shadcn/ui CSS variables with [data-theme] selectors.
- *
- * The @theme block below holds the default theme (slate). All other themes
- * live in `themes.css` as `[data-theme="<id>"]` override blocks. Switching
- * themes = changing the data-theme attribute on <html> in index.html. No
- * JS, no FOUC.
- *
- * Status colors (success, warning, info) are intentionally NOT themed —
- * they stay consistent across every preset.
+ * Blueprint theme (light only). Values come from design/theme-trials.html.
+ * shadcn token names are kept so the UI kit in src/components/ui reads them;
+ * Schema-specific tokens (surface-2, faint, accent-soft, known, link) sit
+ * beside them.
  */
 @theme {
-  /* shadcn core tokens — slate (default): neutral gray on near-black, indigo accent */
-  --color-background: #0a0a0a;
-  --color-foreground: #e8eaed;
-  --color-card: #161616;
-  --color-card-foreground: #e8eaed;
-  --color-popover: #161616;
-  --color-popover-foreground: #e8eaed;
-  --color-primary: #818cf8;
-  --color-primary-foreground: #ffffff;
-  --color-secondary: #1e1e1e;
-  --color-secondary-foreground: #e8eaed;
-  --color-muted: #1e1e1e;
-  --color-muted-foreground: #9ca3af;
-  --color-accent: #262626;
-  --color-accent-foreground: #e8eaed;
-  --color-destructive: #ef4444;
-  --color-destructive-foreground: #ffffff;
-  --color-border: rgba(60, 64, 67, 0.6);
-  --color-input: rgba(60, 64, 67, 0.6);
-  --color-ring: #818cf8;
-  --radius: 0.5rem;
+  --color-background: #F4F6F9;      /* bg */
+  --color-foreground: #0F172A;      /* ink */
+  --color-card: #FFFFFF;            /* surface */
+  --color-card-foreground: #0F172A;
+  --color-popover: #FFFFFF;
+  --color-popover-foreground: #0F172A;
+  --color-primary: #1F4FD8;         /* accent */
+  --color-primary-foreground: #FFFFFF;
+  --color-secondary: #F8FAFC;       /* surface-2 */
+  --color-secondary-foreground: #0F172A;
+  --color-muted: #F8FAFC;
+  --color-muted-foreground: #556070;
+  --color-accent: #EEF2F7;          /* neutral hover fill */
+  --color-accent-foreground: #0F172A;
+  --color-destructive: #B42318;
+  --color-destructive-foreground: #FFFFFF;
+  --color-border: #D6DDE7;          /* line */
+  --color-input: #C4CEDB;           /* form-control edge, 3:1 against white */
+  --color-ring: #1F4FD8;
 
-  /*
-   * Map the rounded-* utilities onto --radius so a theme (or you) can change
-   * the app's shape language in one place. At the default 0.5rem these equal
-   * Tailwind's stock values, so there is no visual change until a theme
-   * overrides --radius.
-   */
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
+  --color-surface-2: #F8FAFC;
+  --color-faint: #94A0B2;
+  --color-accent-soft: #E7EDFC;
+  --color-known: #0F8A6B;
+  --color-learning: #B26B00;
+  --color-link: #A9B8CC;
+  --color-dot: #D3DBE6;
 
-  /* Status colors — constant across all themes */
-  --color-success: #10b981;
-  --color-success-foreground: #ffffff;
-  --color-warning: #f59e0b;
-  --color-warning-foreground: #ffffff;
-  --color-info: #3b82f6;
-  --color-info-foreground: #ffffff;
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  /*
-   * Shadows — slate (default). Each theme in themes.css tunes these.
-   *
-   * Toned down 2026-05: previous values were 8px/12px offset with
-   * 32px/40px blur which read as a heavy halo under every Card on
-   * the page. New values are Linear/Stripe-style: barely-there at
-   * rest, slightly more present on hover.
-   *
-   * IMPORTANT: starter components (`Card`, `Dialog`, `CardGrid`,
-   * `Navigation`, `Toast`) intentionally use literal shadow values
-   * via `shadow-[…]` arbitrary-value classes, NOT the
-   * `shadow-card` / `shadow-card-hover` token classes Tailwind v4
-   * generates from this @theme block. Why: Tailwind's @theme directive
-   * compiles these tokens into the utility-class definitions at build
-   * time, and runtime [data-theme] overrides don't always cancel the
-   * baked baseline cleanly — apps switching themes were getting the
-   * slate value carried forward on the compiled `shadow-card` class.
-   * Sidestepping the token system in starter components is the
-   * deterministic fix. See docs/platform/theming-shadows.md.
-   */
-  --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.12);
-  --shadow-card-hover: 0 2px 8px 0 rgba(0, 0, 0, 0.16);
+  --radius: 4px;                    /* controls */
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;                 /* cards */
+  --radius-xl: 6px;
+  --radius-2xl: 8px;
 
-  /* Shell tokens: the area behind a multi-panel layout, and the raised
-     surface a page renders into. Used by templates whose (app)/_layout is a
-     shell (e.g. copilot's sidebar | panel | chat); a single-column layout
-     simply doesn't reference them. In every theme keep the panel reading as
-     elevated: dark → panel lighter than shell; light → white panel on a
-     faintly darker shell. */
-  --color-shell: #0a0a0a;
-  --color-shell-panel: #161616;
+  --color-success: #0F8A6B;
+  --color-success-foreground: #FFFFFF;
+  --color-warning: #B26B00;
+  --color-warning-foreground: #FFFFFF;
+  --color-info: #1F4FD8;
+  --color-info-foreground: #FFFFFF;
 
-  /* Animations */
+  /* Shadow rings stand in for borders on raised surfaces; pair them with
+     `border: 1px solid transparent` so forced-colors mode still draws an edge. */
+  --shadow-ring: 0 0 0 1px #D6DDE7, 0 1px 0 rgba(15, 23, 42, 0.04);
+  --shadow-ring-hi: 0 0 0 1px #B9C6D8, 0 6px 16px rgba(15, 23, 42, 0.08);
+  --shadow-card: var(--shadow-ring);
+  --shadow-card-hover: var(--shadow-ring-hi);
+
+  --color-shell: #F8FAFC;
+  --color-shell-panel: #FFFFFF;
+
+  --ease-out-quint: cubic-bezier(0.2, 0, 0, 1);
+
   --animate-pulse-glow: pulse-glow 2s ease-in-out infinite;
 }
 
@@ -152,9 +129,7 @@
  */
 @layer base {
   html {
-    /* Default to dark for native form controls (calendar icons, scrollbars).
-     * Light themes opt into `color-scheme: light` in themes.css. */
-    color-scheme: dark;
+    color-scheme: light;
   }
 
   html, body, #root {
@@ -164,7 +139,7 @@
   }
 
   body {
-    font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-sans);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -231,4 +206,109 @@
   a, button, [role="button"], input, select, textarea {
     touch-action: manipulation;
   }
+}
+
+/* ---------- Blueprint utilities ---------- */
+
+/* Mono uppercase label: 11px, 0.05em tracking. */
+@utility label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+}
+
+/* Dot-grid canvas. */
+@utility dot-grid {
+  background:
+    radial-gradient(circle, var(--color-dot) 1px, transparent 1.2px) 0 0 / 18px 18px,
+    var(--color-background);
+}
+
+/* Raised surface: shadow ring with a transparent border for forced-colors mode. */
+@utility surface {
+  background-color: var(--color-card);
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-ring);
+}
+
+/* Press feedback: 0.96 over 150ms ease-out, never on disabled controls. */
+@utility press {
+  transition-property: scale, background-color, border-color, color, box-shadow;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+  -webkit-tap-highlight-color: transparent;
+  &:not(:disabled):not([aria-disabled="true"]):active {
+    scale: 0.96;
+  }
+}
+
+/* One-time staged entrance, staggered 100ms via --i. The hidden state lives in
+   the keyframe, so an element whose animation never runs stays visible. */
+.enter {
+  animation: schema-fade 300ms linear both;
+  animation-delay: calc(var(--i, 0) * 100ms);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .enter {
+    animation-name: schema-enter;
+    animation-timing-function: ease-out;
+  }
+}
+@keyframes schema-enter {
+  from { opacity: 0; filter: blur(4px); transform: translateY(12px); }
+}
+@keyframes schema-fade {
+  from { opacity: 0; }
+}
+
+/* Check-icon cross-fade: scale 0.25 to 1 with a 4px blur over 300ms. */
+.icon-swap {
+  transition-property: opacity, scale, filter;
+  transition-duration: 300ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+.icon-swap[data-shown="false"] { opacity: 0; scale: 0.25; filter: blur(4px); }
+.icon-swap[data-shown="true"] { opacity: 1; scale: 1; filter: blur(0); }
+@media (prefers-reduced-motion: reduce) {
+  .icon-swap[data-shown="false"] { scale: 1; filter: none; }
+}
+
+/* Meter fill. */
+.meter-fill {
+  transition-property: width;
+  transition-duration: 300ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .meter-fill { transition-duration: 0ms; }
+}
+
+/* Used to suppress every transition for one frame during a theme swap. */
+.no-transitions, .no-transitions * { transition: none !important; }
+
+/* Mobile sidebar sheet: enters from the left with the drawer easing, using
+   @starting-style so it is a transition (no keyframes on a toggled element).
+   It unmounts on close. Reduced motion keeps only an opacity fade. */
+.sheet {
+  transition-property: opacity;
+  transition-duration: 200ms;
+  transition-timing-function: linear;
+  @starting-style { opacity: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sheet {
+    transition-property: translate;
+    transition-duration: 300ms;
+    transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+    @starting-style { translate: -100% 0; }
+  }
+}
+.backdrop {
+  transition: opacity 200ms linear;
+  @starting-style { opacity: 0; }
 }

@@ -1,25 +1,29 @@
 /**
  * Knowledge profile: every topic the reader knows or is learning, grouped by
- * level, with the paper each came from; the starter list; and search to add
- * any topic in the shared vocabulary.
+ * level, with its source and the paper it came from; search to add any topic
+ * in the shared vocabulary; the starter list for new readers.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from 'deepspace'
-import { Badge, Button, Input } from '@/components/ui'
+import type { RecordData } from 'deepspace'
+import { Input } from '@/components/ui'
+import { Chip, PageHeader } from '../../../components/blueprint'
+import { StatusControl } from '../../../components/StatusControl'
 import { useKnowledge, useTopics } from '../../../hooks/useReader'
 import { actions } from '../../../lib/actions-client'
 import { arxivSlug } from '../../../lib/arxiv'
 import { STARTER_TOPICS } from '../../../lib/topics'
-import type { PaperData, TopicLevel } from '../../../types'
+import type { KnowledgeData, KnowledgeStatus, PaperData, TopicLevel } from '../../../types'
 
 const LEVELS: TopicLevel[] = ['foundation', 'core', 'specialized']
+const SOURCE: Record<string, string> = { self: 'Marked by you', paper: 'While reading', check: 'Passed the check in', finished: 'Finished' }
 
 export default function KnowledgePage() {
   const knowledge = useKnowledge()
   const { topics, byKey, status: topicsStatus } = useTopics()
-  const papers = useQuery<PaperData>('papers', { limit: 1000 })
+  const papers = useQuery<PaperData>('papers', { limit: 2000 })
   const paperById = useMemo(() => new Map(papers.records.map((p) => [p.recordId, p])), [papers.records])
   const [q, setQ] = useState('')
 
@@ -42,94 +46,109 @@ export default function KnowledgePage() {
   const learning = rows.filter((r) => r.data.status === 'learning')
   const starters = STARTER_TOPICS.filter((t) => !knowledge.byTopic.has(t.key) && byKey.has(t.key))
   const matches = q.trim()
-    ? topics
-        .filter((t) => !knowledge.byTopic.has(t.data.key) && t.data.name.toLowerCase().includes(q.trim().toLowerCase()))
-        .slice(0, 20)
+    ? topics.filter((t) => !knowledge.byTopic.has(t.data.key) && t.data.name.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 20)
     : []
 
-  function group(list: typeof rows) {
-    return LEVELS.map((level) => ({
-      level,
-      items: list.filter((r) => (byKey.get(r.data.topicKey)?.data.level ?? 'core') === level),
-    })).filter((g) => g.items.length > 0)
-  }
+  const setStatus = (topicKey: string) => (next: KnowledgeStatus | null) =>
+    next === null ? knowledge.clear(topicKey) : knowledge.set(topicKey, next, 'self')
 
-  function sourceLabel(r: (typeof rows)[number]) {
+  function source(r: RecordData<KnowledgeData>) {
     const p = r.data.paperId ? paperById.get(r.data.paperId) : undefined
-    const via = { self: 'marked by you', paper: 'from', check: 'passed the check in', finished: 'finished' }[r.data.source] ?? ''
-    if (!p) return <span className="text-xs text-muted-foreground">{r.data.source === 'self' ? 'marked by you' : via}</span>
+    const label = SOURCE[r.data.source] ?? ''
+    if (!p || r.data.source === 'self') return <span className="text-xs text-faint">{label}</span>
     return (
-      <span className="text-xs text-muted-foreground">
-        {via}{' '}
-        <Link to={`/p/${arxivSlug(p.data.arxivId)}`} className="underline">{p.data.title}</Link>
+      <span className="text-xs text-faint">
+        {label}{' '}
+        <Link to={`/p/${arxivSlug(p.data.arxivId)}`} className="text-muted-foreground hover:text-primary hover:underline">{p.data.title}</Link>
       </span>
     )
   }
 
-  const list = (title: string, items: typeof rows, testId: string) => (
-    <section className="space-y-2" data-testid={testId}>
-      <h2 className="text-lg font-semibold">{title} ({items.length})</h2>
-      {group(items).map((g) => (
-        <div key={g.level}>
-          <h3 className="text-sm font-medium capitalize text-muted-foreground">{g.level}</h3>
-          <ul className="space-y-1">
-            {g.items.map((r) => {
-              const t = byKey.get(r.data.topicKey)?.data
-              return (
-                <li key={r.recordId} className="flex flex-wrap items-center gap-2 text-sm" data-testid="knowledge-item" data-topic-key={r.data.topicKey}>
-                  <span className="font-medium">{t?.name ?? r.data.topicKey}</span>
-                  {sourceLabel(r)}
-                  {r.data.status === 'learning' ? (
-                    <Button size="sm" variant="ghost" disabled={!knowledge.ready} onClick={() => knowledge.set(r.data.topicKey, 'known', 'self')}>Mark known</Button>
-                  ) : (
-                    <Button size="sm" variant="ghost" disabled={!knowledge.ready} onClick={() => knowledge.set(r.data.topicKey, 'learning', 'self')}>Move to learning</Button>
-                  )}
-                  <Button size="sm" variant="ghost" disabled={!knowledge.ready} onClick={() => knowledge.clear(r.data.topicKey)} data-testid="knowledge-remove">Remove</Button>
-                </li>
-              )
-            })}
-          </ul>
-        </div>
-      ))}
-    </section>
-  )
+  function section(title: string, items: RecordData<KnowledgeData>[], testId: string) {
+    const groups = LEVELS.map((level) => ({ level, items: items.filter((r) => (byKey.get(r.data.topicKey)?.data.level ?? 'core') === level) })).filter((g) => g.items.length)
+    return (
+      <section data-testid={testId}>
+        <div className="label pb-2">{title} · <span className="tabular-nums">{items.length}</span></div>
+        {items.length === 0 ? (
+          <p className="surface p-4 text-sm text-muted-foreground">{title === 'Known' ? 'Nothing marked known yet.' : 'Nothing in progress.'}</p>
+        ) : (
+          <div className="surface divide-y divide-border">
+            {groups.map((g) => (
+              <div key={g.level} className="px-4 py-3">
+                <div className="label pb-1.5 text-faint">{g.level}</div>
+                <ul className="flex flex-col">
+                  {g.items.map((r) => {
+                    const t = byKey.get(r.data.topicKey)?.data
+                    return (
+                      <li key={r.recordId} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 py-2" data-testid="knowledge-item" data-topic-key={r.data.topicKey}>
+                        <div className="min-w-0">
+                          <p className="font-medium leading-snug">{t?.name ?? r.data.topicKey}</p>
+                          {t?.description && <p className="mt-0.5 text-[13px] text-muted-foreground">{t.description}</p>}
+                          <p className="mt-0.5">{source(r)}</p>
+                        </div>
+                        <StatusControl status={r.data.status} name={t?.name ?? r.data.topicKey} disabled={!knowledge.ready} onChange={setStatus(r.data.topicKey)} />
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    )
+  }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8 p-6" data-testid="knowledge-page">
-      <h1 className="text-2xl font-semibold">What you know</h1>
-      {list('Known', known, 'knowledge-known')}
-      {list('Learning', learning, 'knowledge-learning')}
+    <div className="min-h-full" data-testid="knowledge-page">
+      <PageHeader label="Knowledge" title="What you know" />
+      <div className="mx-auto grid max-w-4xl gap-6 px-5 py-6 md:px-7">
+        <p className="-mt-1 text-sm text-muted-foreground">
+          Topics are shared across papers. A topic you mark here shows as known in every paper that relies on it.
+        </p>
+        {section('Learning', learning, 'knowledge-learning')}
+        {section('Known', known, 'knowledge-known')}
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">Add a topic</h2>
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search topics" aria-label="Search topics" data-testid="topic-search" />
-        <ul className="space-y-1">
-          {matches.map((t) => (
-            <li key={t.recordId} className="flex items-center gap-2 text-sm">
-              <span>{t.data.name}</span>
-              <Badge variant="outline">{t.data.level}</Badge>
-              <Button size="sm" variant="ghost" disabled={!knowledge.ready} onClick={() => knowledge.set(t.data.key, 'known', 'self')}>I know this</Button>
-              <Button size="sm" variant="ghost" disabled={!knowledge.ready} onClick={() => knowledge.set(t.data.key, 'learning', 'self')}>Learning</Button>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {starters.length > 0 && (
-        <section className="space-y-2" data-testid="starter-topics">
-          <h2 className="text-lg font-semibold">Common starting points</h2>
-          <p className="text-sm text-muted-foreground">Tick what you already know, so new papers skip it.</p>
-          <ul className="flex flex-wrap gap-2">
-            {starters.map((t) => (
-              <li key={t.key}>
-                <Button size="sm" variant="outline" disabled={!knowledge.ready} onClick={() => knowledge.set(t.key, 'known', 'self')} data-testid="starter-topic">
-                  {t.name}
-                </Button>
-              </li>
-            ))}
-          </ul>
+        <section className="surface p-4">
+          <div className="label pb-2">Add a topic</div>
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search every topic, e.g. softmax" aria-label="Search topics" data-testid="topic-search" />
+          {matches.length > 0 && (
+            <ul className="mt-2 divide-y divide-border">
+              {matches.map((t) => (
+                <li key={t.recordId} className="flex items-center justify-between gap-3 py-2">
+                  <span className="min-w-0">
+                    <span className="font-medium">{t.data.name}</span> <Chip className="ml-1">{t.data.level}</Chip>
+                  </span>
+                  <StatusControl status={null} name={t.data.name} disabled={!knowledge.ready} onChange={setStatus(t.data.key)} />
+                </li>
+              ))}
+            </ul>
+          )}
+          {q.trim() && matches.length === 0 && <p className="mt-2 text-sm text-muted-foreground">No topic matches “{q.trim()}”.</p>}
         </section>
-      )}
+
+        {starters.length > 0 && (
+          <section data-testid="starter-topics">
+            <div className="label pb-1">Common starting points</div>
+            <p className="pb-2 text-sm text-muted-foreground">Tick what you already know, so new papers skip it.</p>
+            <ul className="flex flex-wrap gap-2">
+              {starters.map((t) => (
+                <li key={t.key}>
+                  <button
+                    type="button"
+                    disabled={!knowledge.ready}
+                    onClick={() => knowledge.set(t.key, 'known', 'self')}
+                    data-testid="starter-topic"
+                    className="press cursor-pointer rounded bg-card px-2.5 py-1 text-[13px] shadow-[var(--shadow-ring)] hover:shadow-[var(--shadow-ring-hi)] disabled:cursor-not-allowed disabled:opacity-50 border border-transparent"
+                  >
+                    {t.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
     </div>
   )
 }

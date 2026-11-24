@@ -6,7 +6,7 @@ import { useCallback, useMemo } from 'react'
 import { useAuth, useMutations, useQuery } from 'deepspace'
 import type { RecordData } from 'deepspace'
 import type { WorkspaceData } from '../types'
-import { withFinished } from '../lib/workspace'
+import { withoutPaper, withStatus } from '../lib/workspace'
 
 export interface WorkspacesApi {
   ready: boolean
@@ -19,6 +19,9 @@ export interface WorkspacesApi {
   remove: (id: string) => Promise<void>
   touch: (id: string) => Promise<void>
   markFinished: (id: string, paperId: string) => Promise<void>
+  setPaperStatus: (id: string, paperId: string, status: 'active' | 'finished') => Promise<void>
+  removePaper: (id: string, paperId: string) => Promise<void>
+  markOpened: (id: string, paperId: string) => Promise<void>
 }
 
 export function useWorkspaces(): WorkspacesApi {
@@ -61,14 +64,49 @@ export function useWorkspaces(): WorkspacesApi {
     [byId, m],
   )
 
-  const markFinished = useCallback(
+  const setPaperStatus = useCallback(
+    async (id: string, paperId: string, next: 'active' | 'finished') => {
+      const ws = byId.get(id)
+      if (!ws) return
+      await m.put(id, { papers: withStatus(ws.data.papers, paperId, next) })
+    },
+    [byId, m],
+  )
+  const markFinished = useCallback((id: string, paperId: string) => setPaperStatus(id, paperId, 'finished'), [setPaperStatus])
+
+  const removePaper = useCallback(
     async (id: string, paperId: string) => {
       const ws = byId.get(id)
       if (!ws) return
-      await m.put(id, { papers: withFinished(ws.data.papers, paperId) })
+      await m.put(id, {
+        papers: withoutPaper(ws.data.papers, paperId),
+        currentPaperId: ws.data.currentPaperId === paperId ? '' : ws.data.currentPaperId,
+      })
     },
     [byId, m],
   )
 
-  return { ready: m.ready && !!userId && status === 'ready', status, rows, byId, create, update, remove, touch, markFinished }
+  const markOpened = useCallback(
+    async (id: string, paperId: string) => {
+      const ws = byId.get(id)
+      if (!ws || ws.data.currentPaperId === paperId) return
+      await m.put(id, { currentPaperId: paperId, lastOpenedAt: Date.now() })
+    },
+    [byId, m],
+  )
+
+  return {
+    ready: m.ready && !!userId && status === 'ready',
+    status,
+    rows,
+    byId,
+    create,
+    update,
+    remove,
+    touch,
+    markFinished,
+    setPaperStatus,
+    removePaper,
+    markOpened,
+  }
 }

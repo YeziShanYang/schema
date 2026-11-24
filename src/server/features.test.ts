@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { branchProgress, cleanBranches, OTHER_BRANCH, paperProgress } from '../lib/branches'
-import { withFinished, withTarget } from '../lib/workspace'
+import { candidateSuggestions, paperStatus, withFinished, withoutPaper, withPaper, withStatus } from '../lib/workspace'
+import { extractCandidates, needsLoad, LOADING_STALE_MS } from './branch-resources'
 import { candidatesFromResults, searchQueryFor } from './recommend'
 import { excerptAround } from './explain-concept'
 import { fixtureIntegration } from './pipeline/fixtures'
@@ -55,25 +56,55 @@ describe('branch progress', () => {
   })
 })
 
-describe('workspace history', () => {
+describe('workspace papers', () => {
   const base: WorkspacePaper[] = [
     { paperId: 'p1', arxivId: '1', title: 'One', status: 'finished', addedAt: 1 },
     { paperId: 'p2', arxivId: '2', title: 'Two', status: 'current', addedAt: 2 },
+    { paperId: 'p3', arxivId: '3', title: 'Three', status: 'previous', addedAt: 3 },
   ]
-  it('demotes the old target and appends the new one', () => {
-    const next = withTarget(base, { paperId: 'p3', arxivId: '3', title: 'Three' }, 3)
+  it('adds papers as active and keeps every existing paper', () => {
+    const next = withPaper(base, { paperId: 'p4', arxivId: '4', title: 'Four' }, 4)
     expect(next.map((p) => [p.paperId, p.status])).toEqual([
       ['p1', 'finished'],
-      ['p2', 'previous'],
-      ['p3', 'current'],
+      ['p2', 'active'],
+      ['p3', 'active'],
+      ['p4', 'active'],
     ])
   })
-  it('re-targets an existing paper without duplicating it and keeps finished papers finished', () => {
-    expect(withTarget(base, { paperId: 'p2', arxivId: '2', title: 'Two' }, 3).filter((p) => p.paperId === 'p2')).toHaveLength(1)
-    expect(withTarget(base, { paperId: 'p1', arxivId: '1', title: 'One' }, 3).find((p) => p.paperId === 'p1')?.status).toBe('finished')
+  it('adding a paper twice keeps one entry and its status', () => {
+    const next = withPaper(base, { paperId: 'p1', arxivId: '1', title: 'One (v2)' }, 5)
+    expect(next.filter((p) => p.paperId === 'p1')).toEqual([{ paperId: 'p1', arxivId: '1', title: 'One (v2)', status: 'finished', addedAt: 1 }])
   })
-  it('marks a paper finished', () => {
+  it('finishes, reopens and removes papers', () => {
     expect(withFinished(base, 'p2').find((p) => p.paperId === 'p2')?.status).toBe('finished')
+    expect(withStatus(base, 'p1', 'active').find((p) => p.paperId === 'p1')?.status).toBe('active')
+    expect(withoutPaper(base, 'p2').map((p) => p.paperId)).toEqual(['p1', 'p3'])
+    expect(paperStatus({ status: 'previous' })).toBe('active')
+  })
+  it('candidate suggestions exclude papers already added', () => {
+    const s = [
+      { arxivId: '2', title: 'Two', authors: [], reason: '' },
+      { arxivId: '9', title: 'Nine', authors: [], reason: '' },
+    ]
+    expect(candidateSuggestions(s, base).map((x) => x.arxivId)).toEqual(['9'])
+  })
+})
+
+describe('lazy branch links', () => {
+  const now = 1_000_000
+  it('loads topics with no links or a stale loading mark', () => {
+    expect(needsLoad({ resourcesStatus: 'none', resourcesLoadingAt: 0 }, now)).toBe(true)
+    expect(needsLoad({ resourcesStatus: 'loading', resourcesLoadingAt: now - 1000 }, now)).toBe(false)
+    expect(needsLoad({ resourcesStatus: 'loading', resourcesLoadingAt: now - LOADING_STALE_MS - 1 }, now)).toBe(true)
+    expect(needsLoad({ resourcesStatus: 'ready', resourcesLoadingAt: 0 }, now)).toBe(false)
+    expect(needsLoad({ resourcesStatus: 'failed', resourcesLoadingAt: 0 }, now)).toBe(false)
+  })
+  it('keeps at most five http results', () => {
+    const results = [
+      { url: 'ftp://x', title: 'bad' },
+      ...Array.from({ length: 7 }, (_, i) => ({ url: `https://e.org/${i}`, title: `T${i}`, text: 'x' })),
+    ]
+    expect(extractCandidates({ results }).map((c) => c.url)).toEqual([0, 1, 2, 3, 4].map((i) => `https://e.org/${i}`))
   })
 })
 

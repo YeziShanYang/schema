@@ -1,24 +1,33 @@
 /**
- * One paper's shared analysis (paper, concepts, sections) joined with the
- * reader's knowledge: branch progress and per-concept status. Readable signed
- * out; the knowledge parts are empty until the reader signs in.
+ * One paper's shared analysis (paper, concepts, sections) joined with a
+ * knowledge API: the reader's real profile, or the signed-out demo adapter
+ * (useReaderKnowledge). Also reports, per branch, whether its explainer links
+ * still need loading.
  */
 
 import { useCallback, useMemo } from 'react'
 import { useQuery } from 'deepspace'
 import type { RecordData } from 'deepspace'
-import type { ConceptData, PaperData, SectionData } from '../types'
+import type { ConceptData, PaperData, SectionData, TopicData } from '../types'
 import { branchProgress, paperProgress } from '../lib/branches'
-import { useKnowledge, useRoadmaps, useTopics } from './useReader'
+import { useKnowledge, useRoadmaps, useTopics, type KnowledgeApi } from './useReader'
 import { useWorkspaces } from './useWorkspaces'
 
-export function usePaper(arxivId: string) {
+export type BranchLinks = 'ready' | 'needs-load' | 'loading'
+
+/** Link state for a set of topics: any topic loading wins, then any topic with no links yet. */
+export function branchLinkState(topics: (TopicData | undefined)[], now = Date.now()): BranchLinks {
+  if (topics.some((t) => t?.resourcesStatus === 'loading' && now - (t.resourcesLoadingAt || 0) < 5 * 60 * 1000)) return 'loading'
+  if (topics.some((t) => !t || t.resourcesStatus === 'none' || !t.resourcesStatus || t.resourcesStatus === 'loading')) return 'needs-load'
+  return 'ready'
+}
+
+export function usePaper(arxivId: string, knowledge: KnowledgeApi) {
   const papersQ = useQuery<PaperData>('papers', { where: { arxivId }, limit: 1 })
   const paper = papersQ.records[0] ?? null
   const paperId = paper?.recordId ?? '__none__'
   const conceptsQ = useQuery<ConceptData>('concepts', { where: { paperId }, limit: 200 })
   const sectionsQ = useQuery<SectionData>('sections', { where: { paperId }, limit: 100 })
-  const knowledge = useKnowledge()
   const { byKey: topicsByKey } = useTopics()
 
   const concepts = useMemo(
@@ -39,6 +48,12 @@ export function usePaper(arxivId: string) {
     [concepts],
   )
 
+  const linksForBranch = useCallback(
+    (branchKey: string): BranchLinks =>
+      branchLinkState(concepts.filter((c) => c.data.branchKey === branchKey).map((c) => topicsByKey.get(c.data.topicKey)?.data)),
+    [concepts, topicsByKey],
+  )
+
   return {
     loading: papersQ.status === 'loading',
     paper,
@@ -48,6 +63,7 @@ export function usePaper(arxivId: string) {
     branches,
     progress,
     conceptsInBranch,
+    linksForBranch,
     topicsByKey,
     knowledge,
   }
