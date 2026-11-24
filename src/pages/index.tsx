@@ -20,6 +20,7 @@ import { demoSnapshot } from '../data/demo'
 import { DAILY_PAPER_CAP } from '../lib/cap'
 import { arxivSlug } from '../lib/arxiv'
 import { seo } from '../seo'
+import { MathText } from '../components/MathText'
 
 const STEPS = [
   ['Pick a paper', 'Paste an arXiv link, or create a workspace for a subject and get three recommended papers.'],
@@ -174,7 +175,7 @@ export default function Landing() {
                           <p className="mt-1 text-[13px] text-muted-foreground">{c.whyNeeded}</p>
                           {c.quote && (
                             <blockquote className="mt-2 rounded-r border-l-2 border-border bg-surface-2 px-2.5 py-2 text-[12.5px] text-muted-foreground">
-                              “{c.quote}” <cite className="label mt-1 block not-italic text-faint">{c.section}</cite>
+                              “{c.quoteDisplay ? <MathText text={c.quoteDisplay} /> : c.quote}” <cite className="label mt-1 block not-italic text-faint">{c.section}</cite>
                             </blockquote>
                           )}
                           {topic?.resource && (

@@ -50,6 +50,8 @@ const snapshot = {
         tier: c.data.tier,
         whyNeeded: c.data.whyNeeded,
         quote: c.data.quoteVerified ? c.data.quote : '',
+        // The quote with its formulas as LaTeX; the server stores it only when its words match the quote.
+        quoteDisplay: c.data.quoteVerified ? c.data.quoteDisplay || '' : '',
         section: c.data.section,
         topicKey: c.data.topicKey,
         explanation: c.data.explanation || '',
