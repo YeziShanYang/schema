@@ -30,6 +30,9 @@ type Shown = 'known' | null
  * (which uniqueOn would refuse). The new state shows at once through a local
  * override until the chain settles.
  */
+/** How long a confirmed write's optimistic state waits for the query to show it. */
+const OVERRIDE_HOLD_MS = 10_000
+
 function useKeyedRows<T extends { userId: string; status: string }>(collection: string, keyOf: (d: T) => string) {
   const { userId, isSignedIn } = useAuth()
   const { records, status } = useQuery<T>(collection, { limit: 5000 })
@@ -50,14 +53,38 @@ function useKeyedRows<T extends { userId: string; status: string }>(collection: 
   // so a write right after a removal never reuses the removed row's id.
   const lastIds = useRef(new Map<string, string | null>())
   const [overrides, setOverrides] = useState<Map<string, Shown>>(() => new Map())
+  // Whether the query already shows what a write left, so its optimistic state can go.
+  const shows = useCallback((key: string, shown: Shown) => {
+    const row = byKeyRef.current.get(key)
+    return shown === 'known' ? row?.data.status === 'known' : !row
+  }, [])
+  const dropOverride = useCallback((key: string) => {
+    setOverrides((m) => {
+      if (!m.has(key)) return m
+      const n = new Map(m)
+      n.delete(key)
+      return n
+    })
+  }, [])
   useEffect(() => {
     for (const [k, id] of lastIds.current) if ((byKey.get(k)?.recordId ?? null) === id) lastIds.current.delete(k)
-  }, [byKey])
+    // A finished write keeps its optimistic state until the query catches up, so the control never flickers back.
+    setOverrides((m) => {
+      let n: Map<string, Shown> | null = null
+      for (const [k, shown] of m) {
+        if (chains.current.has(k) || !shows(k, shown)) continue
+        n ??= new Map(m)
+        n.delete(k)
+      }
+      return n ?? m
+    })
+  }, [byKey, shows])
 
   const enqueue = useCallback((key: string, shown: Shown, write: (id: string | null) => Promise<string | null>) => {
     setOverrides((m) => new Map(m).set(key, shown))
     const currentId = () => (lastIds.current.has(key) ? lastIds.current.get(key)! : byKeyRef.current.get(key)?.recordId ?? null)
     const start = chains.current.get(key) ?? Promise.resolve(currentId())
+    let failed = false
     const tail = start
       .then(write)
       .then((id) => {
@@ -65,6 +92,7 @@ function useKeyedRows<T extends { userId: string; status: string }>(collection: 
         return id
       })
       .catch((e) => {
+        failed = true
         console.warn(`[${collection}] write for ${key} failed: ${e instanceof Error ? e.message : String(e)}`)
         return currentId()
       })
@@ -72,14 +100,13 @@ function useKeyedRows<T extends { userId: string; status: string }>(collection: 
     void tail.finally(() => {
       if (chains.current.get(key) !== tail) return
       chains.current.delete(key)
-      setOverrides((m) => {
-        const n = new Map(m)
-        n.delete(key)
-        return n
-      })
+      // A failed write shows the stored state again. A confirmed one waits for the query (see the effect above),
+      // or at most OVERRIDE_HOLD_MS, so a missed update can't leave the control stuck.
+      if (failed || shows(key, shown)) dropOverride(key)
+      else setTimeout(() => !chains.current.has(key) && dropOverride(key), OVERRIDE_HOLD_MS)
     })
     return tail.then(() => undefined)
-  }, [collection])
+  }, [collection, dropOverride, shows])
 
   /** Create or update the key's row with `data` (the create also gets userId and `create`). */
   const upsert = useCallback(

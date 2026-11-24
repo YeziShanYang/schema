@@ -119,3 +119,15 @@ test('parallel adds to one workspace keep every paper', async ({ users }) => {
   await page.goto(`/w/${workspaceId}`)
   await expect(page.getByTestId('workspace-paper')).toHaveCount(3, { timeout: 20_000 })
 })
+
+test('reanalyzePaper refuses anyone but the app owner and leaves the paper as it was', async ({ users }) => {
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await page.goto('/home')
+  const before = await call(page, 'peekPaper', { input: '0000.00001' })
+  const r = await call(page, 'reanalyzePaper', { arxivId: '0000.00001' })
+  expect(r.success).toBe(false)
+  expect(r.error).toContain('Only the app owner')
+  const after = await call(page, 'peekPaper', { input: '0000.00001' })
+  expect(after.data.status).toBe(before.data.status)
+})

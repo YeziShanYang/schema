@@ -102,6 +102,8 @@ function branchKnown(page: Page, key: string) {
 /** Put a concept back to "not known" through the UI. */
 async function resetStatus(page: Page, key: string) {
   const c = card(page, key)
+  // A click while the previous write is in flight is ignored, so wait for the control first.
+  await expect(c.getByTestId('status-known')).toBeEnabled({ timeout: 15_000 })
   const s = await c.getAttribute('data-status')
   if (s === 'known') await c.getByTestId('status-known').click()
   await expect(c).toHaveAttribute('data-status', 'unknown')
@@ -219,7 +221,8 @@ test('overview: opens on its own once, is step 0 until read, the read mark persi
   // c1 feeds s1 and s2, c2 feeds s2 and s3, c6 feeds s3, c3 and c7 feed s4; the unknown key is dropped.
   await expect(win.getByTestId('overview-lines').locator('path.line')).toHaveCount(7)
   const also = await win.getByTestId('overview-also').getByTestId('overview-chip').evaluateAll((els) => els.map((e) => e.getAttribute('data-concept-key')))
-  expect(also).toEqual(['c5', 'c9', 'c4', 'c8'])
+  // In the recommended sequence: by branch, then tier (c8 is tier 2, c4 tier 3).
+  expect(also).toEqual(['c5', 'c9', 'c8', 'c4'])
   // s3's technical line was unsupported, so it has none.
   await expect(win.locator('[data-testid="overview-step"][data-item-id="s3"] [data-testid="overview-technical-toggle"]')).toHaveCount(0)
   // Hover and focus light up both ways.

@@ -35,7 +35,7 @@ import { ConceptName, MathText } from '../MathText'
 import { hintText } from '../../lib/hints'
 import { BookIcon } from '../icons'
 
-const STAGES = ['queued', 'text', 'concepts', 'overview', 'explain', 'ready'] as const
+const STAGES = ['queued', 'text', 'concepts', 'overview', 'explain', 'verify', 'ready'] as const
 /** Matches retryPaper: a run with no update for this long can be restarted. */
 const STUCK_AFTER_MS = 20 * 60 * 1000
 
