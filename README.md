@@ -100,7 +100,7 @@ LIVE_PAPER=2611.29224 npx playwright test -c tests/live/playwright.live.config.t
 
 ## Cost
 
-100 credits are one US dollar. Analyzing a new paper costs four Haiku calls (about 2.5 to 3.5 credits, one more overview and verify call when the overview is rewritten). CloudConvert (2.3 credits) is paid only for a paper with no arXiv HTML. A verify call on a 12,000-character excerpt cost about 0.3 credits in testing. Explainer links are paid only when a reader loads a branch: about 0.9 credits per Exa search, one search per topic that has no links yet, plus a small Haiku call. Before links became lazy, a 10-page paper cost about 21 credits and a 62-page paper about 16, nearly all of it Exa searches for every topic. Links are cached per topic, so branches that share topics with earlier papers cost less or nothing.
+100 credits are one US dollar. Analyzing a new paper costs four Haiku calls, plus one more overview and verify call when the overview is rewritten. Re-analyzing 8 papers of 10 to 62 pages cost 21.5 credits for 10 runs, about 2.2 credits a paper. CloudConvert (2.3 credits) is paid only for a paper with no arXiv HTML. A verify call on a 12,000-character excerpt cost about 0.3 credits in testing. Explainer links are paid only when a reader loads a branch: about 0.9 credits per Exa search, one search per topic that has no links yet, plus a small Haiku call. Before links became lazy, a 10-page paper cost about 21 credits and a 62-page paper about 16, nearly all of it Exa searches for every topic. Links are cached per topic, so branches that share topics with earlier papers cost less or nothing.
 
 ## Demo data
 
