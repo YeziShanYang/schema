@@ -4,7 +4,7 @@
  * (`npx deepspace agent invoke`). RBAC applies as for that user.
  */
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -21,6 +21,27 @@ export function invoke(app, tool, input) {
     const parsed = JSON.parse(out)
     if (!parsed.ok || parsed.result?.success === false) throw new Error(`${tool} failed: ${out.slice(0, 400)}`)
     return parsed.result?.data
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+/**
+ * Text of one of the app's stored files (`npx deepspace app files get`), or
+ * '' when it can't be read. Accepts a stored key with its `apps/<id>/` prefix.
+ */
+export function appFileText(app, storedKey) {
+  const key = storedKey.replace(/^apps\/[^/]+\//, '')
+  const dir = mkdtempSync(join(tmpdir(), 'schema-file-'))
+  const file = join(dir, 'file')
+  try {
+    execFileSync('npx', ['deepspace', 'app', 'files', 'get', key, '--out', file, '--app', app, '--json'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    return readFileSync(file, 'utf8')
+  } catch {
+    return ''
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

@@ -32,10 +32,30 @@ export interface DemoBranch {
   concepts: DemoConcept[]
 }
 
+export interface DemoFirstPage {
+  /** The arXiv stamp in the margin, e.g. "arXiv:1706.03762v7 [cs.CL] 2 Aug 2023". */
+  stamp: string
+  /** Section 1, lines joined into one string. */
+  introduction: string
+  /** Figure 1's caption, when the paper has one. */
+  figureCaption: string
+}
+
 export interface DemoSnapshot {
   note: string
   exportedAt: string
-  paper: { arxivId: string; title: string; authors: string[]; year: string; mainContribution: string; overview?: PaperOverview | null }
+  paper: {
+    arxivId: string
+    title: string
+    authors: string[]
+    year: string
+    mainContribution: string
+    /** The arXiv abstract. */
+    abstract?: string
+    /** Verbatim text from the PDF's first page, for the landing illustration; null when it couldn't be read. */
+    firstPage?: DemoFirstPage | null
+    overview?: PaperOverview | null
+  }
   branches: DemoBranch[]
   topics: Record<string, { name: string; level: string; description: string; resource: { title: string; url: string; why: string } | null }>
 }
