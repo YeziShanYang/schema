@@ -4,7 +4,6 @@
  * the analyze job, which only these actions enqueue.
  */
 
-import { enqueueJob } from 'deepspace/worker'
 import type { ActionHandler, ActionResult, ActionTools } from 'deepspace/worker'
 import type { Env } from '../../worker'
 import type { ConceptData, Envelope, PaperData, TopicData, WorkspaceData } from '../types'
@@ -18,11 +17,8 @@ import { recommendForWorkspace } from '../server/recommend'
 import { generateExplanation } from '../server/explain-concept'
 import { loadBranch } from '../server/branch-resources'
 import { releaseUsage, reserveUsage, setUsageRef, USAGE_CAPS, usageState, usedRecently } from '../server/usage'
+import { enqueueAnalyze, isOwner, startReanalysis, STUCK_AFTER_MS, toMsTime } from '../server/reanalyze'
 
-/** Every continue counts as a JobRoom attempt; this leaves room for all ticks plus crash recovery. */
-const ANALYZE_MAX_ATTEMPTS = 60
-/** A paper still "processing" after this long is treated as stuck and can be retried. */
-const STUCK_AFTER_MS = 20 * 60 * 1000
 const SEED_BATCH = 20
 
 const fail = (error: string): ActionResult<never> => ({ success: false, error })
@@ -64,22 +60,6 @@ async function addToWorkspace(
   })
   if (!r.success && !/duplicate|unique/i.test(r.error)) throw new Error(r.error)
   await tools.update('workspaces', ws.recordId, { currentPaperId: paper.paperId })
-}
-
-function toMsTime(v: unknown): number {
-  if (typeof v === 'number') return v < 1e12 ? v * 1000 : v
-  if (typeof v === 'string') return Date.parse(v) || 0
-  return 0
-}
-
-function enqueueAnalyze(env: Env, paperId: string, arxivId: string, userId: string) {
-  return enqueueJob(
-    env.JOB_ROOMS,
-    `app:${env.DEEPSPACE_APP_ID}`,
-    'analyze',
-    { paperId, arxivId },
-    { maxAttempts: ANALYZE_MAX_ATTEMPTS, enqueuedBy: userId },
-  )
 }
 
 /** Look a paper up on arXiv before adding it. Free (public arXiv API), not capped, needs sign-in. */
@@ -258,6 +238,25 @@ const retryPaper: ActionHandler<Env> = async ({ userId, params, tools, env }) =>
   return { success: true, data: { paperId } }
 }
 
+/** Re-runs the analysis of a paper with the current pipeline. App owner only; see server/reanalyze.ts. */
+const reanalyzePaper: ActionHandler<Env> = async ({ userId, params, tools, env }) => {
+  if (!isOwner(env, userId)) return fail('Only the app owner can re-analyze a paper.')
+  const paperId = typeof params.paperId === 'string' ? params.paperId : ''
+  const ref = parseArxivId(typeof params.arxivId === 'string' ? params.arxivId : typeof params.input === 'string' ? params.input : '')
+  if (!paperId && !ref) return fail('Give the paper as arxivId or paperId.')
+  let paper: Envelope<PaperData> | null = null
+  if (paperId) {
+    const got = await tools.get('papers', paperId)
+    paper = got.success ? (got.data as unknown as { record: Envelope<PaperData> }).record : null
+  } else if (ref) {
+    paper = await findPaper(tools, ref.id)
+  }
+  if (!paper) return fail('Paper not found.')
+  const r = await startReanalysis(env, userId, paper, (id, data) => tools.update('papers', id, data))
+  if (!r.ok) return fail(r.error)
+  return { success: true, data: { paperId: r.paperId, arxivId: r.arxivId, status: 'queued' } }
+}
+
 /** Creates any missing starter topics, a batch at a time. Idempotent; call until remaining is 0. */
 const seedTopics: ActionHandler<Env> = async ({ tools }) => {
   const r = await tools.query('topics', { where: { origin: 'starter' }, limit: 200 })
@@ -398,16 +397,13 @@ const ensureOverview: ActionHandler<Env> = async ({ userId, params, tools, env }
       order: c.data.order,
       quote: c.data.quoteVerified ? c.data.quote : '',
     }))
-    result = await generateOverview(createPipelineClient(env, free), paper.data, text, ordered)
+    result = await generateOverview(createPipelineClient(env, free), paper.data, text, ordered, { source: paper.data.textSource ?? 'pdf' })
   } catch (e) {
     await tools.update('papers', paperId, { overviewLoadingAt: 0 })
     return fail(`Could not write the overview: ${e instanceof Error ? e.message : String(e)}`)
   }
   for (const c of concepts) {
-    const data: Record<string, unknown> = {}
-    if (result.roles[c.data.key]) data.plainRole = result.roles[c.data.key]
-    if (result.quoteDisplays[c.data.key]) data.quoteDisplay = result.quoteDisplays[c.data.key]
-    if (Object.keys(data).length) await tools.update('concepts', c.recordId, data)
+    if (result.roles[c.data.key]) await tools.update('concepts', c.recordId, { plainRole: result.roles[c.data.key] })
   }
   await tools.update('papers', paperId, { overview: result.overview, overviewLoadingAt: 0 })
   return { success: true, data: { overview: result.overview, cached: false } }
@@ -430,6 +426,7 @@ export const actions: Record<string, ActionHandler<Env>> = {
   peekPaper,
   analyzePaper,
   retryPaper,
+  reanalyzePaper,
   seedTopics,
   recommendPapers,
   explainConcept,

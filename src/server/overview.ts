@@ -2,18 +2,18 @@
  * The paper overview: a plain-language summary, the paper's argument as a
  * short story whose steps name the concepts they rely on, and a one-line
  * plain role per concept. One Haiku call. The analyze job runs it as the
- * `overview` stage; ensureOverview runs it once for papers analyzed before
- * the stage existed.
+ * `overview` stage and then checks it in the `verify` stage
+ * (pipeline/verify.ts); ensureOverview runs it once for papers analyzed
+ * before the stage existed.
  */
 
 import { appFiles } from 'deepspace/worker'
 import type { Env } from '../../worker'
 import type { Envelope, PaperData, PaperOverview, StoryItem } from '../types'
 import { asString, asStringArray } from '../lib/json'
-import { acceptQuoteDisplay } from '../lib/quote-display'
 import { callModelJson } from './pipeline/llm'
 import type { PipelineClient } from './pipeline/client'
-import { OVERVIEW_SYSTEM, overviewUser } from './pipeline/prompts'
+import { overviewSystem, overviewUser } from './pipeline/prompts'
 
 /** About the first 12,000 characters of the main text go into the prompt. */
 export const OVERVIEW_TEXT_CHARS = 12_000
@@ -27,7 +27,7 @@ export interface OverviewConcept {
   whyNeeded: string
   section: string
   order: number
-  /** The verbatim quote, when it passed verification; its LaTeX version comes back as quote_display. */
+  /** The verbatim quote, when it passed verification, as context for the model. */
   quote?: string
 }
 
@@ -35,8 +35,6 @@ export interface ParsedOverview {
   overview: PaperOverview
   /** Concept key to its plain role. */
   roles: Record<string, string>
-  /** Concept key to its quote with the math as LaTeX, only where the words still match the quote. */
-  quoteDisplays: Record<string, string>
 }
 
 /**
@@ -64,8 +62,6 @@ export function parseOverview(json: Record<string, unknown>, concepts: OverviewC
   const alsoNeeded = [...concepts].sort((a, b) => a.order - b.order).map((c) => c.key).filter((k) => !used.has(k))
 
   const roles: Record<string, string> = {}
-  const quoteDisplays: Record<string, string> = {}
-  const quoteOf = new Map(concepts.map((c) => [c.key, c.quote ?? '']))
   const list = Array.isArray(json.roles) ? json.roles : []
   for (const raw of list) {
     if (!raw || typeof raw !== 'object') continue
@@ -74,10 +70,8 @@ export function parseOverview(json: Record<string, unknown>, concepts: OverviewC
     if (!known.has(key)) continue
     const role = asString(o.plain_role, MAX_ROLE_CHARS)
     if (role && !roles[key]) roles[key] = role
-    const display = asString(o.quote_display, 1200)
-    if (display && !quoteDisplays[key] && acceptQuoteDisplay(quoteOf.get(key) ?? '', display)) quoteDisplays[key] = display
   }
-  return { overview: { plain, story, alsoNeeded, generatedAt: now }, roles, quoteDisplays }
+  return { overview: { plain, story, alsoNeeded, generatedAt: now }, roles }
 }
 
 export async function generateOverview(
@@ -85,16 +79,18 @@ export async function generateOverview(
   paper: Pick<PaperData, 'title' | 'abstract' | 'mainContribution'>,
   text: string,
   concepts: OverviewConcept[],
+  opts: { source?: 'html' | 'pdf'; feedback?: string[] } = {},
 ): Promise<ParsedOverview> {
   const ordered = [...concepts].sort((a, b) => a.order - b.order)
   const json = await callModelJson(client, {
-    system: OVERVIEW_SYSTEM,
+    system: overviewSystem(opts.source ?? 'pdf'),
     user: overviewUser({
       title: paper.title,
       abstract: paper.abstract,
       mainContribution: paper.mainContribution,
       text: text.slice(0, OVERVIEW_TEXT_CHARS),
       concepts: ordered.map((c) => ({ key: c.key, name: c.name, whyNeeded: c.whyNeeded, section: c.section, quote: c.quote })),
+      feedback: opts.feedback,
     }),
     maxTokens: 8000, // thinking counts against this
     hint: 'overview',

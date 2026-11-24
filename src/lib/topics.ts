@@ -41,6 +41,93 @@ export function nameMatch(a: string, b: string): number {
   return shared / (x.size + y.size - shared)
 }
 
+/**
+ * A concept or topic name folded for comparison: lowercase ASCII, accents and
+ * punctuation removed, words singular ("Positional Encodings" and
+ * "positional encoding" match). Used to match a reader's checked concepts
+ * across papers and across re-analyses.
+ */
+export function normalizeConceptName(name: string): string {
+  return wordsOf(name).join(' ')
+}
+
+/** Singular form for comparison: "matrices" to "matrix", "probabilities" to "probability", "embeddings" to "embedding". */
+function singular(w: string): string {
+  if (w.length > 4 && w.endsWith('ices')) return `${w.slice(0, -4)}ix`
+  if (w.length > 4 && w.endsWith('ies')) return `${w.slice(0, -3)}y`
+  if (w.length > 4 && w.endsWith('sses')) return w.slice(0, -2)
+  if (w.length > 3 && w.endsWith('s') && !/(?:ss|us|is)$/.test(w)) return w.slice(0, -1)
+  return w
+}
+
+/** Words of a name. Hyphenated compounds stay one word ("cross-entropy" is not "entropy"); possessives drop their s. */
+function wordsOf(name: string): string[] {
+  if (typeof name !== 'string') return []
+  return name
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/['’]s\b/g, '')
+    .replace(/['’]/g, '')
+    .replace(/([a-z0-9])-(?=[a-z0-9])/g, '$1')
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .map(singular)
+}
+
+const STOP_WORDS = new Set([
+  ...MATCH_STOP_WORDS,
+  'at', 'into', 'or', 'over', 'under', 'via', 'using', 'based', 'between', 'their', 'this', 'that', 'is', 'are', 'vs', 'versus',
+])
+
+/**
+ * Head nouns shared by many unrelated ideas. Two names that share only these
+ * ("BLEU score" and "Local R^2 score", "Random matrices" and "Random
+ * variables") are not the same topic, so they don't count as content words.
+ */
+const GENERIC_WORDS = new Set([
+  'model', 'method', 'approach', 'technique', 'framework', 'function', 'theory', 'theorem', 'lemma', 'basic', 'introduction',
+  'overview', 'analysis', 'problem', 'algorithm', 'learning', 'network', 'neural', 'deep', 'system', 'process', 'concept',
+  'property', 'term', 'score', 'metric', 'measure', 'loss', 'estimation', 'estimate', 'estimator', 'distribution', 'probability',
+  'random', 'matrix', 'vector', 'value', 'rate', 'error', 'data', 'set', 'space', 'type', 'form', 'rule', 'law', 'equation',
+  'inequality', 'operator', 'structure', 'bound', 'condition', 'assumption', 'result', 'general', 'simple', 'standard',
+  'classical', 'linear', 'gradient', 'order', 'level', 'step', 'task', 'training', 'application', 'example', 'case',
+  'definition', 'notion', 'principle', 'mechanism', 'representation', 'layer', 'encoding', 'embedding', 'normalization',
+  'regression', 'optimization', 'inference', 'sampling', 'search', 'information', 'divergence', 'distance', 'transform',
+  'decomposition', 'product', 'graph', 'tree', 'code', 'channel', 'state', 'objective', 'parameter', 'variable', 'feature',
+  'statistic', 'test', 'evaluation', 'effect', 'scheme', 'protocol', 'strategy', 'architecture',
+])
+
+/** Content words of a name: not stop words, not generic head nouns, not single characters or bare numbers. */
+export function contentWords(name: string): Set<string> {
+  return new Set(wordsOf(name).filter((w) => !STOP_WORDS.has(w) && !GENERIC_WORDS.has(w) && w.length > 1 && !/^\d+$/.test(w)))
+}
+
+/**
+ * The topic-reuse rule: a concept may reuse an existing topic only when the
+ * two names share a content word. A name made only of generic words ("Loss
+ * functions") is compared by all its words instead: against a name with
+ * content words it needs one of them ("Contrastive loss" doesn't match), and
+ * against another generic-only name one must contain the other ("Loss
+ * function" matches, "Random variables" and "Random matrices" don't).
+ */
+export function sharesContentWord(conceptName: string, topicName: string): boolean {
+  const allWords = (n: string) => new Set(wordsOf(n).filter((w) => !STOP_WORDS.has(w) && w.length > 1 && !/^\d+$/.test(w)))
+  const a = contentWords(conceptName)
+  const b = contentWords(topicName)
+  if (!a.size && !b.size) {
+    const x = allWords(conceptName)
+    const y = allWords(topicName)
+    if (!x.size || !y.size) return false
+    const [small, big] = x.size <= y.size ? [x, y] : [y, x]
+    return [...small].every((w) => big.has(w))
+  }
+  const x = a.size ? a : allWords(conceptName)
+  const y = b.size ? b : allWords(topicName)
+  for (const w of x) if (y.has(w)) return true
+  return false
+}
+
 export interface TopicClaim {
   /** Concept key within the paper. */
   id: string

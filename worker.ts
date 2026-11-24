@@ -21,6 +21,7 @@ import {
 import type { DOBindings, DOManifest, Job, JobContext } from 'deepspace/worker'
 import { registerAgent } from './src/ai/agent.js'
 import { buildTools } from './src/ai/tools.js'
+import { ownerTools } from './src/ai/owner-tools.js'
 import { tasks as cronTasks, runTask as runCronTask } from './src/cron.js'
 import { runJob } from './src/jobs.js'
 import { schemas } from './src/schemas.js'
@@ -144,7 +145,7 @@ registerActionRoutes(app, resolveAuth)
 // No page uses the in-app AI chat, so its routes stay off. The local agent
 // tools (records read/write as the signed-in user, under RBAC) stay on.
 registerAgent(app, {
-  tools: buildTools,
+  tools: (executor, context) => ({ ...buildTools(executor), ...ownerTools(context) }),
   inApp: false,
 })
 registerPlatformProxyRoutes(app)

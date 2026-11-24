@@ -43,7 +43,7 @@ export const papersSchema: CollectionSchema = {
       storage: 'text',
       interpretation: {
         kind: 'select',
-        options: ['queued', 'text', 'concepts', 'overview', 'resources', 'explain', 'ready', 'failed'],
+        options: ['queued', 'text', 'concepts', 'overview', 'resources', 'explain', 'verify', 'ready', 'failed'],
       },
     },
     { name: 'progress', storage: 'number', interpretation: 'plain' },
@@ -57,6 +57,9 @@ export const papersSchema: CollectionSchema = {
     { name: 'topicKeys', storage: 'text', interpretation: { kind: 'json' } },
     { name: 'overview', storage: 'text', interpretation: { kind: 'json' } },
     { name: 'overviewLoadingAt', storage: 'number', interpretation: 'plain' },
+    { name: 'textSource', storage: 'text', interpretation: { kind: 'select', options: ['html', 'pdf'] } },
+    { name: 'pipelineVersion', storage: 'number', interpretation: 'plain' },
+    { name: 'overviewDropped', storage: 'text', interpretation: { kind: 'json' } },
   ],
   uniqueOn: ['arxivId'],
   permissions: readOnlyForEveryone,
@@ -78,7 +81,7 @@ export const topicsSchema: CollectionSchema = {
     {
       name: 'resourcesStatus',
       storage: 'text',
-      interpretation: { kind: 'select', options: ['none', 'loading', 'ready', 'failed'] },
+      interpretation: { kind: 'select', options: ['none', 'loading', 'ready', 'failed', 'skipped'] },
     },
     { name: 'resourcesLoadingAt', storage: 'number', interpretation: 'plain' },
     {

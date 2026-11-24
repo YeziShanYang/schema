@@ -1,7 +1,8 @@
 /**
- * Prepares extracted PDF text for the model: drop references and appendices
- * by cutting at the References heading, then cap the length so a very long
- * main body cannot blow the token budget.
+ * Prepares paper text for the model: for PDF text, drop references and
+ * appendices by cutting at the References heading (the HTML conversion has
+ * already dropped them), then cap the length so a very long main body cannot
+ * blow the token budget.
  */
 
 /** About 30k tokens for typical extracted text; the spike's longest main body was 52k chars. */
@@ -33,9 +34,9 @@ export function cutAtReferences(raw: string): { text: string; cut: boolean } {
   return { text: raw, cut: false }
 }
 
-export function preparePaperText(raw: string, maxChars = MAX_PAPER_CHARS): PreparedText {
+export function preparePaperText(raw: string, maxChars = MAX_PAPER_CHARS, source: 'html' | 'pdf' = 'pdf'): PreparedText {
   const cleaned = raw.replace(/\r\n?/g, '\n').replace(/\f/g, '\n')
-  const { text, cut } = cutAtReferences(cleaned)
+  const { text, cut } = source === 'pdf' ? cutAtReferences(cleaned) : { text: cleaned, cut: false }
   const truncated = text.length > maxChars
   return {
     text: truncated ? text.slice(0, maxChars) : text,

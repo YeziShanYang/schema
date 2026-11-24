@@ -7,6 +7,13 @@
  * Topics are marked `loading` (with a timestamp) before any paid call so two
  * readers opening the same branch do not pay twice. A `loading` mark older
  * than five minutes is treated as stale, so a crashed load can be retried.
+ *
+ * A specialized topic that only this paper uses gets no search (status
+ * `skipped`): general explainers rarely exist for it, and its cards lead with
+ * Explain with AI instead. When the pick call finds no fitting result, the
+ * topic keeps an empty list; raw search results are used only when the pick
+ * call itself fails, and only those whose title shares a content word with
+ * the topic.
  */
 
 import type { ActionTools } from 'deepspace/worker'
@@ -14,6 +21,7 @@ import type { Env } from '../../worker'
 import type { ConceptData, Envelope, PaperData, TopicData, TopicResource } from '../types'
 import { asString } from '../lib/json'
 import { linkTitle } from '../lib/links'
+import { contentWords } from '../lib/topics'
 import { createPipelineClient, fixturesAllowed } from './pipeline/client'
 import type { PipelineClient } from './pipeline/client'
 import { callModelJson } from './pipeline/llm'
@@ -57,15 +65,28 @@ interface TopicItem {
   candidates: Candidate[]
 }
 
-/** The top search results as links without a "why" line, for when the pick call fails. */
-export function fallbackResources(candidates: Candidate[]): TopicResource[] {
-  return candidates.slice(0, 2).map((c) => ({ title: c.title, url: c.url, why: '' }))
+/**
+ * For when the pick call fails: the top search results whose title shares a
+ * content word with the topic's name, as links without a "why" line.
+ */
+export function fallbackResources(topicName: string, candidates: Candidate[]): TopicResource[] {
+  const words = contentWords(topicName)
+  return candidates
+    .filter((c) => [...contentWords(c.title)].some((w) => words.has(w)))
+    .slice(0, 2)
+    .map((c) => ({ title: c.title, url: c.url, why: '' }))
+}
+
+/** A specialized topic created by a paper and used by no other paper: no web search, Explain with AI instead. */
+export function skipsLinks(t: Pick<TopicData, 'level' | 'origin'>, papersUsingIt: number): boolean {
+  return t.level === 'specialized' && t.origin === 'paper' && papersUsingIt <= 1
 }
 
 /**
  * Search and pick for a set of topics. Returns picked resources per topic key
- * and whether any paid call succeeded. If a pick call fails after its
- * searches ran, those topics keep their top search results instead.
+ * and whether any paid call succeeded. A topic the pick call found nothing
+ * for gets an empty list. If a pick call fails after its searches ran, those
+ * topics keep their matching top search results instead (fallbackResources).
  */
 export async function findResources(
   client: PipelineClient,
@@ -98,7 +119,7 @@ export async function findResources(
       })
     } catch (e) {
       console.warn(`[links] pick call failed, keeping top search results: ${e instanceof Error ? e.message : String(e)}`)
-      for (const item of batch) picks[item.key] = fallbackResources(item.candidates)
+      for (const item of batch) picks[item.key] = fallbackResources(item.name, item.candidates)
       continue
     }
     const list = Array.isArray(json.topics) ? json.topics : []
@@ -117,8 +138,8 @@ export async function findResources(
         picks[item.key].push({ title: cand.title, url: cand.url, why: asString((r as Record<string, unknown>).why, 300) })
       }
     }
-    // A topic the model skipped or answered with unknown URLs keeps its top search results.
-    for (const item of batch) if (!picks[item.key]?.length) picks[item.key] = fallbackResources(item.candidates)
+    // A topic the model skipped, or answered only with URLs the search did not return, found no fit.
+    for (const item of batch) picks[item.key] ??= []
   }
   return { picks, charged: withResults.length > 0 }
 }
@@ -151,7 +172,21 @@ export async function loadBranch(
   )
   const now = Date.now()
   const topics = rows.filter((t): t is Envelope<TopicData> => !!t)
-  const due = topics.filter((t) => needsLoad(t.data, now))
+  const candidates = topics.filter((t) => needsLoad(t.data, now))
+
+  // Paper-only specialized topics are marked skipped instead of searched.
+  const due: Envelope<TopicData>[] = []
+  for (const t of candidates) {
+    if (t.data.level === 'specialized' && t.data.origin === 'paper') {
+      const users = await tools.query('concepts', { where: { topicKey: t.data.key }, limit: 20 })
+      const papers = users.success ? new Set((users.data.records as unknown as Envelope<ConceptData>[]).map((c) => c.data.paperId)).size : 2
+      if (skipsLinks(t.data, papers)) {
+        await tools.update('topics', t.recordId, { resourcesStatus: 'skipped', resourcesLoadingAt: 0 })
+        continue
+      }
+    }
+    due.push(t)
+  }
   const busy = topics.filter((t) => t.data.resourcesStatus === 'loading' && !needsLoad(t.data, now)).length
   if (due.length === 0) return { ok: true, loaded: 0, failed: 0, remaining: 0, busy, charged: false }
 

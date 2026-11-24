@@ -4,7 +4,15 @@
  * `ctx.continue`, so no single run comes near the Worker subrequest limit and
  * a restart resumes from the last checkpoint instead of starting over.
  *
- * Steps: seed starter topics -> text -> concepts -> explain -> finish.
+ * Steps: seed -> text -> concepts -> overview -> explain -> verify -> remap -> finish.
+ * - seed: starter topics, and clearing the concepts and sections of an earlier analysis.
+ * - text: the arXiv HTML with its math as LaTeX, or the PDF through CloudConvert.
+ * - concepts: one model call; the server applies the graph, branch, topic and quote rules.
+ * - overview: one model call (plain summary, story, plain roles).
+ * - explain: one model call for the section walkthrough.
+ * - verify: one model call checks the overview against the paper and drops what
+ *   it does not support; a collapsed story sends the job back to overview once.
+ * - remap: readers' checkmarks from an earlier analysis move to the new concepts.
  * Explainer links are not fetched here; readers load them per branch on
  * demand (src/server/branch-resources.ts). Record writes produced by a step are queued in the
  * checkpoint and flushed WRITES_PER_TICK at a time before the next step runs.
@@ -18,28 +26,35 @@
 import { appFiles } from 'deepspace/worker'
 import type { CronContext, Job, JobContext } from 'deepspace/worker'
 import type { Env } from '../../../worker'
-import type { ConceptDepth, Envelope, PaperData, TopicData } from '../../types'
+import type { ConceptDepth, ConceptKnowledgeData, Envelope, PaperData, TextSource, TopicData } from '../../types'
+import { PIPELINE_VERSION } from '../../types'
 import { arxivPdfUrl, arxivSlug } from '../../lib/arxiv'
 import { preparePaperText } from '../../lib/paper-text'
-import { normalizeForMatch, isQuoteVerified } from '../../lib/quotes'
+import { arxivHtmlToText, arxivHtmlUrl, MIN_HTML_TEXT_CHARS } from '../../lib/paper-html'
+import { normalizeForMatch } from '../../lib/quotes'
+import { pickQuote } from '../../lib/quote-rules'
+import { hasMath } from '../../lib/math'
 import { cleanGraph } from '../../lib/graph'
 import { asString, asStringArray } from '../../lib/json'
 import { STARTER_TOPICS } from '../../lib/topics'
-import { assignTopics } from './assign-topics'
+import { planKnowledgeRemap } from '../../lib/knowledge-remap'
+import { assignTopics, promptTopics } from './assign-topics'
 import { generateOverview, type OverviewConcept } from '../overview'
 import { cleanBranches } from '../../lib/branches'
+import { mergeSingletonBranches } from '../../lib/branch-merge'
 import { createPipelineClient, fixturesAllowed, ownerContext } from './client'
 import { refundAnalyze } from '../usage'
 import type { PipelineClient } from './client'
 import { callModelJson } from './llm'
-import { CONCEPTS_SYSTEM, conceptsUser, EXPLAIN_SYSTEM, explainUser } from './prompts'
+import { conceptsSystem, conceptsUser, explainSystem, explainUser, verifySystem, verifyUser } from './prompts'
+import { applyVerdict, parseVerdict, unglossedNames, VERIFY_TEXT_CHARS } from './verify'
 
 export interface AnalyzePayload {
   paperId: string
   arxivId: string
 }
 
-type Step = 'seed' | 'text' | 'concepts' | 'overview' | 'explain' | 'finish'
+type Step = 'seed' | 'text' | 'concepts' | 'overview' | 'explain' | 'verify' | 'remap' | 'finish'
 
 interface PendingWrite {
   op: 'create' | 'update' | 'delete'
@@ -57,11 +72,16 @@ export interface AnalyzeState {
   failures: number
   /** True once any integration call has succeeded (and was billed); then a failure keeps the daily slot. */
   spent?: boolean
+  /** Where `text` came from; checkpoints saved before the HTML source existed used the PDF. */
+  textSource?: TextSource
+  /** How many times the overview has been written: a second write is the one rewrite verify may ask for. */
+  overviewPasses?: number
+  /** What verify found wrong with the first overview, given to the rewrite. */
+  overviewFeedback?: string[]
 }
 
 const WRITES_PER_TICK = 20
-const MAX_CONCEPTS = 22
-const MAX_TOPICS_IN_PROMPT = 400
+const MAX_CONCEPTS = 24
 /** Non-whitespace characters below which a PDF is treated as scanned or empty; real papers have tens of thousands. */
 const MIN_TEXT_CHARS = 600
 
@@ -165,6 +185,12 @@ async function runStep(state: AnalyzeState, s: StepCtx): Promise<boolean> {
     case 'explain':
       await stepExplain(state, s)
       return false
+    case 'verify':
+      await stepVerify(state, s)
+      return false
+    case 'remap':
+      await stepRemap(state, s)
+      return false
     case 'finish': {
       // Counts come from the concepts actually stored, so every page agrees,
       // and a concept that failed to land is logged instead of hidden.
@@ -183,6 +209,7 @@ async function runStep(state: AnalyzeState, s: StepCtx): Promise<boolean> {
         error: '',
         conceptCount: stored.length,
         topicKeys: [...new Set(stored.map((c) => c.data.topicKey).filter(Boolean))],
+        pipelineVersion: PIPELINE_VERSION,
       })
       return true
     }
@@ -206,28 +233,59 @@ async function stepSeed(state: AnalyzeState, { ctx, paper }: StepCtx) {
       data: { ...t, searchQuery: `${t.name} tutorial for beginners`, resources: [], resourcesStatus: 'none', resourcesLoadingAt: 0, origin: 'starter' },
     })
   }
+  // A re-analysis (or a retry) starts clean. Readers' checkmarks are kept and moved in the remap step.
+  for (const collection of ['concepts', 'sections'] as const) {
+    const old = (await ctx.records.query(collection, { where: { paperId: paper.recordId }, limit: 200 })) as Envelope<unknown>[]
+    for (const o of old) state.writes.push({ op: 'delete', collection, recordId: o.recordId })
+  }
   state.step = 'text'
 }
 
-async function stepText(state: AnalyzeState, { env, ctx, client, paper, jobCtx }: StepCtx) {
-  await updatePaper(ctx, paper.recordId, { stage: 'text', progress: 0.1, progressMessage: 'Converting the PDF to text' })
-  let raw = ''
-  const files = appFiles(env, { scope: 'app', userId: env.OWNER_USER_ID })
+/** The arXiv HTML as text, or '' when it is missing, too short or unreachable (the PDF is used then). */
+async function htmlText(client: PipelineClient, arxivId: string, signal: AbortSignal): Promise<string> {
+  try {
+    const page = await client.fetchPage(arxivHtmlUrl(arxivId), signal)
+    if (page.status !== 200) {
+      console.info(`[analyze] ${arxivId}: no arXiv HTML (status ${page.status}), using the PDF`)
+      return ''
+    }
+    const text = arxivHtmlToText(page.text)
+    if (text.length < MIN_HTML_TEXT_CHARS) {
+      console.info(`[analyze] ${arxivId}: arXiv HTML has only ${text.length} characters of text, using the PDF`)
+      return ''
+    }
+    return text
+  } catch (e) {
+    console.warn(`[analyze] ${arxivId}: arXiv HTML fetch failed, using the PDF: ${errMsg(e)}`)
+    return ''
+  }
+}
 
-  // A retry of a failed paper reuses the text saved by an earlier run.
-  if (paper.data.textKey && !client.fixtures) {
+async function stepText(state: AnalyzeState, { env, ctx, client, paper, jobCtx }: StepCtx) {
+  await updatePaper(ctx, paper.recordId, { stage: 'text', progress: 0.1, progressMessage: 'Reading the paper' })
+  const files = appFiles(env, { scope: 'app', userId: env.OWNER_USER_ID })
+  const arxivId = paper.data.arxivId
+
+  // 1. The arXiv HTML (free, math as LaTeX). 2. Text stored by an earlier run. 3. The PDF through CloudConvert.
+  let source: TextSource = 'html'
+  let raw = await htmlText(client, arxivId, jobCtx.signal)
+  let fresh = true
+  if (!raw && paper.data.textKey && !client.fixtures) {
     try {
       const res = await files.download(paper.data.textKey)
       raw = await res.text()
+      source = paper.data.textSource ?? 'pdf'
+      fresh = false
     } catch {
       raw = ''
     }
   }
-
   if (!raw) {
+    source = 'pdf'
+    await updatePaper(ctx, paper.recordId, { progressMessage: 'Converting the PDF to text' })
     const conv = (await client.call(
       'cloudconvert/convert-file',
-      { input_format: 'pdf', output_format: 'txt', url: arxivPdfUrl(paper.data.arxivId) },
+      { input_format: 'pdf', output_format: 'txt', url: arxivPdfUrl(arxivId) },
       'text',
     )) as { downloadUrl?: string; url?: string } | null
     const url = conv?.downloadUrl ?? conv?.url
@@ -235,32 +293,36 @@ async function stepText(state: AnalyzeState, { env, ctx, client, paper, jobCtx }
     raw = await client.fetchText(url, jobCtx.signal)
   }
 
-  const prepared = preparePaperText(raw)
+  const prepared = preparePaperText(raw, undefined, source)
   if (prepared.text.replace(/\s+/g, '').length < MIN_TEXT_CHARS) {
     throw new PermanentError('This PDF has almost no extractable text (it may be a scanned image).')
   }
 
-  let textKey = paper.data.textKey || ''
-  if (!client.fixtures && !textKey) {
+  let textKey = fresh ? '' : paper.data.textKey
+  if (!client.fixtures && fresh) {
     try {
+      // The key names the source, so text from the PDF and from the HTML never overwrite each other.
       const file = await files.upload(new Blob([prepared.text], { type: 'text/plain' }), {
-        key: `papers/${arxivSlug(paper.data.arxivId)}.txt`,
-        name: `${arxivSlug(paper.data.arxivId)}.txt`,
+        key: `papers/${arxivSlug(arxivId)}.${source}.txt`,
+        name: `${arxivSlug(arxivId)}.${source}.txt`,
       })
       textKey = file.key
     } catch (e) {
-      // Storage is a cache for retries; the pipeline continues without it.
-      console.warn(`[analyze] could not store text for ${paper.data.arxivId}: ${errMsg(e)}`)
+      // Storage is a cache for retries and explanations; the pipeline continues without it.
+      console.warn(`[analyze] could not store text for ${arxivId}: ${errMsg(e)}`)
+      textKey = paper.data.textKey || ''
     }
   }
 
   state.text = prepared.text
+  state.textSource = source
   state.step = 'concepts'
   await updatePaper(ctx, paper.recordId, {
     stage: 'concepts',
     progress: 0.2,
     textChars: prepared.text.length,
     textKey,
+    textSource: source,
     progressMessage: prepared.truncated
       ? 'Finding concepts (long paper: only the first part of the main text is used)'
       : 'Finding the concepts this paper relies on',
@@ -272,14 +334,15 @@ interface ParsedConcept {
   name: string
   whyNeeded: string
   section: string
-  quote: string
+  /** Candidate quotes, best first; the server keeps the first that passes the quote rules. */
+  quotes: string[]
   dependsOn: string[]
   depth: ConceptDepth
   branchKey: string
   topic: Record<string, unknown>
 }
 
-function parseConcepts(json: Record<string, unknown>): ParsedConcept[] {
+export function parseConcepts(json: Record<string, unknown>): ParsedConcept[] {
   const list = Array.isArray(json.concepts) ? json.concepts : []
   const out: ParsedConcept[] = []
   for (const item of list.slice(0, MAX_CONCEPTS)) {
@@ -289,12 +352,14 @@ function parseConcepts(json: Record<string, unknown>): ParsedConcept[] {
     const id = asString(c.id, 20)
     if (!name || !id) continue
     const depth = c.depth === 'skim' || c.depth === 'deep' ? c.depth : 'working'
+    // `quote` is the single-quote format of earlier prompts.
+    const quotes = (Array.isArray(c.quotes) ? asStringArray(c.quotes, 2) : [asString(c.quote, 600)]).map((q) => q.slice(0, 600)).filter(Boolean)
     out.push({
       id,
       name,
       whyNeeded: asString(c.why_needed, 600),
       section: asString(c.section, 200),
-      quote: asString(c.quote, 600),
+      quotes,
       dependsOn: asStringArray(c.depends_on, 20),
       depth,
       branchKey: asString(c.branch_key, 80),
@@ -305,16 +370,13 @@ function parseConcepts(json: Record<string, unknown>): ParsedConcept[] {
 }
 
 async function stepConcepts(state: AnalyzeState, { ctx, client, paper }: StepCtx) {
+  const source = state.textSource ?? 'pdf'
   const topics = (await ctx.records.query('topics', { limit: 1000 })) as Envelope<TopicData>[]
-  const promptTopics = [...topics]
-    .sort((a, b) => (a.data.origin === b.data.origin ? 0 : a.data.origin === 'starter' ? -1 : 1))
-    .slice(0, MAX_TOPICS_IN_PROMPT)
-    .map((t) => ({ key: t.data.key, name: t.data.name }))
 
   const json = await callModelJson(client, {
-    system: CONCEPTS_SYSTEM,
-    user: conceptsUser({ title: paper.data.title, abstract: paper.data.abstract, topics: promptTopics, text: state.text }),
-    maxTokens: 16000, // thinking counts against this; 8000 ran out in production
+    system: conceptsSystem(source, state.text.length),
+    user: conceptsUser({ title: paper.data.title, abstract: paper.data.abstract, topics: promptTopics(topics.map((t) => t.data)), text: state.text }),
+    maxTokens: 20000, // thinking counts against this; 8000 ran out in production
     hint: 'concepts',
   })
 
@@ -322,27 +384,33 @@ async function stepConcepts(state: AnalyzeState, { ctx, client, paper }: StepCtx
   if (parsed.length < 2) throw new Error('The model did not return a usable concept list.')
 
   const graph = cleanGraph(parsed.map((c) => ({ id: c.id, dependsOn: c.dependsOn })))
-  const { branches, branchOf } = cleanBranches(
-    json.branches,
-    parsed.filter((c) => graph.ids.includes(c.id)).map((c) => ({ id: c.id, branchKey: c.branchKey })),
-  )
-  const paperNorm = normalizeForMatch(state.text)
+  const kept = parsed.filter((c) => graph.ids.includes(c.id))
+  const cleaned = cleanBranches(json.branches, kept.map((c) => ({ id: c.id, branchKey: c.branchKey })))
+  const { branches, branchOf, merges } = mergeSingletonBranches(cleaned.branches, cleaned.branchOf, graph.deps)
+  for (const m of merges) console.info(`[analyze] ${paper.data.arxivId}: single-concept branch ${m.from} merged into ${m.to}`)
 
   // Resolve each concept to its own topic key, creating new topics as needed.
-  const { topicFor, newTopics } = assignTopics(
-    parsed.filter((c) => graph.ids.includes(c.id)),
-    new Map(topics.map((t) => [t.data.key, t.data])),
-  )
+  const topicByKey = new Map(topics.map((t) => [t.data.key, t]))
+  const { topicFor, newTopics, rejected } = assignTopics(kept, new Map(topics.map((t) => [t.data.key, t.data])))
+  for (const r of rejected) console.info(`[analyze] ${paper.data.arxivId}: ${r.id} does not reuse ${r.from}, gets ${r.to}`)
 
-  // Replace any concepts left by an earlier attempt for this paper.
-  const old = (await ctx.records.query('concepts', { where: { paperId: paper.recordId }, limit: 200 })) as Envelope<unknown>[]
-  for (const o of old) state.writes.push({ op: 'delete', collection: 'concepts', recordId: o.recordId })
   for (const t of newTopics.values()) {
     state.writes.push({ op: 'create', collection: 'topics', ignoreDuplicate: true, data: { ...t } })
   }
+  // A paper-only topic whose links were skipped is shared now, so it gets links on the next branch load.
+  for (const key of new Set(Object.values(topicFor))) {
+    const t = topicByKey.get(key)
+    if (t?.data.resourcesStatus === 'skipped') {
+      state.writes.push({ op: 'update', collection: 'topics', recordId: t.recordId, data: { resourcesStatus: 'none' } })
+    }
+  }
+
+  const paperNorm = normalizeForMatch(state.text)
+  const usedQuotes = new Set<string>()
   let order = 0
-  for (const c of parsed) {
-    if (!graph.ids.includes(c.id)) continue
+  for (const c of kept) {
+    const { quote, rejected: badQuotes } = pickQuote(c.quotes, paperNorm, usedQuotes)
+    if (badQuotes.length) console.info(`[analyze] ${paper.data.arxivId}: ${c.id} quotes rejected: ${badQuotes.map((b) => b.problem).join(', ')}`)
     state.writes.push({
       op: 'create',
       collection: 'concepts',
@@ -355,13 +423,14 @@ async function stepConcepts(state: AnalyzeState, { ctx, client, paper }: StepCtx
         name: c.name,
         whyNeeded: c.whyNeeded,
         section: c.section,
-        quote: c.quote,
-        quoteVerified: c.quote ? isQuoteVerified(c.quote, paperNorm) : false,
+        quote,
+        quoteVerified: !!quote,
+        // HTML text already has its math as LaTeX, so the quote displays as is. PDF math can't be trusted to rewrite.
+        quoteDisplay: source === 'html' && quote && hasMath(quote) ? quote : '',
         dependsOn: graph.deps[c.id],
         tier: graph.tiers[c.id],
         depth: c.depth,
         order: order++,
-        check: null,
         branchKey: branchOf[c.id],
         explanation: '',
         explanationAt: 0,
@@ -377,6 +446,7 @@ async function stepConcepts(state: AnalyzeState, { ctx, client, paper }: StepCtx
     conceptCount: graph.ids.length,
     branches,
     topicKeys: [...new Set(Object.values(topicFor))],
+    overview: null,
     progressMessage: 'Writing a plain-language overview',
   })
 }
@@ -385,29 +455,32 @@ async function stepConcepts(state: AnalyzeState, { ctx, client, paper }: StepCtx
  * One call for the plain-language overview and each concept's plain role.
  * It is not essential to the analysis: if it fails, the paper goes on
  * without one and ensureOverview generates it when a reader opens the paper.
+ * The second time it runs is the rewrite verify asked for, with its feedback.
  */
 async function stepOverview(state: AnalyzeState, { ctx, client, paper }: StepCtx) {
   const concepts = (await ctx.records.query('concepts', { where: { paperId: paper.recordId }, limit: 200 })) as Envelope<
     OverviewConcept & { quoteVerified?: boolean }
   >[]
+  const rewrite = (state.overviewPasses ?? 0) >= 1
+  state.overviewPasses = (state.overviewPasses ?? 0) + 1
   try {
     const input = concepts.map((c) => ({ ...c.data, quote: c.data.quoteVerified ? c.data.quote : '' }))
-    const { overview, roles, quoteDisplays } = await generateOverview(client, paper.data, state.text, input)
+    const { overview, roles } = await generateOverview(client, paper.data, state.text, input, {
+      source: state.textSource ?? 'pdf',
+      feedback: rewrite ? state.overviewFeedback : undefined,
+    })
     for (const c of concepts) {
-      const data: Record<string, unknown> = {}
-      if (roles[c.data.key]) data.plainRole = roles[c.data.key]
-      if (quoteDisplays[c.data.key]) data.quoteDisplay = quoteDisplays[c.data.key]
-      if (Object.keys(data).length) state.writes.push({ op: 'update', collection: 'concepts', recordId: c.recordId, data })
+      if (roles[c.data.key]) state.writes.push({ op: 'update', collection: 'concepts', recordId: c.recordId, data: { plainRole: roles[c.data.key] } })
     }
     await updatePaper(ctx, paper.recordId, { overview })
   } catch (e) {
-    console.warn(`[analyze] ${paper.data.arxivId}: overview skipped: ${errMsg(e)}`)
+    console.warn(`[analyze] ${paper.data.arxivId}: overview ${rewrite ? 'rewrite ' : ''}skipped: ${errMsg(e)}`)
   }
-  state.step = 'explain'
+  state.step = rewrite ? 'verify' : 'explain'
   await updatePaper(ctx, paper.recordId, {
-    stage: 'explain',
-    progress: 0.7,
-    progressMessage: 'Writing the section walkthrough and check questions',
+    stage: rewrite ? 'verify' : 'explain',
+    progress: rewrite ? 0.85 : 0.7,
+    progressMessage: rewrite ? 'Checking the rewritten overview against the paper' : 'Writing the section walkthrough',
   })
 }
 
@@ -422,13 +495,13 @@ async function stepExplain(state: AnalyzeState, { ctx, client, paper }: StepCtx)
   const keys = new Set(concepts.map((c) => c.data.key))
 
   const json = await callModelJson(client, {
-    system: EXPLAIN_SYSTEM,
+    system: explainSystem(state.textSource ?? 'pdf'),
     user: explainUser({
       title: paper.data.title,
       concepts: concepts.map((c) => ({ key: c.data.key, name: c.data.name, whyNeeded: c.data.whyNeeded })),
       text: state.text,
     }),
-    maxTokens: 16000,
+    maxTokens: 12000,
     hint: 'explain',
   })
 
@@ -456,31 +529,105 @@ async function stepExplain(state: AnalyzeState, { ctx, client, paper }: StepCtx)
     })
   })
 
-  const checks = Array.isArray(json.checks) ? json.checks : []
-  for (const ch of checks) {
-    if (!ch || typeof ch !== 'object') continue
-    const o = ch as Record<string, unknown>
-    const concept = concepts.find((c) => c.data.key === asString(o.concept_id, 20))
-    const choices = asStringArray(o.choices, 6).map((c) => c.slice(0, 300))
-    const answerIndex = typeof o.answer_index === 'number' ? Math.round(o.answer_index) : -1
-    if (!concept || choices.length < 2 || answerIndex < 0 || answerIndex >= choices.length) continue
-    state.writes.push({
-      op: 'update',
-      collection: 'concepts',
-      recordId: concept.recordId,
-      data: {
-        check: {
-          question: asString(o.question, 500),
-          choices,
-          answerIndex,
-          explanation: asString(o.explanation, 500),
-        },
-      },
+  state.step = 'verify'
+  await updatePaper(ctx, paper.recordId, { stage: 'verify', progress: 0.85, progressMessage: 'Checking the overview against the paper' })
+}
+
+/**
+ * Checks the overview against the paper and keeps what it supports (see
+ * pipeline/verify.ts). A first failure is retried like any step; a second one
+ * keeps the overview unchecked rather than failing the whole paper.
+ */
+async function stepVerify(state: AnalyzeState, { ctx, client, paper }: StepCtx) {
+  const overview = paper.data.overview
+  const done = () => {
+    state.text = '' // no longer needed; keep the checkpoint small
+    state.overviewFeedback = undefined
+    state.step = 'remap'
+  }
+  if (!overview) return done()
+
+  const concepts = (await ctx.records.query('concepts', { where: { paperId: paper.recordId }, limit: 200 })) as Envelope<{
+    key: string
+    name: string
+    whyNeeded: string
+    order: number
+    quote: string
+    quoteVerified: boolean
+    plainRole?: string
+  }>[]
+  concepts.sort((a, b) => a.data.order - b.data.order)
+  const source = state.textSource ?? 'pdf'
+
+  let json: Record<string, unknown>
+  try {
+    json = await callModelJson(client, {
+      system: verifySystem(source),
+      user: verifyUser({
+        title: paper.data.title,
+        abstract: paper.data.abstract,
+        text: state.text.slice(0, VERIFY_TEXT_CHARS),
+        concepts: concepts.map((c) => ({ key: c.data.key, name: c.data.name, whyNeeded: c.data.whyNeeded, quote: c.data.quoteVerified ? c.data.quote : '' })),
+        plain: overview.plain,
+        story: overview.story.map((s) => ({ id: s.id, text: s.text, technical: s.technical })),
+        roles: concepts.filter((c) => c.data.plainRole).map((c) => ({ key: c.data.key, role: c.data.plainRole! })),
+      }),
+      maxTokens: 8000,
+      hint: 'verify',
     })
+  } catch (e) {
+    if (state.failures < 1) throw e
+    console.warn(`[analyze] ${paper.data.arxivId}: overview check skipped after a retry: ${errMsg(e)}`)
+    return done()
   }
 
+  const final = (state.overviewPasses ?? 1) >= 2
+  const outcome = applyVerdict(overview, parseVerdict(json), concepts.map((c) => c.data.key), { final })
+  for (const p of outcome.problems) console.info(`[analyze] ${paper.data.arxivId}: overview check: ${p}`)
+  if (outcome.regenerate) {
+    state.overviewFeedback = outcome.problems
+    state.step = 'overview'
+    await updatePaper(ctx, paper.recordId, { stage: 'overview', progress: 0.8, progressMessage: 'Rewriting the overview' })
+    return
+  }
+
+  const names = concepts.map((c) => c.data.name)
+  for (const s of outcome.overview!.story) {
+    const terms = unglossedNames(s.text, names)
+    if (terms.length) console.info(`[analyze] ${paper.data.arxivId}: story ${s.id} names ${terms.join(', ')} without explaining it`)
+  }
+  for (const key of outcome.droppedRoles) {
+    const c = concepts.find((k) => k.data.key === key)
+    if (c?.data.plainRole) state.writes.push({ op: 'update', collection: 'concepts', recordId: c.recordId, data: { plainRole: '' } })
+  }
+  await updatePaper(ctx, paper.recordId, {
+    overview: outcome.overview,
+    overviewDropped: { story: outcome.droppedStory, technical: outcome.droppedTechnical, regenerated: final },
+  })
+  done()
+}
+
+/**
+ * Moves readers' checkmarks from an earlier analysis of this paper to the new
+ * concepts with the same normalized name; a row with no match is kept and
+ * marked stale (see lib/knowledge-remap.ts).
+ */
+async function stepRemap(state: AnalyzeState, { ctx, paper }: StepCtx) {
+  const rows = (await ctx.records.query('concept_knowledge', { where: { paperId: paper.recordId }, limit: 1000 })) as Envelope<ConceptKnowledgeData>[]
+  if (rows.length) {
+    const concepts = (await ctx.records.query('concepts', { where: { paperId: paper.recordId }, limit: 200 })) as Envelope<{
+      name: string
+      topicKey: string
+    }>[]
+    const plan = planKnowledgeRemap(
+      rows.map((r) => ({ recordId: r.recordId, ...r.data })),
+      concepts.map((c) => ({ conceptId: c.recordId, name: c.data.name, topicKey: c.data.topicKey })),
+    )
+    for (const m of plan.moves) state.writes.push({ op: 'update', collection: 'concept_knowledge', recordId: m.recordId, data: m.data })
+    for (const id of plan.deletes) state.writes.push({ op: 'delete', collection: 'concept_knowledge', recordId: id })
+    console.info(`[analyze] ${paper.data.arxivId}: checkmarks ${plan.moves.length} updated, ${plan.deletes.length} duplicates removed`)
+  }
   state.step = 'finish'
-  state.text = '' // no longer needed; keep the checkpoint small
   await updatePaper(ctx, paper.recordId, { progress: 0.95, progressMessage: 'Saving' })
 }
 

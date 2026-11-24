@@ -4,7 +4,11 @@
  */
 
 export type PaperStatus = 'queued' | 'processing' | 'ready' | 'failed'
-export type PaperStage = 'queued' | 'text' | 'concepts' | 'overview' | 'resources' | 'explain' | 'ready' | 'failed'
+export type PaperStage = 'queued' | 'text' | 'concepts' | 'overview' | 'resources' | 'explain' | 'verify' | 'ready' | 'failed'
+/** Where the paper text came from: the arXiv HTML (math as LaTeX) or the PDF converted to text (math may be damaged). */
+export type TextSource = 'html' | 'pdf'
+/** The analysis pipeline that produced a paper's concepts; papers without one predate version 2. */
+export const PIPELINE_VERSION = 2
 
 export interface PaperData {
   arxivId: string
@@ -30,6 +34,12 @@ export interface PaperData {
   overview?: PaperOverview | null
   /** Set while ensureOverview is generating one, so two readers don't both pay. */
   overviewLoadingAt?: number
+  /** Source of the stored text; missing on papers analyzed before the HTML source existed (they used the PDF). */
+  textSource?: TextSource
+  /** PIPELINE_VERSION of the analysis that produced the current concepts; missing means version 1. */
+  pipelineVersion?: number
+  /** Story sentences and technical lines the verify stage dropped as unsupported by the paper. */
+  overviewDropped?: { story: number; technical: number; regenerated: boolean }
 }
 
 /** One step of the paper's argument in plain words, with the concepts it uses. */
@@ -58,7 +68,11 @@ export interface Branch {
 
 export type TopicLevel = 'foundation' | 'core' | 'specialized'
 export type TopicOrigin = 'starter' | 'paper'
-export type ResourcesStatus = 'none' | 'loading' | 'ready' | 'failed'
+/**
+ * `skipped`: a specialized topic only one paper uses, so no web search is made;
+ * its cards lead with Explain with AI. A later paper that reuses it resets it to `none`.
+ */
+export type ResourcesStatus = 'none' | 'loading' | 'ready' | 'failed' | 'skipped'
 
 export interface TopicResource {
   title: string
@@ -81,6 +95,7 @@ export interface TopicData {
 
 export type ConceptDepth = 'skim' | 'working' | 'deep'
 
+/** Legacy: check questions are no longer generated or shown; old concept rows may still carry one. */
 export interface CheckQuestion {
   question: string
   choices: string[]
@@ -102,7 +117,8 @@ export interface ConceptData {
   tier: number
   depth: ConceptDepth
   order: number
-  check: CheckQuestion | null
+  /** Legacy field, no longer written or read. */
+  check?: CheckQuestion | null
   branchKey: string
   /** Cached "Explain with AI" text (Markdown), shared by every reader. */
   explanation: string
@@ -127,6 +143,11 @@ export interface SectionData {
 export type KnowledgeStatus = 'known' | 'learning'
 export type KnowledgeSource = 'self' | 'paper' | 'check' | 'finished'
 
+/**
+ * A topic in the reader's profile (collection `knowledge`), keyed by topic.
+ * Profile topics only produce hints ("In your profile"); they never check a
+ * concept. Rows written before per-concept knowledge existed are read the same way.
+ */
 export interface KnowledgeData {
   userId: string
   topicKey: string
@@ -134,6 +155,27 @@ export interface KnowledgeData {
   source: KnowledgeSource
   paperId: string
   arxivId: string
+}
+
+export type ConceptKnowledgeSource = 'self' | 'finished'
+
+/**
+ * One concept the reader checked (collection `concept_knowledge`), one row per
+ * (userId, conceptId). Checking a concept never checks anything in another
+ * paper; the name and topic are kept for hints and display.
+ */
+export interface ConceptKnowledgeData {
+  userId: string
+  /** The concept's record id. */
+  conceptId: string
+  paperId: string
+  arxivId: string
+  conceptName: string
+  topicKey: string
+  status: 'known'
+  source: ConceptKnowledgeSource
+  /** Set by a re-analysis when no new concept matched this row's name: listed under its paper as "from an earlier analysis". */
+  stale?: boolean
 }
 
 export type RoadmapStatus = 'reading' | 'finished'

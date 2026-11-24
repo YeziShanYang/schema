@@ -9,7 +9,7 @@ import type { CollectionSchema } from 'deepspace/schema'
 import { usersSchema } from './schemas/users-schema'
 import { settingsSchema } from './schemas/admin-schema'
 import { conceptsSchema, papersSchema, sectionsSchema, topicsSchema } from './schemas/paper-schemas'
-import { knowledgeSchema, roadmapsSchema, usageEventsSchema, workspacePapersSchema, workspacesSchema } from './schemas/reader-schemas'
+import { conceptKnowledgeSchema, knowledgeSchema, roadmapsSchema, usageEventsSchema, workspacePapersSchema, workspacesSchema } from './schemas/reader-schemas'
 
 export const schemas: CollectionSchema[] = [
   usersSchema,
@@ -19,6 +19,7 @@ export const schemas: CollectionSchema[] = [
   conceptsSchema,
   sectionsSchema,
   knowledgeSchema,
+  conceptKnowledgeSchema,
   roadmapsSchema,
   workspacesSchema,
   workspacePapersSchema,
