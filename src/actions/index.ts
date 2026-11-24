@@ -11,7 +11,9 @@ import type { ConceptData, Envelope, PaperData, TopicData, WorkspaceData } from 
 import { isFixtureId, parseArxivId } from '../lib/arxiv'
 import { STARTER_TOPICS } from '../lib/topics'
 import { withPaper } from '../lib/workspace'
+import { categoryName, suggestWorkspaceName } from '../lib/categories'
 import { lookupArxiv } from '../server/pipeline/arxiv-meta'
+import { fixturesAllowed, fixtureWorkspace } from '../server/pipeline/client'
 import { recommendForWorkspace } from '../server/recommend'
 import { generateExplanation } from '../server/explain-concept'
 import { loadBranch } from '../server/branch-resources'
@@ -70,11 +72,60 @@ function enqueueAnalyze(env: Env, paperId: string, arxivId: string, userId: stri
   )
 }
 
+/** Look a paper up on arXiv before adding it. Free (public arXiv API), not capped, needs sign-in. */
+const peekPaper: ActionHandler<Env> = async ({ params, tools, env }) => {
+  const ref = parseArxivId(typeof params.input === 'string' ? params.input : '')
+  if (!ref) return fail(INVALID_INPUT)
+  const debug = env.ALLOW_DEBUG_ROUTES === 'true'
+  if (isFixtureId(ref.id) && !debug) return fail(INVALID_INPUT)
+  const existing = await findPaper(tools, ref.id)
+  const lookup = await lookupArxiv(ref.id, { fixtures: debug })
+  if (!lookup.ok) {
+    // An analyzed paper can still be shown if arXiv is briefly unreachable.
+    if (!existing || lookup.reason === 'not_found') return fail(lookup.message)
+  }
+  const meta = lookup.ok ? lookup.meta : null
+  const title = meta?.title ?? existing?.data.title ?? ref.id
+  const primaryCategory = meta?.primaryCategory ?? existing?.data.primaryCategory ?? ''
+  return {
+    success: true,
+    data: {
+      arxivId: ref.id,
+      title,
+      authors: (meta?.authors ?? existing?.data.authors ?? []).slice(0, 8),
+      year: (meta?.publishedAt ?? existing?.data.publishedAt ?? '').slice(0, 4),
+      primaryCategory,
+      categoryName: categoryName(primaryCategory),
+      suggestedWorkspaceName: suggestWorkspaceName(primaryCategory, title),
+      analyzed: existing?.data.status === 'ready',
+      status: existing?.data.status ?? 'new',
+    },
+  }
+}
+
+/** Create a workspace for the caller (server side, after the paper checked out). */
+async function createWorkspace(tools: ActionTools, userId: string, name: string): Promise<Envelope<WorkspaceData> | null> {
+  const data: WorkspaceData = {
+    userId,
+    name: name.trim().slice(0, 120),
+    description: '',
+    currentPaperId: '',
+    papers: [],
+    suggestions: [],
+    suggestionsAt: 0,
+    lastOpenedAt: Date.now(),
+  }
+  const r = await tools.create('workspaces', data as unknown as Record<string, unknown>)
+  if (!r.success) return null
+  return { recordId: r.data.recordId, data }
+}
+
 interface AnalyzeResult {
   paperId: string
   arxivId: string
   existing: boolean
   status: string
+  workspaceId?: string
 }
 
 const analyzePaper: ActionHandler<Env> = async ({ userId, params, tools, env }) => {
@@ -84,15 +135,27 @@ const analyzePaper: ActionHandler<Env> = async ({ userId, params, tools, env }) 
   if (isFixtureId(ref.id) && !debug) return fail(INVALID_INPUT)
 
   const workspaceId = typeof params.workspaceId === 'string' ? params.workspaceId : ''
-  const workspace = workspaceId ? await ownedWorkspace(tools, userId, workspaceId) : null
+  let workspace = workspaceId ? await ownedWorkspace(tools, userId, workspaceId) : null
   if (workspaceId && !workspace) return fail('Workspace not found.')
+  const nw = params.newWorkspace as { name?: unknown } | undefined
+  const newName = nw && typeof nw.name === 'string' ? nw.name.trim() : ''
+  if (nw && !newName) return fail('Give the new workspace a name.')
+  if (newName && workspace) return fail('Choose either an existing workspace or a new one.')
+  // A new workspace is created only once the paper has checked out, so a bad link never leaves an empty one.
+  const ensureWorkspace = async () => {
+    if (!newName || workspace) return workspace
+    workspace = await createWorkspace(tools, userId, newName)
+    return workspace
+  }
 
   const existing = await findPaper(tools, ref.id)
   if (existing) {
-    if (workspace) await addToWorkspace(tools, workspace, { paperId: existing.recordId, arxivId: ref.id, title: existing.data.title })
+    const ws = await ensureWorkspace()
+    if (newName && !ws) return fail('Could not create the workspace.')
+    if (ws) await addToWorkspace(tools, ws, { paperId: existing.recordId, arxivId: ref.id, title: existing.data.title })
     return {
       success: true,
-      data: { paperId: existing.recordId, arxivId: ref.id, existing: true, status: existing.data.status } satisfies AnalyzeResult,
+      data: { paperId: existing.recordId, arxivId: ref.id, existing: true, status: existing.data.status, workspaceId: ws?.recordId } satisfies AnalyzeResult,
     }
   }
 
@@ -102,6 +165,7 @@ const analyzePaper: ActionHandler<Env> = async ({ userId, params, tools, env }) 
   const lookup = await lookupArxiv(ref.id, { fixtures: debug })
   if (!lookup.ok) return fail(lookup.message)
   const m = lookup.meta
+  if (newName && !(await ensureWorkspace())) return fail('Could not create the workspace.')
 
   const created = await tools.create('papers', {
     arxivId: ref.id,
@@ -127,7 +191,7 @@ const analyzePaper: ActionHandler<Env> = async ({ userId, params, tools, env }) 
     const raced = await findPaper(tools, ref.id)
     if (raced) {
       if (workspace) await addToWorkspace(tools, workspace, { paperId: raced.recordId, arxivId: ref.id, title: raced.data.title })
-      return { success: true, data: { paperId: raced.recordId, arxivId: ref.id, existing: true, status: raced.data.status } }
+      return { success: true, data: { paperId: raced.recordId, arxivId: ref.id, existing: true, status: raced.data.status, workspaceId: workspace?.recordId } }
     }
     return fail(created.error)
   }
@@ -148,7 +212,7 @@ const analyzePaper: ActionHandler<Env> = async ({ userId, params, tools, env }) 
   }
   if (workspace) await addToWorkspace(tools, workspace, { paperId, arxivId: ref.id, title: m.title })
   console.info(`[analyzePaper] queued ${ref.id} for ${userId} (${cap.used + 1} in the last 24h)`)
-  return { success: true, data: { paperId, arxivId: ref.id, existing: false, status: 'queued' } satisfies AnalyzeResult }
+  return { success: true, data: { paperId, arxivId: ref.id, existing: false, status: 'queued', workspaceId: workspace?.recordId } satisfies AnalyzeResult }
 }
 
 const retryPaper: ActionHandler<Env> = async ({ userId, params, tools, env }) => {
@@ -205,12 +269,15 @@ const seedTopics: ActionHandler<Env> = async ({ tools }) => {
 const recommendPapers: ActionHandler<Env> = async ({ userId, params, tools, env }) => {
   const ws = await ownedWorkspace(tools, userId, typeof params.workspaceId === 'string' ? params.workspaceId : '')
   if (!ws) return fail('Workspace not found.')
+  // Fixture runs in local tests cost nothing, so they neither count nor stop at the cap.
+  const free = fixtureWorkspace(env, ws.data.name)
   const usage = await usageState(tools, userId, 'recommend')
-  if (!usage.allowed) return fail(capMessage('recommend', usage))
+  if (!free && !usage.allowed) return fail(capMessage('recommend', usage))
 
-  const outcome = await recommendForWorkspace(env, tools, userId, ws)
+  const mode = params.mode === 'starter' ? 'starter' : 'next'
+  const outcome = await recommendForWorkspace(env, tools, userId, ws, mode)
   // A search that ran was paid for, so it counts toward the cap even if nothing usable came back.
-  if (outcome.ok || outcome.charged) await recordUsage(tools, userId, 'recommend', ws.recordId)
+  if (outcome.charged) await recordUsage(tools, userId, 'recommend', ws.recordId)
   if (!outcome.ok) return fail(outcome.error)
 
   await tools.update('workspaces', ws.recordId, { suggestions: outcome.suggestions, suggestionsAt: Date.now() })
@@ -227,12 +294,12 @@ const explainConcept: ActionHandler<Env> = async ({ userId, params, tools, env }
     return { success: true, data: { explanation: concept.data.explanation, cached: true } }
   }
 
-  const usage = await usageState(tools, userId, 'explain')
-  if (!usage.allowed) return fail(capMessage('explain', usage))
-
   const paperRes = await tools.get('papers', concept.data.paperId)
   if (!paperRes.success) return fail('Paper not found.')
   const paper = (paperRes.data as unknown as { record: Envelope<PaperData> }).record
+  const free = fixturesAllowed(env, paper.data.arxivId)
+  const usage = await usageState(tools, userId, 'explain')
+  if (!free && !usage.allowed) return fail(capMessage('explain', usage))
 
   let explanation: string
   try {
@@ -241,7 +308,7 @@ const explainConcept: ActionHandler<Env> = async ({ userId, params, tools, env }
     return fail(`Could not generate an explanation: ${e instanceof Error ? e.message : String(e)}`)
   }
   await tools.update('concepts', conceptId, { explanation, explanationAt: Date.now() })
-  await recordUsage(tools, userId, 'explain', conceptId)
+  if (!free) await recordUsage(tools, userId, 'explain', conceptId)
   return { success: true, data: { explanation, cached: false } }
 }
 
@@ -256,13 +323,14 @@ const loadBranchResources: ActionHandler<Env> = async ({ userId, params, tools, 
 
   // Loading the rest of a branch already counted today is free.
   const ref = `${paperId}:${branchKey}`
+  const free = fixturesAllowed(env, paper.data.arxivId)
   const alreadyCounted = await usedRecently(tools, userId, 'branch', ref)
   const usage = await usageState(tools, userId, 'branch')
-  if (!alreadyCounted && !usage.allowed) return fail(capMessage('branch', usage))
+  if (!free && !alreadyCounted && !usage.allowed) return fail(capMessage('branch', usage))
 
   const outcome = await loadBranch(env, tools, paper, branchKey)
   if (!outcome.ok) return fail(outcome.error)
-  if (outcome.charged && !alreadyCounted) await recordUsage(tools, userId, 'branch', ref)
+  if (outcome.charged && !alreadyCounted && !free) await recordUsage(tools, userId, 'branch', ref)
   return {
     success: true,
     data: {
@@ -288,6 +356,7 @@ const myAllowance: ActionHandler<Env> = async ({ userId, tools }) => {
 
 export const actions: Record<string, ActionHandler<Env>> = {
   myAllowance,
+  peekPaper,
   analyzePaper,
   retryPaper,
   seedTopics,

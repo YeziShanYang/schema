@@ -128,7 +128,7 @@ export default function KnowledgePage() {
         </section>
 
         {starters.length > 0 && (
-          <section data-testid="starter-topics">
+          <section data-testid="starter-topics" id="starter">
             <div className="label pb-1">Common starting points</div>
             <p className="pb-2 text-sm text-muted-foreground">Tick what you already know, so new papers skip it.</p>
             <ul className="flex flex-wrap gap-2">

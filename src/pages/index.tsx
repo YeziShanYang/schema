@@ -5,10 +5,14 @@
  * separately; until then the example shows the same branches as a list.
  */
 
-import { useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Seo } from '../components/Seo'
 import { MarkIcon } from '../components/icons'
+import { FloatingGraph } from '../components/graph/FloatingGraph'
+import { BranchPanel } from '../components/graph/BranchPanel'
+import { CenterCard } from '../components/graph/nodes'
+import { recommendedSequence } from '../lib/sequence'
 import { cleanTitle } from '../components/Markdown'
 import { APP_DISPLAY_NAME, DEMO_ARXIV_ID } from '../constants'
 import { demoSnapshot } from '../data/demo'
@@ -26,8 +30,24 @@ const STEPS = [
 
 export default function Landing() {
   const snap = demoSnapshot
-  const [open, setOpen] = useState(snap.branches[0]?.key ?? '')
-  const branch = snap.branches.find((b) => b.key === open) ?? snap.branches[0]
+  const [open, setOpen] = useState('')
+  const branch = snap.branches.find((b) => b.key === open) ?? null
+  const buttons = useRef(new Map<string, HTMLButtonElement | null>())
+  const lastOpened = useRef('')
+  const openBranch = (key: string) => {
+    lastOpened.current = key
+    setOpen(key)
+  }
+  // The same sequence the app computes, for a reader who knows nothing yet.
+  const seq = useMemo(
+    () =>
+      recommendedSequence(
+        snap.branches,
+        snap.branches.flatMap((b) => b.concepts.map((c, i) => ({ ...c, branchKey: b.key, order: i, dependsOn: [] as string[] }))),
+        () => null,
+      ),
+    [snap],
+  )
   const demoHref = `/p/${arxivSlug(DEMO_ARXIV_ID)}`
   const total = snap.branches.reduce((n, b) => n + b.concepts.length, 0)
 
@@ -74,40 +94,72 @@ export default function Landing() {
               {snap.paper.authors.slice(0, 3).join(', ')} et al. · {snap.paper.year} · {total} concepts in {snap.branches.length} branches
             </p>
 
-            <div className="mt-5 grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
-              <ul className="grid gap-2 self-start" data-testid="landing-branches">
-                {snap.branches.map((b) => (
-                  <li key={b.key}>
-                    <button
-                      type="button"
-                      aria-pressed={b.key === branch?.key}
-                      onClick={() => setOpen(b.key)}
-                      data-testid="landing-branch"
-                      className={
-                        'press w-full cursor-pointer rounded border border-transparent bg-card p-3 text-left ' +
-                        (b.key === branch?.key ? 'shadow-[0_0_0_2px_var(--color-primary),var(--shadow-ring-hi)]' : 'shadow-[var(--shadow-ring)] hover:shadow-[var(--shadow-ring-hi)]')
-                      }
-                    >
-                      <span className="block text-sm font-semibold">{b.name}</span>
-                      <span className="mt-1 block text-xs text-muted-foreground">{b.concepts.length} concepts</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-
+            <div className="surface mt-5 overflow-hidden">
+              <FloatingGraph
+                label={`Branches of ${snap.paper.title}`}
+                testId="landing-graph"
+                className="min-h-[520px]"
+                center={
+                  <CenterCard label="Target paper" className="w-[300px]">
+                    <h3 className="mb-1 mt-1.5 text-[19px] font-semibold leading-tight">{snap.paper.title}</h3>
+                    <p className="mb-2 text-[13px] text-muted-foreground">{snap.paper.authors[0]?.split(' ').slice(-1)[0]} et al. · {snap.paper.year} · <span className="font-mono">arXiv {snap.paper.arxivId}</span></p>
+                    <p className="text-xs text-muted-foreground">{total} concepts in {snap.branches.length} branches. Click a branch.</p>
+                  </CenterCard>
+                }
+                nodes={seq.steps.map((st) => {
+                  const b = snap.branches.find((x) => x.key === st.branchKey)!
+                  return {
+                    key: b.key,
+                    hot: open === b.key,
+                    content: (
+                      <button
+                        type="button"
+                        ref={(el) => {
+                          buttons.current.set(b.key, el)
+                        }}
+                        onClick={() => openBranch(b.key)}
+                        aria-haspopup="dialog"
+                        data-testid="landing-branch"
+                        data-branch-key={b.key}
+                        className={
+                          'press graph-w-branch block w-full cursor-pointer rounded border border-transparent bg-card px-3.5 py-3 text-left ' +
+                          (st.index === 1 ? 'shadow-[0_0_0_2px_var(--color-primary),var(--shadow-ring-hi)]' : 'shadow-[var(--shadow-ring)] hover:shadow-[var(--shadow-ring-hi)]')
+                        }
+                      >
+                        <span className="mb-1 flex items-center justify-between gap-2">
+                          <span className="font-mono text-[11px] text-faint tabular-nums">Step {st.index}</span>
+                          {st.index === 1 && <span className="label text-primary">Start here</span>}
+                        </span>
+                        <span className="block text-sm font-semibold leading-snug">{b.name}</span>
+                        <span className="mt-1 block text-xs text-muted-foreground">{b.concepts.length} concepts</span>
+                      </button>
+                    ),
+                  }
+                })}
+              />
+            </div>
+            <BranchPanel
+              open={!!branch}
+              onClose={() => setOpen('')}
+              returnFocus={() => (lastOpened.current ? buttons.current.get(lastOpened.current) ?? null : null)}
+              title={branch?.name ?? ''}
+              eyebrow={branch ? `Example · ${branch.concepts.length} concepts` : ''}
+              description={branch?.description}
+              testId="landing-panel"
+            >
               {branch && (
-                <div className="surface min-w-0" data-testid="landing-branch-concepts">
-                  <div className="border-b border-border px-4 pb-3 pt-4">
-                    <h3 className="text-lg font-semibold">{branch.name}</h3>
-                    <p className="mt-0.5 text-[13px] text-muted-foreground">{branch.description}</p>
-                  </div>
-                  <ul className="divide-y divide-border px-4">
-                    {branch.concepts.map((c) => {
+                <ul className="grid gap-3 min-[900px]:grid-cols-2" data-testid="landing-branch-concepts">
+                  {seq.concepts
+                    .filter((c) => c.branchKey === branch.key)
+                    .map((c) => {
                       const topic = snap.topics[c.topicKey]
                       return (
-                        <li key={c.key} className="py-3">
+                        <li key={c.key} className="rounded-lg border border-border bg-card p-3.5">
                           <div className="flex items-baseline justify-between gap-2">
-                            <span className="font-semibold">{c.name}</span>
+                            <span className="font-semibold">
+                              <span className="mr-1.5 font-mono text-[11px] font-normal text-faint">{seq.stepInBranch.get(c.key)}.</span>
+                              {c.name}
+                            </span>
                             <span className={'rounded-[3px] border px-[7px] py-px font-mono text-[11px] uppercase tracking-[0.05em] ' + (c.depth === 'deep' ? 'border-transparent bg-accent-soft text-primary' : 'border-border bg-surface-2 text-muted-foreground')}>
                               {c.depth}
                             </span>
@@ -126,12 +178,11 @@ export default function Landing() {
                         </li>
                       )
                     })}
-                  </ul>
-                </div>
+                </ul>
               )}
-            </div>
+            </BranchPanel>
             <p className="mt-3 text-[13px] text-muted-foreground">
-              <Link to={demoHref} className="text-primary hover:underline">Open this paper</Link> to try marking concepts, the check questions and the AI explanations. No sign-in needed.
+              <Link to={demoHref} className="text-primary hover:underline">Open this paper</Link> to try marking concepts, the recommended order, the check questions and the AI explanations. No sign-in needed.
             </p>
           </section>
 

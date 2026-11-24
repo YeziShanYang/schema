@@ -10,6 +10,7 @@ import { useQuery } from 'deepspace'
 import type { RecordData } from 'deepspace'
 import type { ConceptData, PaperData, SectionData, TopicData } from '../types'
 import { branchProgress, paperProgress } from '../lib/branches'
+import { recommendedSequence } from '../lib/sequence'
 import { useKnowledge, useRoadmaps, useTopics, type KnowledgeApi } from './useReader'
 import { useWorkspaces } from './useWorkspaces'
 
@@ -48,6 +49,16 @@ export function usePaper(arxivId: string, knowledge: KnowledgeApi) {
     [concepts],
   )
 
+  const sequence = useMemo(
+    () =>
+      recommendedSequence(
+        paper?.data.branches ?? [],
+        concepts.map((c) => ({ ...c.data, key: c.data.key, dependsOn: c.data.dependsOn ?? [] })),
+        knowledge.statusOf,
+      ),
+    [paper, concepts, knowledge.statusOf],
+  )
+
   const linksForBranch = useCallback(
     (branchKey: string): BranchLinks =>
       branchLinkState(concepts.filter((c) => c.data.branchKey === branchKey).map((c) => topicsByKey.get(c.data.topicKey)?.data)),
@@ -64,6 +75,7 @@ export function usePaper(arxivId: string, knowledge: KnowledgeApi) {
     progress,
     conceptsInBranch,
     linksForBranch,
+    sequence,
     topicsByKey,
     knowledge,
   }

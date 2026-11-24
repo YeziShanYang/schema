@@ -18,8 +18,11 @@ import { RECOMMEND_SYSTEM, recommendUser, type PaperCandidate } from './pipeline
 const PICKS = 3
 const MAX_CANDIDATES = 10
 
-export function searchQueryFor(ws: Pick<WorkspaceData, 'name' | 'description'>, knownTopics: string[]): string {
+export type RecommendMode = 'starter' | 'next'
+
+export function searchQueryFor(ws: Pick<WorkspaceData, 'name' | 'description'>, knownTopics: string[], mode: RecommendMode = 'next'): string {
   const focus = ws.description ? `${ws.name}: ${ws.description}` : ws.name
+  if (mode === 'starter') return `A famous, introductory or survey paper that newcomers to ${focus} read first`
   if (knownTopics.length < 8) return `An introductory survey or tutorial paper on ${focus}`
   return `A research paper on ${focus} for a reader who already knows ${knownTopics.slice(0, 5).join(', ')}`
 }
@@ -46,13 +49,15 @@ export function candidatesFromResults(results: unknown, skip: Set<string>): Pape
   return out
 }
 
-export type RecommendOutcome = { ok: true; suggestions: Suggestion[] } | { ok: false; error: string; charged: boolean }
+/** `charged` is false when nothing billable ran (including fixture runs in local tests). */
+export type RecommendOutcome = { ok: true; suggestions: Suggestion[]; charged: boolean } | { ok: false; error: string; charged: boolean }
 
 export async function recommendForWorkspace(
   env: Env,
   tools: ActionTools,
   userId: string,
   workspace: Envelope<WorkspaceData>,
+  mode: RecommendMode = 'next',
 ): Promise<RecommendOutcome> {
   const ws = workspace.data
   const known = await tools.query('knowledge', { where: { userId, status: 'known' }, limit: 1000 })
@@ -74,7 +79,7 @@ export async function recommendForWorkspace(
     const data = (await client.call(
       'exa/search',
       {
-        query: searchQueryFor(ws, knownTopics),
+        query: searchQueryFor(ws, knownTopics, mode),
         numResults: 12,
         includeDomains: ['arxiv.org'],
         category: 'research paper',
@@ -88,7 +93,7 @@ export async function recommendForWorkspace(
 
   const candidates = candidatesFromResults(results, existing)
   if (candidates.length === 0) {
-    return { ok: false, charged: true, error: 'No arXiv papers matched this workspace. Try adding a description.' }
+    return { ok: false, charged: !fixtures, error: 'No arXiv papers found for this subject. Paste a link instead.' }
   }
 
   let picks: { candidate: PaperCandidate; reason: string }[] = []
@@ -96,6 +101,7 @@ export async function recommendForWorkspace(
     const json = await callModelJson(client, {
       system: RECOMMEND_SYSTEM,
       user: recommendUser({
+        mode,
         name: ws.name,
         description: ws.description,
         knownTopics: knownTopics.slice(0, 40),
@@ -132,7 +138,7 @@ export async function recommendForWorkspace(
     })
   }
   if (suggestions.length === 0) {
-    return { ok: false, charged: true, error: 'None of the recommended papers could be confirmed on arXiv. Try again.' }
+    return { ok: false, charged: !fixtures, error: 'None of the recommended papers could be confirmed on arXiv. Try again.' }
   }
-  return { ok: true, suggestions }
+  return { ok: true, suggestions, charged: !fixtures }
 }

@@ -38,6 +38,19 @@ export interface AnalyzeResult {
   arxivId: string
   existing: boolean
   status: string
+  workspaceId?: string
+}
+
+export interface PaperPeek {
+  arxivId: string
+  title: string
+  authors: string[]
+  year: string
+  primaryCategory: string
+  categoryName: string
+  suggestedWorkspaceName: string
+  analyzed: boolean
+  status: string
 }
 
 export interface Allowance {
@@ -69,8 +82,11 @@ export const actions = {
     metered(callAction<AnalyzeResult>('analyzePaper', workspaceId ? { input, workspaceId } : { input })),
   retryPaper: (paperId: string) => metered(callAction<{ paperId: string }>('retryPaper', { paperId })),
   seedTopics: () => callAction<{ remaining: number }>('seedTopics'),
-  recommendPapers: (workspaceId: string) =>
-    metered(callAction<{ suggestions: Suggestion[]; remaining: number }>('recommendPapers', { workspaceId })),
+  recommendPapers: (workspaceId: string, mode: 'starter' | 'next' = 'next') =>
+    metered(callAction<{ suggestions: Suggestion[]; remaining: number }>('recommendPapers', { workspaceId, mode })),
+  peekPaper: (input: string) => callAction<PaperPeek>('peekPaper', { input }),
+  addPaperToNewWorkspace: (input: string, name: string) =>
+    metered(callAction<AnalyzeResult>('analyzePaper', { input, newWorkspace: { name } })),
   explainConcept: (conceptId: string) =>
     metered(callAction<{ explanation: string; cached: boolean }>('explainConcept', { conceptId })),
   loadBranchResources: (paperId: string, branchKey: string) =>

@@ -16,6 +16,11 @@ test.describe('API tests', () => {
     expect(res.status()).toBe(401)
   })
 
+  test('peekPaper requires sign-in', async ({ request }) => {
+    const res = await request.post('/api/actions/peekPaper', { data: { input: '1706.03762' } })
+    expect(res.status()).toBe(401)
+  })
+
   test('WebSocket endpoint exists', async ({ page }) => {
     // /home is a dynamic page (under src/pages/(app)/), so mounting it boots
     // the providers and auto-connects the records WebSocket. The static

@@ -109,6 +109,7 @@ export interface PaperCandidate {
 }
 
 export function recommendUser(args: {
+  mode?: 'starter' | 'next'
   name: string
   description: string
   knownTopics: string[]
@@ -116,7 +117,11 @@ export function recommendUser(args: {
   candidates: PaperCandidate[]
 }): string {
   const results = args.candidates.map((c) => `${c.n}. [${c.arxivId}] ${c.title}\n   ${c.snippet}`).join('\n')
-  return `Workspace: ${args.name}\nDescription: ${args.description || '(none)'}\n\nTopics the learner knows (${args.knownTopics.length}): ${args.knownTopics.join('; ') || '(none yet)'}\n\nAlready in the workspace: ${args.existing.join('; ') || '(none)'}\n\nSearch results:\n${results}`
+  const modeLine =
+    args.mode === 'starter'
+      ? 'Mode: starter. This workspace is new: pick the famous, foundational, introductory or survey papers a newcomer to the subject should read first.'
+      : 'Mode: next. Pick what this learner should read next, given the papers already in the workspace and what they know.'
+  return `${modeLine}\n\nWorkspace: ${args.name}\nDescription: ${args.description || '(none)'}\n\nTopics the learner knows (${args.knownTopics.length}): ${args.knownTopics.join('; ') || '(none yet)'}\n\nAlready in the workspace: ${args.existing.join('; ') || '(none)'}\n\nSearch results:\n${results}`
 }
 
 export const EXPLAIN_CONCEPT_SYSTEM = `You explain one concept to a learner who is reading a specific research paper and got stuck on it.

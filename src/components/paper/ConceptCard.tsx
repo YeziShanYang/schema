@@ -25,9 +25,15 @@ interface Props {
   knowledge: KnowledgeApi
   signedIn: boolean
   explainLeft?: number
+  /** Branch-level link state for topics that have no links yet. */
+  linksState?: 'loading' | 'signin' | null
+  onSignIn?: () => void
+  /** Position within the branch in the recommended sequence. */
+  stepIndex?: number
+  nextUp?: boolean
 }
 
-export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcept, status, knowledge, signedIn, explainLeft }: Props) {
+export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcept, status, knowledge, signedIn, explainLeft, linksState, onSignIn, stepIndex, nextUp }: Props) {
   const c = concept.data
   const from = { paperId: paper.recordId, arxivId: paper.data.arxivId }
   const [choice, setChoice] = useState<number | null>(null)
@@ -64,13 +70,23 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
       data-testid="concept-card"
       data-concept-key={c.key}
       data-status={status ?? 'unknown'}
-      className="grid grid-cols-[28px_minmax(0,1fr)] gap-2.5 border-b border-border px-2 py-3.5 last:border-b-0"
+      data-next-up={nextUp ? 'true' : undefined}
+      className={
+        'grid scroll-mt-4 grid-cols-[28px_minmax(0,1fr)] gap-2.5 rounded-lg border bg-card p-3.5 ' +
+        (nextUp ? 'border-primary shadow-[0_0_0_1px_var(--color-primary)]' : 'border-border')
+      }
     >
       <KnownToggle status={status} name={c.name} disabled={!knowledge.ready} onChange={setStatus} className="mt-px" />
       <div className="min-w-0">
         <div className="flex items-baseline justify-between gap-2.5">
-          <span className={status === 'known' ? 'font-semibold leading-snug text-muted-foreground' : 'font-semibold leading-snug'}>{c.name}</span>
-          <Chip tone={c.depth === 'deep' ? 'accent' : 'plain'}>{c.depth}</Chip>
+          <span className={status === 'known' ? 'font-semibold leading-snug text-muted-foreground' : 'font-semibold leading-snug'}>
+            {stepIndex !== undefined && <span className="mr-1.5 font-mono text-[11px] font-normal text-faint tabular-nums">{stepIndex}.</span>}
+            {c.name}
+          </span>
+          <span className="flex shrink-0 items-center gap-1.5">
+            {nextUp && <Chip tone="accent"><span data-testid="next-up-badge">Next up</span></Chip>}
+            <Chip tone={c.depth === 'deep' ? 'accent' : 'plain'}>{c.depth}</Chip>
+          </span>
         </div>
 
         <div className="mt-1.5">
@@ -112,7 +128,14 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
               ))}
             </ul>
           )}
-          {topic?.resourcesStatus === 'loading' && <span className="text-xs text-muted-foreground" data-testid="concept-links-loading">Finding explainers…</span>}
+          {(topic?.resourcesStatus === 'loading' || (linksState === 'loading' && (!topic?.resourcesStatus || topic.resourcesStatus === 'none'))) && (
+            <span className="w-full text-xs text-muted-foreground motion-safe:animate-pulse" data-testid="concept-links-loading">Finding explainer links…</span>
+          )}
+          {linksState === 'signin' && (!topic?.resourcesStatus || topic.resourcesStatus === 'none') && (
+            <span className="w-full text-xs text-muted-foreground" data-testid="links-signin">
+              <button type="button" onClick={onSignIn} className="text-primary hover:underline">Sign in</button> to load links
+            </span>
+          )}
           {topic?.resourcesStatus === 'failed' && <span className="text-xs text-faint">No explainers found for this topic.</span>}
 
           {c.explanation ? (

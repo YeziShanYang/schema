@@ -10,12 +10,13 @@
  * nav-user-name, nav-user-email); the shipped specs use them.
  */
 
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { AuthOverlay, signOut, useAuthProfileReady } from 'deepspace'
 import { cn } from '@/lib/utils'
-import { Button, Input, Modal, Textarea } from './ui'
-import { CloseIcon, MarkIcon, MenuIcon, PlusIcon } from './icons'
+import { Button } from './ui'
+import { AddButton } from './AddDialog'
+import { CloseIcon, MarkIcon, MenuIcon } from './icons'
 import { useKnowledge, useRoadmaps } from '../hooks/useReader'
 import { useWorkspaces } from '../hooks/useWorkspaces'
 import { useAllowance } from '../hooks/useAllowance'
@@ -35,66 +36,12 @@ function plural(n: number, one: string, many: string) {
   return `${n} ${n === 1 ? one : many}`
 }
 
-export function NewWorkspaceDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const workspaces = useWorkspaces()
-  const navigate = useNavigate()
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-
-  async function submit(e: FormEvent) {
-    e.preventDefault()
-    if (!name.trim()) return setError('Give the workspace a name.')
-    setBusy(true)
-    setError('')
-    try {
-      const id = await workspaces.create(name, description)
-      if (id) {
-        setName('')
-        setDescription('')
-        onClose()
-        navigate(`/w/${id}`)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not create the workspace.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} size="sm">
-      <Modal.Header>
-        <Modal.Title>New workspace</Modal.Title>
-        <Modal.Description>A subject you are studying, such as Machine Learning or CS 229.</Modal.Description>
-      </Modal.Header>
-      <form onSubmit={submit} className="flex flex-col gap-3" data-testid="workspace-form">
-        <label className="flex flex-col gap-1.5">
-          <span className="label">Name</span>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Machine Learning" aria-label="Workspace name" autoFocus />
-        </label>
-        <label className="flex flex-col gap-1.5">
-          <span className="label">What you want to learn (optional)</span>
-          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Representation learning and probing" aria-label="Workspace description" rows={3} />
-        </label>
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={busy} disabled={!workspaces.ready}>Create workspace</Button>
-        </div>
-      </form>
-    </Modal>
-  )
-}
-
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { user } = useAuthProfileReady({ requireUser: true })
   const workspaces = useWorkspaces()
   const roadmaps = useRoadmaps()
   const knowledge = useKnowledge()
   const { allowance } = useAllowance()
-  const [creating, setCreating] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
 
   const knownCount = knowledge.rows.filter((r) => r.data.status === 'known').length
@@ -109,7 +56,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-1 px-3 py-[18px]" data-testid="app-navigation">
-      <div className="px-0 pb-3.5"><Brand /></div>
+      <div className="px-0 pb-3"><Brand /></div>
+      <AddButton className="w-full justify-start" />
 
       <nav aria-label="Workspaces" className="flex min-h-0 flex-col">
         <div className="label px-2 pb-1.5 pt-3">Workspaces</div>
@@ -124,11 +72,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
               </NavLink>
             </li>
           ))}
-          <li>
-            <button type="button" onClick={() => setCreating(true)} className="press flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-[7px] text-left text-sm text-muted-foreground hover:bg-[color-mix(in_oklab,var(--color-foreground)_5%,transparent)] hover:text-foreground" data-testid="new-workspace">
-              <PlusIcon size={14} /> New workspace
-            </button>
-          </li>
+          {workspaces.rows.length === 0 && <li className="px-2 text-[13px] text-faint">No workspaces yet.</li>}
         </ul>
       </nav>
 
@@ -197,7 +141,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         )}
       </div>
 
-      <NewWorkspaceDialog open={creating} onClose={() => setCreating(false)} />
     </div>
   )
 }
