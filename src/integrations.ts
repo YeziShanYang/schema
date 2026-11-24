@@ -22,7 +22,16 @@
 
 export const integrations: Record<
   string,
-  { billing: 'developer' | 'user'; anonymous?: boolean }
+  {
+    billing: 'developer' | 'user'
+    anonymous?: boolean
+    /**
+     * Allow the browser to call this developer-billed integration through
+     * /api/integrations. Off for everything in Schema: owner-billed calls go
+     * through server actions and the analyze job, which enforce daily caps.
+     */
+    browser?: boolean
+  }
 > = {
   google: { billing: 'user' },
   composio: { billing: 'user' },

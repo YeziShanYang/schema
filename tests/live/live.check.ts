@@ -109,6 +109,10 @@ test('failure states: bad input and a paper that does not exist', async ({ users
   await page.getByTestId('analyze-input').fill('2611.99999')
   await page.getByTestId('analyze-submit').click()
   await expect(page.getByTestId('analyze-error')).toContainText('arXiv has no paper', { timeout: 30_000 })
+  // Fixture ids only work in local test runs.
+  await page.getByTestId('analyze-input').fill('0000.00001')
+  await page.getByTestId('analyze-submit').click()
+  await expect(page.getByTestId('analyze-error')).toContainText('does not look like an arXiv link', { timeout: 30_000 })
   await page.goto('/p/2611~99999')
   await expect(page.getByTestId('paper-missing')).toBeVisible({ timeout: 20_000 })
 })

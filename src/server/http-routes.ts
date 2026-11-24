@@ -240,6 +240,13 @@ export function registerAuthAndIntegrationRoutes(app: Hono<AppContext>): void {
     const config = lookupOwn(integrations, integrationName)
     const billingMode = config?.billing ?? 'developer'
 
+    // Owner-billed integrations are called only by server code (actions and
+    // the analyze job), which enforce the per-user caps. A browser call would
+    // skip those caps, so it is refused unless the integration opts in.
+    if (billingMode === 'developer' && !config?.browser) {
+      return c.json({ error: 'This integration is only available to the server.' }, 403)
+    }
+
     // Sign-in is required unless the app opts this integration into anonymous
     // use; developer billing would otherwise let any visitor spend the owner's
     // credits. User billing always needs a caller to bill.
