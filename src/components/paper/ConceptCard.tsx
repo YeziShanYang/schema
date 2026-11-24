@@ -32,7 +32,8 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
   const from = { paperId: paper.recordId, arxivId: paper.data.arxivId }
   const [choice, setChoice] = useState<number | null>(null)
   const [showCheck, setShowCheck] = useState(false)
-  const [showExplain, setShowExplain] = useState(true)
+  // A cached explanation starts collapsed; one generated now opens right away.
+  const [showExplain, setShowExplain] = useState(false)
   const [explaining, setExplaining] = useState(false)
   const [explainError, setExplainError] = useState('')
   const answered = choice !== null && c.check
@@ -54,6 +55,7 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
     const r = await actions.explainConcept(concept.recordId)
     setExplaining(false)
     if (!r.success) setExplainError(r.error)
+    else setShowExplain(true)
   }
 
   return (
@@ -114,7 +116,7 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
           {topic?.resourcesStatus === 'failed' && <span className="text-xs text-faint">No explainers found for this topic.</span>}
 
           {c.explanation ? (
-            <button type="button" aria-expanded={showExplain} onClick={() => setShowExplain((v) => !v)} className="press inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-[12.5px] font-medium text-primary hover:bg-accent-soft">
+            <button type="button" aria-expanded={showExplain} onClick={() => setShowExplain((v) => !v)} data-testid="explain-toggle" className="press inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-[12.5px] font-medium text-primary hover:bg-accent-soft">
               <SparkIcon size={13} /> {showExplain ? 'Hide explanation' : 'Show explanation'}
             </button>
           ) : signedIn ? (

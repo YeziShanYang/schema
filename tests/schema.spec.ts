@@ -137,7 +137,11 @@ test('a correct check answer marks the topic known; Explain with AI is cached on
   await expect(c2).toHaveAttribute('data-status', 'known')
 
   const explain = c2.getByTestId('explain-button')
-  if (await explain.isVisible()) await explain.click()
+  if (await explain.isVisible()) {
+    await explain.click() // a fresh explanation opens on its own
+  } else {
+    await c2.getByTestId('explain-toggle').click() // a cached one starts collapsed
+  }
   await expect(c2.getByTestId('concept-explanation')).toContainText('Worked example', { timeout: 15_000 })
 })
 

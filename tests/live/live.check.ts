@@ -60,6 +60,7 @@ test('analyze a real paper, track knowledge, explain a concept, share with a sec
   // Explain with AI on the second concept (cached afterwards).
   const second = page.getByTestId('branch-concepts').getByTestId('concept-card').nth(1)
   if ((await second.getByTestId('explain-button').count()) > 0) await second.getByTestId('explain-button').click()
+  else await second.getByTestId('explain-toggle').click()
   await expect(second.getByTestId('concept-explanation')).toBeVisible({ timeout: 90_000 })
   console.log(`[live] explanation: ${(await second.getByTestId('concept-explanation').innerText()).slice(0, 300)}`)
 

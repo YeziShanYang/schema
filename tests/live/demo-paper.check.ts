@@ -49,7 +49,7 @@ test('demo paper: analyze, load every branch, pre-generate explanations', async 
     const count = await cards.count()
     for (let j = 0; j < count && made < EXPLANATIONS; j++) {
       const c = cards.nth(j)
-      if ((await c.getByTestId('concept-explanation').count()) > 0) {
+      if ((await c.getByTestId('explain-toggle').count()) > 0) {
         made++
         continue
       }
