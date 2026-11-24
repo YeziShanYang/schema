@@ -11,6 +11,7 @@ import type { RecordData } from 'deepspace'
 import { Input } from '@/components/ui'
 import { Chip, PageHeader } from '../../../components/blueprint'
 import { StatusControl } from '../../../components/StatusControl'
+import { ConceptName } from '../../../components/MathText'
 import { useKnowledge, useTopics } from '../../../hooks/useReader'
 import { actions } from '../../../lib/actions-client'
 import { arxivSlug } from '../../../lib/arxiv'
@@ -89,7 +90,7 @@ export default function KnowledgePage() {
                         data-topic-key={r.data.topicKey}
                       >
                         <div className="min-w-0">
-                          <p className="font-medium leading-snug">{t?.name ?? r.data.topicKey}</p>
+                          <p className="font-medium leading-snug"><ConceptName name={t?.name ?? r.data.topicKey} /></p>
                           {t?.description && <p className="mt-0.5 text-[13px] text-muted-foreground">{t.description}</p>}
                           <p className="mt-0.5">{source(r)}</p>
                         </div>
@@ -123,7 +124,7 @@ export default function KnowledgePage() {
               {matches.map((t) => (
                 <li key={t.recordId} className="flex items-center justify-between gap-3 py-2">
                   <span className="min-w-0">
-                    <span className="font-medium">{t.data.name}</span> <Chip className="ml-1">{t.data.level}</Chip>
+                    <ConceptName name={t.data.name} className="font-medium" /> <Chip className="ml-1">{t.data.level}</Chip>
                   </span>
                   <StatusControl status={knowledge.statusOf(t.data.key)} name={t.data.name} disabled={!knowledge.ready || knowledge.isPending(t.data.key)} onChange={setStatus(t.data.key)} />
                 </li>

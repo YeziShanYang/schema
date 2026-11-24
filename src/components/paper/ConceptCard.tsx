@@ -11,7 +11,7 @@ import type { ConceptData, KnowledgeStatus, PaperData, TopicData } from '../../t
 import type { KnowledgeApi } from '../../hooks/useReader'
 import { actions } from '../../lib/actions-client'
 import { linkTitle } from '../../lib/links'
-import { MathText } from '../MathText'
+import { ConceptName, MathText } from '../MathText'
 import { KnownToggle } from '../StatusControl'
 import { Chip } from '../blueprint'
 import { ExternalIcon, SparkIcon } from '../icons'
@@ -86,7 +86,7 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
         <div className="flex items-baseline justify-between gap-2.5">
           <span className={status === 'known' ? 'font-semibold leading-snug text-muted-foreground' : 'font-semibold leading-snug'}>
             {stepIndex !== undefined && <span className="mr-1.5 font-mono text-[11px] font-normal text-faint tabular-nums">{stepIndex}.</span>}
-            {c.name}
+            <ConceptName name={c.name} />
           </span>
           <span className="flex shrink-0 items-center gap-1.5">
             {nextUp && <Chip tone="accent"><span data-testid="next-up-badge">Next up</span></Chip>}
@@ -102,7 +102,7 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
             <span className="label">Learn first</span>
             {prerequisites.map((p) => (
               <button key={p.key} type="button" onClick={() => onOpenConcept?.(p.key)} className="press cursor-pointer rounded-[3px] bg-surface-2 px-1.5 py-0.5 text-xs text-foreground border border-border hover:bg-accent-soft">
-                {p.name}
+                <ConceptName name={p.name} />
               </button>
             ))}
           </p>

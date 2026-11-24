@@ -13,6 +13,7 @@ import { AddButton } from '../../../../../components/AddDialog'
 import { FirstRunPrompt } from '../../../../../components/FirstRunPrompt'
 import { InlineEdit } from '../../../../../components/blueprint'
 import { SparkIcon } from '../../../../../components/icons'
+import { ConceptName } from '../../../../../components/MathText'
 import { FloatingGraph } from '../../../../../components/graph/FloatingGraph'
 import { CandidateNode, CenterCard, PaperNode } from '../../../../../components/graph/nodes'
 import { useWorkspaceGraph } from '../../../../../hooks/useWorkspaceGraph'
@@ -184,7 +185,7 @@ export default function WorkspacePage() {
           <span>
             <span className="label mr-2">Continue</span>
             <Link to={`/w/${id}/p/${arxivSlug(continuePaper.arxivId)}`} className="font-medium text-foreground hover:text-primary">{continuePaper.title}</Link>
-            {nextUp && <span className="text-muted-foreground">, next up <b className="font-semibold text-foreground">{nextUp.name}</b></span>}
+            {nextUp && <span className="text-muted-foreground">, next up <b className="font-semibold text-foreground"><ConceptName name={nextUp.name} /></b></span>}
           </span>
         ) : (
           <span className="text-muted-foreground">Pick a paper to start.</span>

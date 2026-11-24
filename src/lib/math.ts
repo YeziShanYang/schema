@@ -102,3 +102,17 @@ export function normalizeMathMarkdown(input: string): string {
 export function hasMath(input: string): boolean {
   return parseMath(input).some((s) => s.type === 'math')
 }
+
+/*
+ * Concept names from earlier analyses carry bare math such as "Local R^2
+ * score", written before the prompts asked for \( \) delimiters. A token is
+ * a short base (1 to 3 letters or digits) at a word start, followed by one or
+ * more ^ or _ scripts, each 1 to 3 characters or a {…} group.
+ */
+const BARE_SCRIPT = /(^|[\s([/,])([A-Za-z0-9]{1,3}(?:[\^_](?:\{[^{}\s]{1,12}\}|[A-Za-z0-9+*-]{1,3}))+)(?=$|[\s)\],.;:/-])/g
+
+/** A concept name with any bare math token wrapped in \( \) for <MathText>; names that already hold math are unchanged. */
+export function nameMath(name: string): string {
+  if (!name || hasMath(name)) return name ?? ''
+  return name.replace(BARE_SCRIPT, (_m, pre: string, tok: string) => `${pre}\\(${tok}\\)`)
+}

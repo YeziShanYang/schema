@@ -12,6 +12,7 @@ import { MarkIcon } from '../components/icons'
 import { FloatingGraph } from '../components/graph/FloatingGraph'
 import { BranchPanel } from '../components/graph/BranchPanel'
 import { CenterCard } from '../components/graph/nodes'
+import { ConceptName } from '../components/MathText'
 import { recommendedSequence } from '../lib/sequence'
 import { linkTitle } from '../lib/links'
 import { cleanTitle } from '../components/Markdown'
@@ -165,7 +166,7 @@ export default function Landing() {
                           <div className="flex items-baseline justify-between gap-2">
                             <span className="font-semibold">
                               <span className="mr-1.5 font-mono text-[11px] font-normal text-faint">{seq.stepInBranch.get(c.key)}.</span>
-                              {c.name}
+                              <ConceptName name={c.name} />
                             </span>
                             <span className={'rounded-[3px] border px-[7px] py-px font-mono text-[11px] uppercase tracking-[0.05em] ' + (c.depth === 'deep' ? 'border-transparent bg-accent-soft text-primary' : 'border-border bg-surface-2 text-muted-foreground')}>
                               {c.depth}

@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type katexType from 'katex'
-import { parseMath } from '../lib/math'
+import { nameMath, parseMath } from '../lib/math'
 import { loadKatex, renderMath } from '../lib/katex-loader'
 
 export function MathText({ text, className }: { text: string; className?: string }) {
@@ -42,4 +42,9 @@ export function MathText({ text, className }: { text: string; className?: string
       })}
     </span>
   )
+}
+
+/** A concept name, with bare math such as "R^2" rendered too (see nameMath). */
+export function ConceptName({ name, className }: { name: string; className?: string }) {
+  return <MathText text={nameMath(name)} className={className} />
 }

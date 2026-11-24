@@ -25,7 +25,7 @@ import { FloatingGraph } from '../graph/FloatingGraph'
 import { BranchNode, CenterCard } from '../graph/nodes'
 import { BranchPanel } from '../graph/BranchPanel'
 import { ConceptCard } from './ConceptCard'
-import { MathText } from '../MathText'
+import { ConceptName, MathText } from '../MathText'
 
 const STAGES = ['queued', 'text', 'concepts', 'overview', 'explain', 'ready'] as const
 /** Matches retryPaper: a run with no update for this long can be restarted. */
@@ -350,7 +350,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
             </span>
           ) : seq.nextUp ? (
             <Button size="sm" onClick={() => openBranch(seq.nextUp!.branchKey, seq.nextUp!.key)} data-testid="next-up">
-              Next up: {seq.nextUp.name}
+              Next up: <ConceptName name={seq.nextUp.name} />
             </Button>
           ) : null}
         </section>
@@ -371,7 +371,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
                     return (
                       <button key={k} type="button" data-testid="walkthrough-chip" onClick={(e) => openConceptByKey(k, e.currentTarget)}
                         className="press cursor-pointer rounded-[3px] border border-border bg-surface-2 px-2 py-0.5 text-xs hover:bg-accent-soft">
-                        {c.data.name}
+                        <ConceptName name={c.data.name} />
                       </button>
                     )
                   })}
