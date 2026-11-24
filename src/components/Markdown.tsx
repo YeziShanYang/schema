@@ -77,7 +77,7 @@ export function Markdown({ text, className }: { text: string; className?: string
 
 /** Page titles often end in "| Site" or "- site.com"; show the part that names the page. */
 export function cleanTitle(title: string): string {
-  let t = title.split(' | ')[0]
+  let t = title.split(/\s+[|｜·]\s+/)[0]
   t = t.replace(/\s[-–—]\s[\w.-]+\.(com|org|io|net|dev|ai|edu)$/i, '')
   return t.trim().length >= 8 ? t.trim() : title
 }
