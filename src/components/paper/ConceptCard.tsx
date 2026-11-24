@@ -82,6 +82,7 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
       id={`concept-${c.key}`}
       data-testid="concept-card"
       data-concept-key={c.key}
+      data-concept-id={concept.recordId}
       data-status={status ?? 'unknown'}
       data-next-up={nextUp ? 'true' : undefined}
       className={

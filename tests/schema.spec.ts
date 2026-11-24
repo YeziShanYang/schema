@@ -22,17 +22,30 @@ test.describe.configure({ mode: 'serial' })
 
 const FIXTURE_ID = '0000.00001'
 const FIXTURE_SLUG = '0000~00001'
+/** A second paper analyzed from the same fixture: same concept names and topics, different concept rows. */
+const SECOND_ID = '0000.00031'
+const SECOND_SLUG = '0000~00031'
+const FIXTURE_TITLE = 'A Fixture Paper on Curvature-Aware Attention'
 const READY_TIMEOUT = 90_000
+/** Every fixture concept by branch, in the order the panel lists them. */
+const FIXTURE_CONCEPTS = [
+  ['foundations', ['c1', 'c5']],
+  ['attention', ['c2', 'c6']],
+  ['geometry', ['c3', 'c7', 'c9']],
+  ['other', ['c4', 'c8']],
+] as const
 
 /**
  * Drifting nodes never settle for Playwright's stability check, so specs run
- * with the static graph. The fixture paper's overview is also marked as
- * already shown in this browser, so it does not open over the graph on its
+ * with the static graph. The fixture papers' overviews are also marked as
+ * already shown in this browser, so they do not open over the graph on their
  * own (the overview spec checks that without this helper).
  */
 async function calm(page: Page) {
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.addInitScript((id) => localStorage.setItem(`schema:overview-shown:${id}`, '1'), FIXTURE_ID)
+  await page.addInitScript((ids) => {
+    for (const id of ids) localStorage.setItem(`schema:overview-shown:${id}`, '1')
+  }, [FIXTURE_ID, SECOND_ID])
 }
 
 /** Wait until the paper's overview and this reader's read mark have loaded. */
@@ -53,12 +66,12 @@ async function setOverviewRead(page: Page, read: boolean) {
   await expect(page.getByTestId('overview-window')).toHaveCount(0)
 }
 
-async function openReadyFixturePaper(page: Page) {
+async function openReadyFixturePaper(page: Page, id = FIXTURE_ID) {
   await calm(page)
   await page.goto('/home')
-  await page.getByTestId('analyze-input').fill(FIXTURE_ID)
+  await page.getByTestId('analyze-input').fill(id)
   await page.getByTestId('analyze-submit').click()
-  await expect(page).toHaveURL(new RegExp(`/p/${FIXTURE_SLUG}$`), { timeout: 15_000 })
+  await expect(page).toHaveURL(new RegExp(`/p/${id.replace('.', '~')}$`), { timeout: 15_000 })
   const paperPage = page.getByTestId('paper-page')
   await expect(paperPage).toHaveAttribute('data-paper-status', /ready|failed/, { timeout: READY_TIMEOUT })
   if ((await paperPage.getAttribute('data-paper-status')) === 'failed') {
@@ -86,7 +99,7 @@ function branchKnown(page: Page, key: string) {
   return page.locator(`[data-testid="branch"][data-branch-key="${key}"] [data-testid="branch-progress"]`)
 }
 
-/** Put a concept's topic back to "not known" through the UI. */
+/** Put a concept back to "not known" through the UI. */
 async function resetStatus(page: Page, key: string) {
   const c = card(page, key)
   const s = await c.getAttribute('data-status')
@@ -94,6 +107,24 @@ async function resetStatus(page: Page, key: string) {
   await expect(c).toHaveAttribute('data-status', 'unknown')
   // The control is disabled while the write is in flight.
   await expect(c.getByTestId('status-known')).toBeEnabled({ timeout: 15_000 })
+}
+
+/** Check a concept through the UI, if it is not checked already. */
+async function ensureKnown(page: Page, key: string) {
+  const c = card(page, key)
+  await expect(c.getByTestId('status-known')).toBeEnabled({ timeout: 15_000 })
+  if ((await c.getAttribute('data-status')) !== 'known') await c.getByTestId('status-known').click()
+  await expect(c).toHaveAttribute('data-status', 'known')
+  await expect(c.getByTestId('status-known')).toBeEnabled({ timeout: 15_000 })
+}
+
+/** Reset every fixture concept in the open paper to "not known". */
+async function resetAll(page: Page) {
+  for (const [branch, keys] of FIXTURE_CONCEPTS) {
+    await openBranch(page, branch)
+    for (const key of keys) await resetStatus(page, key)
+  }
+  await page.keyboard.press('Escape')
 }
 
 test('analyze a paper end to end: graph, panel, lazy links, sequence, walkthrough chips', async ({ users }) => {
@@ -104,7 +135,7 @@ test('analyze a paper end to end: graph, panel, lazy links, sequence, walkthroug
 
   await expect(page.getByTestId('paper-title')).toHaveText('A Fixture Paper on Curvature-Aware Attention')
   await expect(page.getByTestId('paper-graph')).toHaveAttribute('data-mode', 'graph')
-  // Nodes follow the recommended sequence: mean tiers foundations 0, attention 1, geometry 2, other 3.
+  // Nodes follow the recommended sequence: mean tiers foundations 0, attention 1, geometry 2.3, other 2.5.
   const branchKeys = await page.getByTestId('branch').evaluateAll((els) => els.map((e) => e.getAttribute('data-branch-key')))
   expect(branchKeys).toEqual(['foundations', 'attention', 'geometry', 'other'])
   await expect(page.locator('[data-testid="branch"][data-branch-key="foundations"]')).toHaveAttribute('data-step', '1')
@@ -114,18 +145,32 @@ test('analyze a paper end to end: graph, panel, lazy links, sequence, walkthroug
   // Opening a branch loads its links when any topic has none (cached afterwards).
   await expect(page.getByTestId('branch-links')).toHaveAttribute('data-links', 'ready', { timeout: 20_000 })
   await expect(card(page, 'c1').getByTestId('concept-resources')).toBeVisible()
+  // Check questions are gone.
+  await expect(page.getByTestId('check-toggle')).toHaveCount(0)
 
   // Esc closes the panel and focus returns to the branch that opened it.
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('branch-panel')).toHaveCount(0)
   await expect(page.locator('[data-testid="branch"][data-branch-key="foundations"]')).toBeFocused()
 
-  // The invented quote failed verification, so it is not shown.
+  // The paper text came from the HTML: c6's quote keeps its inline math and renders it with KaTeX.
+  await openBranch(page, 'attention')
+  await expect(card(page, 'c6').locator('blockquote')).toContainText('Each score is the dot product of a query and a key')
+  await expect(card(page, 'c6').locator('blockquote .katex').first()).toBeAttached({ timeout: 10_000 })
+
+  // The invented quote failed verification, so it is not shown; c8's lead-in quote gave way to its second one.
   await openBranch(page, 'other')
   await expect(card(page, 'c4').locator('blockquote')).toHaveCount(0)
+  await expect(card(page, 'c8').locator('blockquote')).toContainText('On three benchmarks the curvature correction')
+
+  // The one-concept "deployment" branch merged into geometry, where its prerequisites are.
+  await openBranch(page, 'geometry')
+  await expect(page.getByTestId('branch-concepts').getByTestId('concept-card')).toHaveCount(3)
+  await expect(card(page, 'c9')).toBeVisible()
+  // c7's first quote was c3's, so it shows its second.
+  await expect(card(page, 'c7').locator('blockquote')).toContainText('Most prior work treats the representation space as flat')
 
   // Prerequisite chips open the concept they name, in its branch.
-  await openBranch(page, 'geometry')
   await card(page, 'c3').getByRole('button', { name: 'Attention as a weighted average' }).click()
   await expect(page.getByTestId('branch-panel')).toContainText('Attention')
   await expect(card(page, 'c2')).toBeVisible()
@@ -167,11 +212,16 @@ test('overview: opens on its own once, is step 0 until read, the read mark persi
   // First visit while unread: it opens on its own, with the story, chips and their lines.
   await expect(win).toBeVisible()
   await expect(win.getByTestId('overview-plain')).toContainText('Attention lets a model decide which words matter most')
-  await expect(win.getByTestId('overview-step')).toHaveCount(3)
+  // Verification dropped s5, which the paper does not support, so four steps remain.
+  await expect(win.getByTestId('overview-step')).toHaveCount(4)
+  await expect(win).not.toContainText('twice as fast')
   await expect(win.getByTestId('overview-map')).toHaveAttribute('data-layout', 'lines')
-  // c1 feeds s1 and s2, c2 feeds s2 and s3, c3 feeds s3; the unknown key is dropped.
-  await expect(win.getByTestId('overview-lines').locator('path.line')).toHaveCount(5)
-  await expect(win.getByTestId('overview-also').getByTestId('overview-chip')).toHaveAttribute('data-concept-key', 'c4')
+  // c1 feeds s1 and s2, c2 feeds s2 and s3, c6 feeds s3, c3 and c7 feed s4; the unknown key is dropped.
+  await expect(win.getByTestId('overview-lines').locator('path.line')).toHaveCount(7)
+  const also = await win.getByTestId('overview-also').getByTestId('overview-chip').evaluateAll((els) => els.map((e) => e.getAttribute('data-concept-key')))
+  expect(also).toEqual(['c5', 'c9', 'c4', 'c8'])
+  // s3's technical line was unsupported, so it has none.
+  await expect(win.locator('[data-testid="overview-step"][data-item-id="s3"] [data-testid="overview-technical-toggle"]')).toHaveCount(0)
   // Hover and focus light up both ways.
   await win.locator('[data-testid="overview-chips-left"] [data-concept-key="c2"], [data-testid="overview-chips-right"] [data-concept-key="c2"]').hover()
   await expect(win.locator('[data-testid="overview-step"][data-hot="true"]')).toHaveCount(2)
@@ -233,13 +283,15 @@ test('overview: opens on its own once, is step 0 until read, the read mark persi
 
   // "Where it fits" shows the plain role; "See in overview" goes back with the concept highlighted.
   await expect(card(page, 'c3').getByTestId('concept-role')).toContainText('It measures the curve the correction follows.')
+  // c9's plain role claimed a speedup the paper does not make, so verification removed it.
+  await expect(card(page, 'c9').getByTestId('concept-role')).toHaveCount(0)
   await card(page, 'c3').getByTestId('see-in-overview').click()
   await expect(win).toBeVisible()
   // Move the pointer off the window so a hover does not replace the requested highlight.
   await page.mouse.move(2, 2)
   await expect(panel).toHaveCount(0)
   await expect(win.locator('[data-testid="overview-map"] [data-testid="overview-chip"][data-concept-key="c3"]')).toHaveAttribute('data-hot', 'true')
-  await expect(win.locator('[data-testid="overview-step"][data-item-id="s3"]')).toHaveAttribute('data-hot', 'true')
+  await expect(win.locator('[data-testid="overview-step"][data-item-id="s4"]')).toHaveAttribute('data-hot', 'true')
   await page.keyboard.press('Escape')
   await expect(win).toHaveCount(0)
   await expect(page.locator('[data-testid="branch"][data-branch-key="geometry"]')).toBeFocused()
@@ -287,12 +339,7 @@ test('recommended sequence: next up follows prerequisites and opens the concept'
   await openReadyFixturePaper(page)
   // Step 0 comes first; with the overview read, Next up names a concept.
   await setOverviewRead(page, true)
-  // Reset the four fixture topics to "not known".
-  for (const [branch, key] of [['foundations', 'c1'], ['attention', 'c2'], ['geometry', 'c3'], ['other', 'c4']] as const) {
-    await openBranch(page, branch)
-    await resetStatus(page, key)
-  }
-  await page.keyboard.press('Escape')
+  await resetAll(page)
   await expect(page.getByTestId('next-up')).toHaveText('Next up: Softmax over scores')
   await expect(page.locator('[data-testid="branch"][data-branch-key="foundations"]')).toHaveAttribute('data-current', 'true')
   await expect(page.locator('[data-testid="branch"][data-branch-key="foundations"] [data-testid="branch-current"]')).toHaveText('Start here')
@@ -301,6 +348,12 @@ test('recommended sequence: next up follows prerequisites and opens the concept'
   await expect(page.getByTestId('branch-panel')).toBeVisible()
   await expect(card(page, 'c1')).toHaveAttribute('data-next-up', 'true')
   await card(page, 'c1').getByTestId('status-known').click()
+  await page.keyboard.press('Escape')
+  // Gradient descent is the other tier-0 concept in foundations.
+  await expect(page.getByTestId('next-up')).toHaveText('Next up: Gradient descent')
+  await page.getByTestId('next-up').click()
+  await expect(card(page, 'c5')).toHaveAttribute('data-next-up', 'true')
+  await card(page, 'c5').getByTestId('status-known').click()
   await page.keyboard.press('Escape')
   // c2 depends on c1, which is now known, so it is next.
   await expect(page.getByTestId('next-up')).toHaveText('Next up: Attention as a weighted average')
@@ -314,7 +367,9 @@ test('known or not known, saved per reader with a green outline; the paper is sh
   await openReadyFixturePaper(ada.page)
   await openBranch(ada.page, 'foundations')
   const c1 = card(ada.page, 'c1')
+  const conceptId = (await c1.getAttribute('data-concept-id'))!
   await resetStatus(ada.page, 'c1')
+  await resetStatus(ada.page, 'c5')
   const progress = branchKnown(ada.page, 'foundations')
   await expect(progress).toHaveAttribute('data-known', '0')
 
@@ -330,8 +385,15 @@ test('known or not known, saved per reader with a green outline; the paper is sh
   await openBranch(ada.page, 'foundations')
   await expect(card(ada.page, 'c1')).toHaveAttribute('data-status', 'known', { timeout: 15_000 })
 
+  // The knowledge page lists the checked concept under its paper.
   await ada.page.goto('/knowledge')
-  await expect(ada.page.locator('[data-testid="knowledge-item"][data-topic-key="softmax-function"]')).toBeVisible()
+  const row = ada.page.locator(`[data-testid="checked-concept"][data-concept-id="${conceptId}"]`)
+  await expect(row).toContainText('Softmax over scores')
+  await expect(ada.page.getByTestId('checked-paper').filter({ has: row })).toContainText(FIXTURE_TITLE)
+  await ada.page.getByTestId('checked-search').fill('softmax')
+  await expect(row).toBeVisible()
+  await ada.page.getByTestId('checked-search').fill('no such concept')
+  await expect(row).toHaveCount(0)
 
   await calm(bob.page)
   await bob.page.goto(`/p/${FIXTURE_SLUG}`)
@@ -340,7 +402,7 @@ test('known or not known, saved per reader with a green outline; the paper is sh
   await expect(card(bob.page, 'c1')).toHaveAttribute('data-status', 'unknown')
   await bob.page.goto('/knowledge')
   await expect(bob.page.getByTestId('knowledge-page')).toBeVisible()
-  await expect(bob.page.locator('[data-testid="knowledge-item"][data-topic-key="softmax-function"]')).toHaveCount(0)
+  await expect(bob.page.locator(`[data-testid="checked-concept"][data-concept-id="${conceptId}"]`)).toHaveCount(0)
 })
 
 test('quick repeated status clicks leave one knowledge row and no write error', async ({ users }) => {
@@ -349,6 +411,7 @@ test('quick repeated status clicks leave one knowledge row and no write error', 
   const page = ada.page
   await openReadyFixturePaper(page)
   await openBranch(page, 'foundations')
+  const conceptId = (await card(page, 'c1').getAttribute('data-concept-id'))!
   await resetStatus(page, 'c1')
   // Three clicks inside one round trip: before, the second one created a duplicate row.
   await card(page, 'c1').getByTestId('status-known').evaluate((el: HTMLElement) => {
@@ -360,22 +423,16 @@ test('quick repeated status clicks leave one knowledge row and no write error', 
   await expect(card(page, 'c1').getByTestId('status-known')).toBeEnabled({ timeout: 15_000 })
   await expect(page.getByText(/duplicate|unique/i)).toHaveCount(0)
   await page.goto('/knowledge')
-  await expect(page.locator('[data-testid="knowledge-item"][data-topic-key="softmax-function"]')).toHaveCount(1, { timeout: 15_000 })
+  await expect(page.locator(`[data-testid="checked-concept"][data-concept-id="${conceptId}"]`)).toHaveCount(1, { timeout: 15_000 })
 })
 
-test('a correct check answer marks the topic known; Explain with AI is cached on the concept', async ({ users }) => {
+test('Explain with AI is cached on the concept', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada] = await users(['Schema ada'])
   const page = ada.page
   await openReadyFixturePaper(page)
   await openBranch(page, 'attention')
   const c2 = card(page, 'c2')
-  await resetStatus(page, 'c2')
-
-  await c2.getByTestId('check-toggle').click()
-  await c2.getByTestId('check-choice').nth(1).click() // "Value vectors" is the fixture's correct answer
-  await expect(c2.getByTestId('check-result')).toContainText('Correct')
-  await expect(c2).toHaveAttribute('data-status', 'known')
 
   const explain = c2.getByTestId('explain-button')
   if (await explain.isVisible()) {
@@ -484,6 +541,86 @@ test('Add flow, paper path: look up, suggested workspace name, bad links leave n
   await expect(page.getByTestId('sidebar-workspaces')).toContainText(name)
 })
 
+test('checking a concept in one paper leaves another paper unchecked and shows a hint there', async ({ users }) => {
+  test.setTimeout(200_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  // Paper A: c1 checked.
+  await openReadyFixturePaper(page)
+  await openBranch(page, 'foundations')
+  await ensureKnown(page, 'c1')
+  await page.keyboard.press('Escape')
+
+  // Paper B, analyzed from the same fixture: its c1 starts unchecked and points to A.
+  await openReadyFixturePaper(page, SECOND_ID)
+  await openBranch(page, 'foundations')
+  await resetStatus(page, 'c1')
+  const b1 = card(page, 'c1')
+  await expect(b1).toHaveAttribute('data-status', 'unknown')
+  await expect(b1).not.toHaveClass(/known-outline/)
+  const hint = b1.getByTestId('concept-hint')
+  await expect(hint).toHaveAttribute('data-hint', 'checked')
+  await expect(hint).toContainText(`You checked this in ${FIXTURE_TITLE}`)
+  await expect(hint.getByRole('link')).toHaveAttribute('href', /\/p\/0000~\d{5}$/)
+  // B's progress counts only B's checkmarks.
+  await expect(branchKnown(page, 'foundations')).toHaveAttribute('data-known', '0')
+  await page.keyboard.press('Escape')
+
+  // The overview chip carries the same note.
+  await page.getByTestId('open-overview').click()
+  const win = page.getByTestId('overview-window')
+  await expect(win).toBeVisible()
+  await expect(win.locator('[data-testid="overview-map"] [data-testid="overview-chip"][data-concept-key="c1"] [data-testid="overview-chip-hint"]').first()).toContainText('You checked this in')
+  await page.keyboard.press('Escape')
+
+  // Ticking it in B hides the note; A still has its own checkmark.
+  await openBranch(page, 'foundations')
+  await card(page, 'c1').getByTestId('status-known').click()
+  await expect(card(page, 'c1')).toHaveAttribute('data-status', 'known')
+  await expect(card(page, 'c1').getByTestId('concept-hint')).toHaveCount(0)
+  await resetStatus(page, 'c1')
+  await page.goto(`/p/${FIXTURE_SLUG}`)
+  await openBranch(page, 'foundations')
+  await expect(card(page, 'c1')).toHaveAttribute('data-status', 'known', { timeout: 15_000 })
+  await expect(card(page, 'c1').getByTestId('concept-hint')).toHaveCount(0)
+})
+
+test('a profile topic shows "In your profile" on its concept and checks nothing', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [, bob] = await users(['Schema ada', 'Schema bob'])
+  const page = bob.page
+  await calm(page)
+  const removeFromProfile = async () => {
+    await page.goto('/knowledge')
+    const item = page.locator('[data-testid="knowledge-item"][data-topic-key="gradient-descent"]')
+    await expect(page.getByTestId('knowledge-page')).toHaveAttribute('data-ready', 'true', { timeout: 15_000 })
+    if (await item.count()) {
+      await item.getByTestId('status-known').click()
+      await expect(item).toHaveCount(0, { timeout: 15_000 })
+    }
+  }
+  await removeFromProfile()
+
+  // Add "Gradient descent" to the profile by search.
+  await page.getByTestId('topic-search').fill('Gradient descent')
+  const match = page.locator('[data-testid="topic-match"][data-topic-key="gradient-descent"]')
+  await match.getByTestId('status-known').click()
+  await expect(page.locator('[data-testid="knowledge-item"][data-topic-key="gradient-descent"]')).toBeVisible({ timeout: 15_000 })
+
+  // c5 uses that topic: it shows the note but stays unchecked.
+  await page.goto(`/p/${FIXTURE_SLUG}`)
+  await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'ready', { timeout: 20_000 })
+  await openBranch(page, 'foundations')
+  const c5 = card(page, 'c5')
+  await expect(c5).toHaveAttribute('data-status', 'unknown')
+  await expect(c5.getByTestId('concept-hint')).toHaveAttribute('data-hint', 'profile')
+  await expect(c5.getByTestId('concept-hint')).toHaveText('In your profile')
+  await expect(card(page, 'c1').getByTestId('concept-hint')).toHaveCount(0)
+  await expect(branchKnown(page, 'foundations')).toHaveAttribute('data-known', '0')
+
+  await removeFromProfile()
+})
+
 test('first-run prompt shows for an empty knowledge profile and can be dismissed', async ({ users }) => {
   const [, bob] = await users(['Schema ada', 'Schema bob'])
   const page = bob.page
@@ -491,7 +628,7 @@ test('first-run prompt shows for an empty knowledge profile and can be dismissed
   await page.evaluate(() => localStorage.removeItem('schema:first-run-dismissed'))
   await page.reload()
   await expect(page.getByTestId('home-page')).toBeVisible()
-  // Bob never marks anything in these specs, so his profile is empty.
+  // Bob never checks a concept in these specs, and the profile spec removes the topic it adds, so he has no rows.
   await expect(page.getByTestId('first-run')).toContainText('Tell Schema what you already know')
   await page.getByTestId('first-run-dismiss').click()
   await expect(page.getByTestId('first-run')).toHaveCount(0)
@@ -630,7 +767,10 @@ test('signed-out demo: status changes stay local, links and AI need sign-in', as
   await expect(branchKnown(page, 'foundations')).toHaveAttribute('data-known', '1')
   // The sequence uses the local demo state too.
   await page.keyboard.press('Escape')
-  await expect(page.getByTestId('next-up')).toHaveText('Next up: Attention as a weighted average')
+  await expect(page.getByTestId('next-up')).toHaveText('Next up: Gradient descent')
+  // Demo mode has no hints.
+  await openBranch(page, 'foundations')
+  await expect(page.getByTestId('concept-hint')).toHaveCount(0)
   // Nothing was saved: a reload starts over.
   await page.reload()
   await openBranch(page, 'foundations')

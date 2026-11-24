@@ -124,7 +124,7 @@ export default function KnowledgePage() {
   }
 
   return (
-    <div className="min-h-full" data-testid="knowledge-page">
+    <div className="min-h-full" data-testid="knowledge-page" data-ready={concepts.status === 'ready' && profile.status === 'ready' ? 'true' : undefined}>
       <PageHeader label="Knowledge" title="What you know" />
       <div className="grid max-w-4xl gap-6 px-5 py-6 md:px-7">
         <p className="-mt-1 text-sm text-muted-foreground">
