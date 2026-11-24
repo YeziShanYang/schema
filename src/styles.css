@@ -372,3 +372,4 @@
 }
 [data-mode="graph"] .graph-w-branch { width: 188px; }
 [data-mode="graph"] .graph-w-paper { width: 228px; }
+[data-mode="stack"] .graph-center { width: auto; max-width: none; }

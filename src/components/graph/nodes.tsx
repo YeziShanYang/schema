@@ -9,8 +9,10 @@ import { Meter } from '../blueprint'
 import { Button } from '../ui'
 import { PlusIcon } from '../icons'
 
-const nodeBase =
-  'press block w-full cursor-pointer select-none rounded border border-transparent bg-card px-3.5 py-3 text-left shadow-[var(--shadow-ring)] hover:shadow-[var(--shadow-ring-hi)]'
+const nodeBase = 'press block w-full cursor-pointer select-none rounded border border-transparent bg-card px-3.5 py-3 text-left'
+// Kept as separate whole strings so the ring and the resting shadow never compete in one class list.
+const nodeResting = 'shadow-[var(--shadow-ring)] hover:shadow-[var(--shadow-ring-hi)]'
+const nodeRinged = 'shadow-[0_0_0_2px_var(--color-primary),var(--shadow-ring-hi)]'
 
 export const BranchNode = forwardRef<
   HTMLButtonElement,
@@ -39,11 +41,7 @@ export const BranchNode = forwardRef<
       data-branch-key={branchKey}
       data-step={step}
       data-current={current ? 'true' : undefined}
-      className={cn(
-        nodeBase,
-        'graph-w-branch',
-        (open || current) && 'shadow-[0_0_0_2px_var(--color-primary),var(--shadow-ring-hi)]',
-      )}
+      className={cn(nodeBase, 'graph-w-branch', open || current ? nodeRinged : nodeResting)}
     >
       {(step || current) && (
         <span className="mb-1 flex items-center justify-between gap-2">
@@ -92,7 +90,7 @@ export function PaperNode({
       data-testid="workspace-paper"
       data-arxiv={arxivId}
       data-status={status}
-      className={cn(nodeBase, 'graph-w-paper')}
+      className={cn(nodeBase, nodeResting, 'graph-w-paper')}
     >
       <span className="label flex items-center justify-between gap-2">
         <span className="truncate">{meta}</span>
@@ -134,7 +132,7 @@ export function CandidateNode({ title, reason, meta, busy, onAdd }: { title: str
 
 export function CenterCard({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
-    <div className={cn('w-[300px] max-w-[calc(100vw-48px)] rounded-lg border border-transparent bg-card px-5 py-[18px] shadow-[var(--shadow-ring-hi)]', className)}>
+    <div className={cn('graph-center w-[300px] max-w-[calc(100vw-48px)] rounded-lg border border-transparent bg-card px-5 py-[18px] shadow-[var(--shadow-ring-hi)]', className)}>
       <div className="label">{label}</div>
       {children}
     </div>
