@@ -13,9 +13,10 @@ export default defineConfig({
   testMatch: 'screens.check.ts',
   timeout: 5 * 60_000,
   workers: 1,
-  use: { baseURL: process.env.LIVE_BASE_URL ?? 'https://schema.app.space', headless: true },
+  use: { baseURL: process.env.LIVE_BASE_URL ?? 'https://schema.app.space', headless: true, actionTimeout: 20_000 },
   projects: [
     { name: 'motion', use: { launchOptions: base } },
-    { name: 'reduced', use: { launchOptions: { ...base, args: [...(base.args ?? []), '--force-prefers-reduced-motion'] } } },
+    // Playwright emulates no-preference unless told otherwise, so the flag alone is not enough.
+    { name: 'reduced', use: { reducedMotion: 'reduce', launchOptions: { ...base, args: [...(base.args ?? []), '--force-prefers-reduced-motion'] } } },
   ],
 })
