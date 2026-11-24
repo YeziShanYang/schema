@@ -331,7 +331,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
           {(ov.overview || ov.generating || finishControls) && (
             <div className="mt-3.5 flex flex-wrap items-center gap-2">
               {ov.overview ? (
-                <Button ref={overviewButton} size="sm" variant="outline" onClick={(e) => openOverview(undefined, e.currentTarget)} data-testid="open-overview">
+                <Button ref={overviewButton} size="sm" variant={overviewUnread ? 'default' : 'outline'} onClick={(e) => openOverview(undefined, e.currentTarget)} data-testid="open-overview">
                   <BookIcon size={14} /> Overview
                 </Button>
               ) : ov.generating ? (
@@ -477,7 +477,8 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
                       known={b.known}
                       total={b.total}
                       step={step?.index}
-                      current={step?.state === 'current' ? (seq.fresh ? 'start' : 'continue') : null}
+                      // While the overview is unread it is the current step, so no branch claims "Start here" yet.
+                      current={step?.state === 'current' && !overviewUnread ? (seq.fresh ? 'start' : 'continue') : null}
                       open={openKey === b.key}
                       onOpen={() => openBranch(b.key)}
                     />

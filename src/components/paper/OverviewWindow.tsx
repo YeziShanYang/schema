@@ -121,11 +121,13 @@ function computeLayout(
     const x1 = edge[c.side].chip
     const x2 = edge[c.side].story
     const mx = Math.round(x1 + (x2 - x1) * (c.side === 'left' ? f : 1 - f)) + 0.5
-    const y1 = Math.round(c.top + c.h / 2) + 0.5
-    for (const it of items) {
-      if (!it.keys.includes(c.key)) continue
+    const linked = items.filter((it) => it.keys.includes(c.key))
+    // A chip tied to one sentence leaves at that sentence's height when it can, so the line runs straight.
+    const only = linked.length === 1 ? centers.get(linked[0].id) : undefined
+    const y1 = Math.round(only !== undefined ? Math.min(Math.max(only, c.top + 8), c.top + c.h - 8) : c.top + c.h / 2) + 0.5
+    for (const it of linked) {
       const y2 = Math.round(centers.get(it.id) ?? y1) + 0.5
-      lines.push({ id: `${c.key}:${it.id}`, key: c.key, item: it.id, d: `M${x1} ${y1} H${mx} V${y2} H${x2}` })
+      lines.push({ id: `${c.key}:${it.id}`, key: c.key, item: it.id, d: y1 === y2 ? `M${x1} ${y1} H${x2}` : `M${x1} ${y1} H${mx} V${y2} H${x2}` })
     }
   }
   const height = Math.ceil(Math.max(storyBox.height, ...chips.map((c) => c.top + c.h)))

@@ -54,7 +54,7 @@ function Step({
               : 'border border-[color-mix(in_oklab,var(--color-foreground)_24%,transparent)] text-muted-foreground',
         )}
       >
-        {state === 'done' ? <CheckIcon size={12} weight={2} /> : <span className="translate-y-[0.5px]">{index}</span>}
+        {state === 'done' ? <CheckIcon size={12} /> : <span className="translate-y-[0.5px]">{index}</span>}
       </span>
       <span>
         <span className="sr-only">Step {index}: </span>
