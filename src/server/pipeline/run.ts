@@ -31,8 +31,8 @@ import { PIPELINE_VERSION } from '../../types'
 import { arxivPdfUrl, arxivSlug } from '../../lib/arxiv'
 import { preparePaperText } from '../../lib/paper-text'
 import { arxivHtmlToText, arxivHtmlUrl, MIN_HTML_TEXT_CHARS } from '../../lib/paper-html'
-import { normalizeForMatch } from '../../lib/quotes'
-import { pickQuote } from '../../lib/quote-rules'
+import { indexPaperText } from '../../lib/quotes'
+import { pickQuote, quotePickOrder } from '../../lib/quote-rules'
 import { hasMath } from '../../lib/math'
 import { cleanGraph } from '../../lib/graph'
 import { asString, asStringArray } from '../../lib/json'
@@ -405,12 +405,18 @@ async function stepConcepts(state: AnalyzeState, { ctx, client, paper }: StepCtx
     }
   }
 
-  const paperNorm = normalizeForMatch(state.text)
+  // Deep concepts pick first, so a central idea keeps a passage it shares with a foundation.
+  const paperIndex = indexPaperText(state.text)
   const usedQuotes = new Set<string>()
+  const quoteOf: Record<string, string> = {}
+  for (const c of quotePickOrder(kept)) {
+    const { quote, rejected: badQuotes } = pickQuote(c.quotes, paperIndex, usedQuotes)
+    if (badQuotes.length) console.info(`[analyze] ${paper.data.arxivId}: ${c.id} quotes rejected: ${badQuotes.map((b) => b.problem).join(', ')}`)
+    quoteOf[c.id] = quote
+  }
   let order = 0
   for (const c of kept) {
-    const { quote, rejected: badQuotes } = pickQuote(c.quotes, paperNorm, usedQuotes)
-    if (badQuotes.length) console.info(`[analyze] ${paper.data.arxivId}: ${c.id} quotes rejected: ${badQuotes.map((b) => b.problem).join(', ')}`)
+    const quote = quoteOf[c.id]
     state.writes.push({
       op: 'create',
       collection: 'concepts',

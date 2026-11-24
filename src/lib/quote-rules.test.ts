@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { endsInLeadIn, pickQuote, quoteProblem, wordCount } from './quote-rules'
-import { normalizeForMatch } from './quotes'
+import { endsInLeadIn, pickQuote, quotePickOrder, quoteProblem, wordCount } from './quote-rules'
+import { exactQuoteSpan, indexPaperText, normalizeForMatch } from './quotes'
 
 const paper = normalizeForMatch(`Theorem 1. With Ak = {A ⊆ V : 1 ≤ |A| ≤ k}, the two optima are
 equal. Us = exp{−I(v; s)}, as shown. We compute the dot products of the query with all keys and apply a softmax function to obtain the weights.
@@ -41,5 +41,44 @@ describe('quote rules', () => {
     expect(first.rejected.map((r) => r.problem)).toEqual(['equation'])
     const second = pickQuote([good], paper, used)
     expect(second).toEqual({ quote: '', rejected: [{ quote: good, problem: 'duplicate' }] })
+  })
+})
+
+describe('quotes in the paper\'s own words', () => {
+  const text =
+    'We compute the dot products of the query with all keys, divide each by \\(\\sqrt{d_{k}}\\), and apply a softmax function to obtain the weights on the values. ' +
+    'For large values of \\(d_{k}\\) the dot products grow large in magnitude, pushing the softmax into regions with tiny gradients.'
+  const index = indexPaperText(text)
+
+  it('restores math delimiters the model dropped when copying', () => {
+    const copied = 'We compute the dot products of the query with all keys, divide each by \\sqrt{d_{k}}, and apply a softmax function'
+    expect(exactQuoteSpan(copied, index)).toBe('We compute the dot products of the query with all keys, divide each by \\(\\sqrt{d_{k}}\\), and apply a softmax function')
+  })
+
+  it('widens a span that cuts into a formula to the whole formula, and keeps closing punctuation', () => {
+    expect(exactQuoteSpan('values of d_{k} the dot products grow large in magnitude.', index)).toBe('values of \\(d_{k}\\) the dot products grow large in magnitude')
+    expect(exactQuoteSpan('pushing the softmax into regions with tiny gradients.', index)).toBe('pushing the softmax into regions with tiny gradients.')
+    expect(exactQuoteSpan('A sentence the paper never contains at all.', index)).toBeNull()
+  })
+
+  it('stores the exact span when picking, and its normalized form blocks the same passage for another concept', () => {
+    const used = new Set<string>()
+    const pick = pickQuote(['For large values of d_k the dot products grow large in magnitude, pushing the softmax into regions with tiny gradients.'], index, used)
+    expect(pick.quote).toBe('For large values of \\(d_{k}\\) the dot products grow large in magnitude, pushing the softmax into regions with tiny gradients.')
+    expect(pickQuote([pick.quote], index, used).rejected[0].problem).toBe('duplicate')
+  })
+
+  it('rejects a quote that starts mid-clause', () => {
+    expect(quoteProblem('and decreasing it thereafter proportionally to the inverse square root of the step number.', index.norm, new Set())).toBe('fragment')
+  })
+
+  it('lets deep concepts pick first, keeping the model order within a depth', () => {
+    const order = quotePickOrder([
+      { id: 'a', depth: 'working' },
+      { id: 'b', depth: 'deep' },
+      { id: 'c', depth: 'skim' },
+      { id: 'd', depth: 'deep' },
+    ])
+    expect(order.map((c) => c.id)).toEqual(['b', 'd', 'a', 'c'])
   })
 })

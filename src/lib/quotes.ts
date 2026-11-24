@@ -48,3 +48,56 @@ export const QUOTE_VERIFIED_THRESHOLD = 0.6
 export function isQuoteVerified(quote: string, normalizedPaper: string): boolean {
   return quoteScore(quote, normalizedPaper) >= QUOTE_VERIFIED_THRESHOLD
 }
+
+/** The paper text normalized like normalizeForMatch, with the raw index of every normalized character. */
+export interface PaperIndex {
+  raw: string
+  norm: string
+  rawAt: Int32Array
+}
+
+export function indexPaperText(raw: string): PaperIndex {
+  const out: string[] = []
+  const at: number[] = []
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i]
+    const folded = (LIGATURES[ch] ?? ch).normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    for (const f of folded) {
+      if (/[a-z0-9]/.test(f)) {
+        out.push(f)
+        at.push(i)
+      }
+    }
+  }
+  return { raw, norm: out.join(''), rawAt: Int32Array.from(at) }
+}
+
+/**
+ * The paper's own text for a quote that matches it exactly (after
+ * normalization), so a model's copying slips (dropped math delimiters, a
+ * changed dash) never reach the card. A span that starts or ends inside a
+ * formula is widened to the whole formula, and the quote's closing
+ * punctuation is kept. Null when the quote is not an exact match.
+ */
+export function exactQuoteSpan(quote: string, index: PaperIndex): string | null {
+  const q = normalizeForMatch(quote)
+  if (q.length < 12) return null
+  const pos = index.norm.indexOf(q)
+  if (pos === -1) return null
+  const { raw } = index
+  let start = index.rawAt[pos]
+  let end = index.rawAt[pos + q.length - 1] + 1
+  // Inside \( … \) or \[ … \] at either edge: take the whole formula.
+  const lastOpen = (s: string) => Math.max(s.lastIndexOf('\\('), s.lastIndexOf('\\['))
+  const lastClose = (s: string) => Math.max(s.lastIndexOf('\\)'), s.lastIndexOf('\\]'))
+  const before = raw.slice(0, start)
+  if (lastOpen(before) > lastClose(before)) start = lastOpen(before)
+  const span = raw.slice(start, end)
+  if (lastOpen(span) > lastClose(span)) {
+    const close = raw.slice(end).search(/\\[)\]]/)
+    if (close !== -1) end += close + 2
+  }
+  const trailing = quote.trim().match(/[.!?;,:]$/)?.[0]
+  if (trailing && raw[end] === trailing) end += 1
+  return raw.slice(start, end).replace(/\s+/g, ' ').trim()
+}

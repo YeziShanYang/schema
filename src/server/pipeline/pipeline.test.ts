@@ -107,3 +107,12 @@ describe('concepts prompt', () => {
     expect(sourceNote('html')).toMatch(/LaTeX/)
   })
 })
+
+describe('indexPaperText', () => {
+  it('normalizes exactly like normalizeForMatch on both fixture texts', async () => {
+    const { indexPaperText } = await import('../../lib/quotes')
+    for (const raw of [arxivHtmlToText(FIXTURE_PAPER_HTML), FIXTURE_PAPER_TEXT, 'ﬁnal exam-\nple, café Ünïcode']) {
+      expect(indexPaperText(raw).norm).toBe(normalizeForMatch(raw))
+    }
+  })
+})
