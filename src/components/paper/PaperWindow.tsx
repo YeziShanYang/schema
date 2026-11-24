@@ -143,7 +143,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   if (!parseArxivId(arxivId)) return <div className="p-6">Not a valid arXiv id.</div>
   if (p.loading) return <div className="p-6 text-muted-foreground">Loading…</div>
 
-  const backTo = ws ? { to: `/w/${ws.recordId}`, label: ws.data.name } : { to: '/home', label: 'Home' }
+  const backTo = ws ? { to: `/w/${ws.recordId}`, label: ws.data.name } : knowledge.isDemo ? { to: '/', label: 'Schema' } : { to: '/home', label: 'Home' }
 
   if (!paper) {
     return (

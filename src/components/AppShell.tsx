@@ -23,9 +23,9 @@ import { useAllowance } from '../hooks/useAllowance'
 import { arxivSlug } from '../lib/arxiv'
 import { APP_DISPLAY_NAME } from '../constants'
 
-function Brand() {
+function Brand({ to = '/home' }: { to?: string }) {
   return (
-    <Link to="/home" className="flex items-center gap-2 rounded px-2 py-0.5 text-[17px] font-semibold tracking-[-0.01em] text-foreground">
+    <Link to={to} className="flex items-center gap-2 rounded px-2 py-0.5 text-[17px] font-semibold tracking-[-0.01em] text-foreground">
       <MarkIcon size={18} className="text-primary" />
       {APP_DISPLAY_NAME}
     </Link>
@@ -157,7 +157,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     return (
       <div className="flex min-h-screen flex-col bg-background">
         <header data-testid="app-navigation" className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4">
-          <Brand />
+          <Brand to="/" />
           <button
             type="button"
             data-testid="nav-sign-in-button"

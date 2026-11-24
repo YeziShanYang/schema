@@ -1,22 +1,20 @@
 /**
  * Home: continue where you left off, paste an arXiv link, recently analyzed
- * papers. Signed out, it points to the demo paper.
+ * papers. Requires sign-in (it sits under (protected)).
  */
 
 import { Link } from 'react-router-dom'
-import { useAuth, useQuery } from 'deepspace'
-import { AnalyzeForm } from '../../components/AnalyzeForm'
-import { AddButton } from '../../components/AddDialog'
-import { FirstRunPrompt } from '../../components/FirstRunPrompt'
-import { PageHeader } from '../../components/blueprint'
-import { useRoadmaps } from '../../hooks/useReader'
-import { useWorkspaces } from '../../hooks/useWorkspaces'
-import { arxivSlug } from '../../lib/arxiv'
-import { DEMO_ARXIV_ID } from '../../constants'
-import type { PaperData } from '../../types'
+import { useQuery } from 'deepspace'
+import { AnalyzeForm } from '../../../components/AnalyzeForm'
+import { AddButton } from '../../../components/AddDialog'
+import { FirstRunPrompt } from '../../../components/FirstRunPrompt'
+import { PageHeader } from '../../../components/blueprint'
+import { useRoadmaps } from '../../../hooks/useReader'
+import { useWorkspaces } from '../../../hooks/useWorkspaces'
+import { arxivSlug } from '../../../lib/arxiv'
+import type { PaperData } from '../../../types'
 
 export default function HomePage() {
-  const { isSignedIn } = useAuth()
   const workspaces = useWorkspaces()
   const roadmaps = useRoadmaps()
   const recentReady = useQuery<PaperData>('papers', { where: { status: 'ready' }, orderBy: 'updatedAt', orderDir: 'desc', limit: 10 })
@@ -27,11 +25,11 @@ export default function HomePage() {
   return (
     <div className="min-h-full" data-testid="home-page">
       <PageHeader label="Home" title="Learn the ideas a paper is built on">
-        {isSignedIn && <AddButton testId="home-add-open" />}
+        <AddButton testId="home-add-open" />
       </PageHeader>
       <div className="grid max-w-5xl gap-5 px-5 py-6 md:px-7">
-        {isSignedIn && <FirstRunPrompt />}
-        {isSignedIn && (lastWorkspace || lastPaper) && (
+        <FirstRunPrompt />
+        {(lastWorkspace || lastPaper) && (
           <section className="surface enter p-4" style={{ ['--i' as string]: 0 }} data-testid="continue">
             <div className="label">Continue where you left off</div>
             {lastWorkspace ? (
@@ -61,15 +59,6 @@ export default function HomePage() {
             Paste an arXiv link or id. A paper nobody has analyzed takes about two minutes; one already analyzed opens right away.
           </p>
           <AnalyzeForm />
-          {!isSignedIn && (
-            <p className="mt-3 text-sm text-muted-foreground">
-              Or open the{' '}
-              <Link to={`/p/${arxivSlug(DEMO_ARXIV_ID)}`} className="text-primary hover:underline" data-testid="home-demo-link">
-                demo paper
-              </Link>{' '}
-              without signing in.
-            </p>
-          )}
         </section>
 
         <section className="enter" style={{ ['--i' as string]: 2 }} data-testid="recently-analyzed">

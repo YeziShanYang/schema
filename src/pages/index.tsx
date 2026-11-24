@@ -60,7 +60,7 @@ export default function Landing() {
             <span className="flex items-center gap-2 text-[17px] font-semibold">
               <MarkIcon size={18} className="text-primary" /> {APP_DISPLAY_NAME}
             </span>
-            <Link to="/home" className="press rounded px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent">
+            <Link to="/home?signin=1" className="press rounded px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent" data-testid="landing-sign-in">
               Sign in
             </Link>
           </div>
@@ -71,7 +71,7 @@ export default function Landing() {
             <div className="mx-auto max-w-6xl px-4 py-14 md:px-6 md:py-20">
               <p className="label enter" style={{ ['--i' as string]: 0 }}>Learning roadmaps for arXiv papers</p>
               <h1 className="enter mt-3 max-w-3xl text-[34px] font-semibold leading-[1.1] tracking-[-0.01em] text-balance md:text-[44px]" style={{ ['--i' as string]: 1 }}>
-                See every idea a research paper relies on, and learn the ones you are missing.
+                See every idea a research paper relies on, and learn the ones you're missing.
               </h1>
               <p className="enter mt-4 max-w-2xl text-[15px] leading-relaxed text-muted-foreground text-pretty" style={{ ['--i' as string]: 2 }}>
                 Schema reads an arXiv paper once and lists the concepts it builds on, from foundations to the paper's own ideas, grouped into branches and ordered by prerequisite. You mark what you already know, and the rest comes with the passage that uses it, explainer links and an optional AI explanation. Your knowledge carries over from paper to paper.
@@ -80,7 +80,7 @@ export default function Landing() {
                 <Link to={demoHref} className="press inline-flex h-10 items-center rounded bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-[color-mix(in_oklab,var(--color-primary)_88%,black)]" data-testid="landing-demo">
                   Open the full demo
                 </Link>
-                <Link to="/home" className="press inline-flex h-10 items-center rounded border border-border bg-card px-5 text-sm font-medium hover:bg-surface-2">
+                <Link to="/home?signin=1" className="press inline-flex h-10 items-center rounded border border-border bg-card px-5 text-sm font-medium hover:bg-surface-2" data-testid="landing-start">
                   Sign in to start a workspace
                 </Link>
               </div>
