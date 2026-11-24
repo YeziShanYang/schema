@@ -12,7 +12,7 @@
  * patch from the record it loaded and the page can measure elapsed time.
  */
 
-import type { PaperData, StageTimings, TimedStage } from '../types'
+import type { StageTimings, TimedStage } from '../types'
 
 export const TIMED_STAGES: readonly TimedStage[] = ['queued', 'text', 'concepts', 'overview', 'explain']
 
@@ -97,9 +97,4 @@ export function stageDurations(t: StageTimings | null | undefined, now = Date.no
     stages[s] = Math.max(0, (span.endedAt ?? now) - span.startedAt)
   }
   return { stages, totalMs: Math.max(0, (runEndedAt(t) ?? now) - start) }
-}
-
-/** Stage order for paper.data.stage values that the job reports. */
-export function stageIndex(stage: PaperData['stage']): number {
-  return TIMED_STAGES.indexOf(stage as TimedStage)
 }

@@ -27,13 +27,17 @@ Explainer links are not part of the job. When a reader opens a branch and asks f
 
 Record writes are queued in the checkpoint and flushed 20 per tick, so no tick approaches the Worker subrequest limit. A failing step is retried once after three seconds. A second failure marks the paper failed with a message, and the requester can retry it.
 
+The paper record keeps `timings`, the start and end (ms) of the queue wait and of each stage in the latest run, and `retries`, the number of steps that run retried. A stage's span is the time the record showed it, so a retried step's wait counts toward its stage. `stageDurations()` in `src/lib/timings.ts` turns them into per-stage and total durations, both for the progress view and for reviewing stored runs.
+
+While a paper is analyzed, the paper window shows a progress view (`src/components/paper/AnalysisProgress.tsx`) in place of the graph: a sheet whose motion follows the stage, a checklist of the four stages with their times, and branch nodes that join one at a time as concept records arrive. A failed run shows its error and Retry. When the paper turns ready, the view fades out over the paper window.
+
 The concept list does not depend on the reader. Readers mark what they already know, and progress (per paper and per branch) is computed from their knowledge profile.
 
 ## Data model
 
 | Collection | Contents | Read | Write |
 | --- | --- | --- | --- |
-| `papers` | arXiv metadata, status and stage, branches, main contribution, distinct topic keys | everyone | server only |
+| `papers` | arXiv metadata, status and stage, stage timings and retries, branches, main contribution, distinct topic keys | everyone | server only |
 | `topics` | shared vocabulary: name, level, description, cached links and their loading state | everyone | server only |
 | `concepts` | per-paper concept: topic, branch, quote, dependencies, tier, check question, cached explanation | everyone | server only |
 | `sections` | per-paper walkthrough entries | everyone | server only |
@@ -68,7 +72,7 @@ npx deepspace test run all   # unit, smoke, api and e2e suites
 npx deepspace deploy
 ```
 
-The Playwright suite needs two test accounts (`npx deepspace test accounts create`). In local test runs (`ALLOW_DEBUG_ROUTES=true`), papers with ids starting `0000.` and workspaces named `[fixture] ...` get canned CloudConvert, Claude, Exa and arXiv responses from `src/server/pipeline/fixtures.ts`. Everything else, including the actions, the job, the record rooms and permissions, runs for real.
+The Playwright suite needs two test accounts (`npx deepspace test accounts create`). In local test runs (`ALLOW_DEBUG_ROUTES=true`), papers with ids starting `0000.` and workspaces named `[fixture] ...` get canned CloudConvert, Claude, Exa and arXiv responses from `src/server/pipeline/fixtures.ts`. Fixture ids ending in 55 answer each call after four seconds, which keeps every stage on screen long enough to watch the progress view. Everything else, including the actions, the job, the record rooms and permissions, runs for real.
 
 `tests/live` holds a check against the deployed app with real integration calls. It is not part of `test run` and costs credits:
 

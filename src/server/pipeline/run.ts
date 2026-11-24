@@ -106,7 +106,7 @@ export async function runAnalyzeTick(job: Job, jobCtx: JobContext, env: Env): Pr
     if (next.writes.length > 0) {
       await flushWrites(ctx, next)
     } else {
-      const base = createPipelineClient(env, fixturesAllowed(env, payload.arxivId), ctx)
+      const base = createPipelineClient(env, fixturesAllowed(env, payload.arxivId), ctx, payload.arxivId)
       // Every successful integration call is billed, so from then on a failure keeps the slot.
       const client: PipelineClient = {
         ...base,

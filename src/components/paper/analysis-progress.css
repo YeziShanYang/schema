@@ -1,0 +1,167 @@
+/*
+ * Analysis progress view (AnalysisProgress.tsx). Kept beside the component.
+ *
+ * Ambient motion loops only without a reduced-motion preference. Under it
+ * the sheet is static: no scan line, and highlights and margin notes fade
+ * in once their stage is reached.
+ */
+
+/* Cross-fade into the paper window, which renders underneath. Opacity only,
+   with or without a reduced-motion preference. */
+.analysis-progress {
+  transition-property: opacity;
+  transition-duration: 300ms;
+  transition-timing-function: ease-out;
+}
+.analysis-progress[data-phase="fade"] { opacity: 0; }
+.analysis-progress[data-phase="hold"],
+.analysis-progress[data-phase="fade"] { pointer-events: none; }
+
+/* ---------- The sheet: 144 by 186, drawn at 92 by 119 on narrow screens ---------- */
+.sheet-frame { width: 92px; height: 119px; }
+.paper-sheet {
+  position: relative;
+  isolation: isolate;
+  width: 144px;
+  height: 186px;
+  overflow: hidden;
+  padding: 12px 11px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background-color: var(--color-card);
+  box-shadow: 0 0 0 1px var(--color-border), 0 4px 12px rgba(15, 23, 42, 0.06);
+  scale: 0.639;
+  transform-origin: top left;
+}
+@media (min-width: 640px) {
+  .sheet-frame { width: 144px; height: 186px; }
+  .paper-sheet { scale: 1; }
+}
+
+.sheet-title {
+  display: -webkit-box;
+  height: 20px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  text-align: center;
+  font-size: 7.5px;
+  line-height: 10px;
+  font-weight: 600;
+  color: color-mix(in oklab, var(--color-foreground) 85%, transparent);
+}
+.sheet-bar,
+.sheet-gap {
+  position: relative;
+  display: block;
+  height: 2px;
+}
+.sheet-bar {
+  border-radius: 1px;
+  background-color: color-mix(in oklab, var(--color-foreground) 13%, transparent);
+}
+.sheet-author { width: 46%; margin: 5px auto 0; }
+.sheet-abstract { display: grid; gap: 3px; margin-top: 7px; padding: 0 12px; }
+.sheet-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.sheet-cols > div { display: grid; align-content: start; gap: 3.5px; }
+
+/* Highlights: an accent sweep behind marked bars while concepts are found. */
+.sheet-bar[data-mark]::before {
+  content: "";
+  position: absolute;
+  inset: -1.5px;
+  z-index: -1;
+  border-radius: 1px;
+  background-color: color-mix(in oklab, var(--color-primary) 26%, transparent);
+  transform-origin: left center;
+  opacity: 0;
+  transition-property: opacity;
+  transition-duration: 300ms;
+  transition-timing-function: linear;
+}
+.paper-sheet:not([data-marks="none"]) .sheet-bar[data-mark]::before { opacity: 1; }
+
+/* Pencil notes in the margins while the overview and walkthrough are written. */
+.sheet-notes {
+  position: absolute;
+  inset: -1px;
+  width: 144px;
+  height: 186px;
+  overflow: visible;
+  pointer-events: none;
+}
+.sheet-notes path {
+  stroke: var(--color-primary);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  opacity: 0;
+  transition-property: opacity;
+  transition-duration: 300ms;
+  transition-timing-function: linear;
+}
+.paper-sheet:not([data-notes-a="none"]) .note-a,
+.paper-sheet:not([data-notes-b="none"]) .note-b { opacity: 0.8; }
+
+/* The scan line exists only as motion. */
+.sheet-scan {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 26px;
+  display: none;
+  pointer-events: none;
+  background-image: linear-gradient(to bottom, transparent, color-mix(in oklab, var(--color-primary) 12%, transparent));
+  border-bottom: 1.5px solid color-mix(in oklab, var(--color-primary) 65%, transparent);
+}
+
+/* The active stage's dot sends out a ring. */
+.stage-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: inherit;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .paper-sheet[data-scan="loop"] .sheet-scan {
+    display: block;
+    animation: sheet-scan 2.4s linear infinite;
+  }
+  .paper-sheet[data-marks="loop"] .sheet-bar[data-mark]::before {
+    animation: sheet-mark 5.4s ease-out infinite both;
+    animation-delay: calc(var(--m) * 450ms);
+  }
+  .paper-sheet[data-notes-a="loop"] .note-a,
+  .paper-sheet[data-notes-b="loop"] .note-b {
+    animation: sheet-note 4.2s ease-out infinite both;
+    animation-delay: calc(var(--n) * 700ms);
+  }
+  [data-shown="true"] > .stage-dot::after {
+    animation: stage-pulse 1.6s ease-out infinite;
+  }
+}
+
+@keyframes sheet-scan {
+  from { translate: 0 -26px; }
+  to { translate: 0 186px; }
+}
+@keyframes sheet-mark {
+  0% { opacity: 1; scale: 0 1; }
+  7% { scale: 1 1; }
+  80% { opacity: 1; scale: 1 1; }
+  92%, 100% { opacity: 0; scale: 1 1; }
+}
+@keyframes sheet-note {
+  0% { opacity: 0.8; stroke-dashoffset: 1; }
+  16% { stroke-dashoffset: 0; }
+  80% { opacity: 0.8; stroke-dashoffset: 0; }
+  94%, 100% { opacity: 0; stroke-dashoffset: 0; }
+}
+@keyframes stage-pulse {
+  from { opacity: 0.45; scale: 1; }
+  to { opacity: 0; scale: 2.6; }
+}
