@@ -15,7 +15,89 @@
       "Illia Polosukhin"
     ],
     "year": "2017",
-    "mainContribution": "Introduces the Transformer, a sequence transduction architecture built solely on multi-head self-attention (no recurrence or convolution), with positional encodings, achieving state-of-the-art machine translation BLEU and generalizing to English constituency parsing."
+    "mainContribution": "Introduces the Transformer, a sequence transduction architecture built solely on multi-head self-attention (no recurrence or convolution), with positional encodings, achieving state-of-the-art machine translation BLEU and generalizing to English constituency parsing.",
+    "overview": {
+      "plain": "Computer translation has usually read sentences one word at a time, which is slow and hard to speed up. This paper introduces the Transformer, a design that drops step-by-step reading and lets every word look directly at every other word. It translates more accurately and trains much faster than earlier systems.",
+      "story": [
+        {
+          "id": "s1",
+          "text": "Older translation systems read sentences one word at a time, so they cannot process the whole sentence at once.",
+          "technical": "Here the paper uses recurrent neural networks as the baseline, where each hidden state \\(h_t\\) depends on the previous state \\(h_{t-1}\\) and the current input.",
+          "conceptKeys": [
+            "c1"
+          ]
+        },
+        {
+          "id": "s2",
+          "text": "The authors build a model that turns an input sentence into a list of meaning vectors, then produces the output one word at a time.",
+          "technical": "Here the paper uses an encoder-decoder structure, where the encoder maps \\((x_1, \\ldots, x_n)\\) to \\(z\\) and the decoder generates outputs auto-regressively, each step conditioned on earlier outputs.",
+          "conceptKeys": [
+            "c2",
+            "c3"
+          ]
+        },
+        {
+          "id": "s3",
+          "text": "Their key idea is to drop step-by-step reading and let each word gather information directly from every other word in the sentence.",
+          "technical": "Here the paper uses self-attention to relate all positions of one sequence in parallel, replacing recurrence and convolution entirely.",
+          "conceptKeys": [
+            "c4",
+            "c12"
+          ]
+        },
+        {
+          "id": "s4",
+          "text": "Each comparison scores a query against keys, turns the scores into weights, and uses them to mix values, with scaling to keep the numbers stable.",
+          "technical": "Here the paper uses scaled dot-product attention, \\(\\text{softmax}(QK^T/\\sqrt{d_k})V\\), where the softmax keeps gradients from vanishing for large \\(d_k\\).",
+          "conceptKeys": [
+            "c5",
+            "c6"
+          ]
+        },
+        {
+          "id": "s5",
+          "text": "The model runs several of these comparisons side by side, so each one can focus on a different kind of relationship between words.",
+          "technical": "Here the paper uses multi-head attention, projecting queries, keys and values \\(h\\) times and attending to different representation subspaces in parallel.",
+          "conceptKeys": [
+            "c7"
+          ]
+        },
+        {
+          "id": "s6",
+          "text": "Because there is no reading order, the model adds position signals, and each layer uses shortcut connections, normalization and a small per-word network.",
+          "technical": "Here the paper uses positional encodings added to embeddings, plus residual connections with \\(\\text{LayerNorm}(x + \\text{Sublayer}(x))\\) and position-wise feed-forward layers.",
+          "conceptKeys": [
+            "c10",
+            "c8",
+            "c9"
+          ]
+        },
+        {
+          "id": "s7",
+          "text": "During training the decoder is blocked from peeking at future words, and the model is tuned with a learning schedule and regularization.",
+          "technical": "Here the paper uses masked self-attention that sets illegal scores to \\(-\\infty\\), together with the Adam optimizer, warmup learning rate, dropout and label smoothing.",
+          "conceptKeys": [
+            "c11",
+            "c14",
+            "c13"
+          ]
+        },
+        {
+          "id": "s8",
+          "text": "The result is higher translation quality, measured with a standard score after a search for the best output, and faster training, and it also works for parsing.",
+          "technical": "Here the paper uses BLEU scores with beam search of size 4 and byte-pair tokenization to show the Transformer outperforms prior models.",
+          "conceptKeys": [
+            "c16",
+            "c17",
+            "c18"
+          ]
+        }
+      ],
+      "alsoNeeded": [
+        "c15"
+      ],
+      "generatedAt": 1795541466584
+    }
   },
   "branches": [
     {
@@ -32,7 +114,10 @@
           "quote": "they generate a sequence of hidden states ht , as a function of the previous hidden state ht−1 and the input for position t.",
           "section": "1 Introduction",
           "topicKey": "recurrent-neural-networks",
-          "explanation": "### What it is\n\nA recurrent neural network (RNN) processes a sequence one step at a time, carrying a summary of everything it has seen so far in a vector called the hidden state. At each position *t*, it combines the previous hidden state *h*ₜ₋₁ with the current input to produce a new hidden state *h*ₜ. Because each step needs the result of the step before it, the whole sequence must be processed in order.\n\n### How this paper uses it\n\nThe Introduction describes recurrent models as generating hidden states *h*ₜ \"as a function of the previous hidden state *h*ₜ₋₁ and the input for position t.\" The paper treats this chain as the bottleneck. Since *h*ₜ can't be computed until *h*ₜ₋₁ is ready, training examples can't be parallelized along the sequence, which becomes costly for long sequences. The Transformer's central claim is that it removes this chain and computes relationships between positions directly through attention.\n\n### Worked example\n\nTake a scalar RNN with *h*ₜ = tanh(0.5·*h*ₜ₋₁ + 1·*x*ₜ), starting from *h*₀ = 0 with inputs *x* = [1, 0, 0]:\n\n- *h*₁ = tanh(0.5·0 + 1·1) = tanh(1) ≈ 0.76\n- *h*₂ = tanh(0.5·0.76 + 0) = tanh(0.38) ≈ 0.36\n- *h*₃ = tanh(0.5·0.36 + 0) = tanh(0.18) ≈ 0.18\n\nEach step has to wait for the previous one, and the first input's influence shrinks at every step.\n\n### Common misconception\n\nA common mistake is to think an RNN's hidden state keeps a complete, faithful memory of the whole input. In the example, the signal from *x*₁ is still present in *h*₃ but has been reduced to about 0.18 through repeated squashing and multiplication. Information from distant positions gets diluted, and the sequential structure also prevents parallel computation. Both problems motivate the paper's attention-only design."
+          "explanation": "### What it is\n\nA recurrent neural network (RNN) processes a sequence one step at a time, carrying a summary of everything it has seen so far in a vector called the hidden state. At each position *t*, it combines the previous hidden state *h*ₜ₋₁ with the current input to produce a new hidden state *h*ₜ. Because each step needs the result of the step before it, the whole sequence must be processed in order.\n\n### How this paper uses it\n\nThe Introduction describes recurrent models as generating hidden states *h*ₜ \"as a function of the previous hidden state *h*ₜ₋₁ and the input for position t.\" The paper treats this chain as the bottleneck. Since *h*ₜ can't be computed until *h*ₜ₋₁ is ready, training examples can't be parallelized along the sequence, which becomes costly for long sequences. The Transformer's central claim is that it removes this chain and computes relationships between positions directly through attention.\n\n### Worked example\n\nTake a scalar RNN with *h*ₜ = tanh(0.5·*h*ₜ₋₁ + 1·*x*ₜ), starting from *h*₀ = 0 with inputs *x* = [1, 0, 0]:\n\n- *h*₁ = tanh(0.5·0 + 1·1) = tanh(1) ≈ 0.76\n- *h*₂ = tanh(0.5·0.76 + 0) = tanh(0.38) ≈ 0.36\n- *h*₃ = tanh(0.5·0.36 + 0) = tanh(0.18) ≈ 0.18\n\nEach step has to wait for the previous one, and the first input's influence shrinks at every step.\n\n### Common misconception\n\nA common mistake is to think an RNN's hidden state keeps a complete, faithful memory of the whole input. In the example, the signal from *x*₁ is still present in *h*₃ but has been reduced to about 0.18 through repeated squashing and multiplication. Information from distant positions gets diluted, and the sequential structure also prevents parallel computation. Both problems motivate the paper's attention-only design.",
+          "order": 0,
+          "dependsOn": [],
+          "plainRole": "Shows the older approach the paper replaces: each step waits for the previous one, blocking parallel work."
         },
         {
           "key": "c2",
@@ -43,7 +128,12 @@
           "quote": "Here, the encoder maps an input sequence of symbol representations (x1 , ..., xn ) to a sequence of continuous representations z",
           "section": "3 Model Architecture",
           "topicKey": "language-models",
-          "explanation": "### What it is\n\nAn encoder-decoder model is a two-part sequence-to-sequence design. The **encoder** reads an input sequence, such as English words, and converts it into a list of vectors, one per input position. The **decoder** then produces an output sequence, such as French words, one element at a time. Each new output is chosen using the encoder's vectors and the outputs produced so far.\n\n### How this paper uses it\n\nThe passage says the encoder maps (x1, ..., xn) to continuous representations z = (z1, ..., zn). The decoder then generates (y1, ..., ym) one symbol per step. The paper calls this process auto-regressive: at each step, the model consumes its previously generated symbols as extra input when predicting the next one. The Transformer keeps this two-part structure but replaces recurrent networks with stacks of self-attention and feed-forward layers. The encoder has N = 6 identical layers, and Figure 1 shows the encoder on the left and the decoder on the right.\n\n### Worked example\n\nHere is a simplified greedy decoding loop. `decoder_step` stands in for the full decoder, which conditions on the encoder output `z` and on all previous outputs.\n\n```python\ndef greedy_decode(z, decoder_step, max_len=10):\n    ys = [\"<s>\"]\n    for _ in range(max_len):\n        nxt = decoder_step(z, ys)   # uses z AND the outputs so far\n        ys.append(nxt)\n        if nxt == \"</s>\":\n            break\n    return ys[1:]\n\n# Illustrative run for \"I love cats\" -> \"J'aime les chats\":\n# step 1: sees [\"<s>\"]             -> \"J'aime\"\n# step 2: sees [\"<s>\", \"J'aime\"]   -> \"les\"\n# step 3: sees [..., \"les\"]        -> \"chats\"\n# step 4: sees [..., \"chats\"]      -> \"</s>\"  (stop)\n```\n\n### Common misconception\n\nIt is tempting to think the encoder compresses the whole input into one fixed summary vector that the decoder reads once. In the Transformer, the encoder outputs n vectors, one per input position, and the decoder consults all of them at every generation step. The decoder also does not produce its outputs independently; each prediction depends on the outputs before it."
+          "explanation": "### What it is\n\nAn encoder-decoder model is a two-part sequence-to-sequence design. The **encoder** reads an input sequence, such as English words, and converts it into a list of vectors, one per input position. The **decoder** then produces an output sequence, such as French words, one element at a time. Each new output is chosen using the encoder's vectors and the outputs produced so far.\n\n### How this paper uses it\n\nThe passage says the encoder maps (x1, ..., xn) to continuous representations z = (z1, ..., zn). The decoder then generates (y1, ..., ym) one symbol per step. The paper calls this process auto-regressive: at each step, the model consumes its previously generated symbols as extra input when predicting the next one. The Transformer keeps this two-part structure but replaces recurrent networks with stacks of self-attention and feed-forward layers. The encoder has N = 6 identical layers, and Figure 1 shows the encoder on the left and the decoder on the right.\n\n### Worked example\n\nHere is a simplified greedy decoding loop. `decoder_step` stands in for the full decoder, which conditions on the encoder output `z` and on all previous outputs.\n\n```python\ndef greedy_decode(z, decoder_step, max_len=10):\n    ys = [\"<s>\"]\n    for _ in range(max_len):\n        nxt = decoder_step(z, ys)   # uses z AND the outputs so far\n        ys.append(nxt)\n        if nxt == \"</s>\":\n            break\n    return ys[1:]\n\n# Illustrative run for \"I love cats\" -> \"J'aime les chats\":\n# step 1: sees [\"<s>\"]             -> \"J'aime\"\n# step 2: sees [\"<s>\", \"J'aime\"]   -> \"les\"\n# step 3: sees [..., \"les\"]        -> \"chats\"\n# step 4: sees [..., \"chats\"]      -> \"</s>\"  (stop)\n```\n\n### Common misconception\n\nIt is tempting to think the encoder compresses the whole input into one fixed summary vector that the decoder reads once. In the Transformer, the encoder outputs n vectors, one per input position, and the decoder consults all of them at every generation step. The decoder also does not produce its outputs independently; each prediction depends on the outputs before it.",
+          "order": 1,
+          "dependsOn": [
+            "c1"
+          ],
+          "plainRole": "Describes the overall shape of the model: one part reads the input, another writes the output."
         },
         {
           "key": "c3",
@@ -53,8 +143,13 @@
           "whyNeeded": "The decoder produces one symbol at a time conditioned on earlier outputs, and the masking design depends on this property.",
           "quote": "At each step the model is auto-regressive [10], consuming the previously generated symbols as additional input when generating the next.",
           "section": "3 Model Architecture",
-          "topicKey": "language-models",
-          "explanation": "### What it is\n\nAuto-regressive generation means producing an output sequence one token at a time, where each new token is predicted from the tokens already produced. The full probability of a sequence is factored into a chain of conditional probabilities:\n\np(y₁, …, yₘ) = ∏ₜ p(yₜ | y₁, …, yₜ₋₁)\n\nEach step gets to \"see\" its own earlier outputs as input.\n\n### How this paper uses it\n\nSection 3 describes the decoder as generating \"(y₁, …, yₘ) of symbols one element at a time,\" and states that \"at each step the model is auto-regressive, consuming the previously generated symbols as additional input when generating the next.\" The decoder's self-attention therefore must not look at future positions. During training, the decoder receives the target sequence shifted right, and a mask blocks attention to later positions. This keeps the training objective faithful to the factorization above, so position t is predicted only from y₁ through y₍ₜ₋₁₎. Without the mask, the model could copy the answer from the input it is supposed to predict.\n\n### A worked example\n\nSuppose the model generates \"the cat sat\" with these conditional probabilities:\n\n- p(the) = 0.5\n- p(cat | the) = 0.4\n- p(sat | the, cat) = 0.2\n\nThen the sequence probability is 0.5 × 0.4 × 0.2 = 0.04. Each factor depends only on earlier tokens, which is exactly what the decoder's masking enforces.\n\n### A common misconception\n\nIt is tempting to conclude that auto-regressive models must also train one token at a time. That is false. During training, the ground-truth outputs are known, so all positions are computed in parallel, with the mask ensuring each position sees only its prefix. The sequential bottleneck applies at inference, when the model must wait for its own previous outputs."
+          "topicKey": "auto-regressive-generation",
+          "explanation": "### What it is\n\nAuto-regressive generation means producing an output sequence one token at a time, where each new token is predicted from the tokens already produced. The full probability of a sequence is factored into a chain of conditional probabilities:\n\np(y₁, …, yₘ) = ∏ₜ p(yₜ | y₁, …, yₜ₋₁)\n\nEach step gets to \"see\" its own earlier outputs as input.\n\n### How this paper uses it\n\nSection 3 describes the decoder as generating \"(y₁, …, yₘ) of symbols one element at a time,\" and states that \"at each step the model is auto-regressive, consuming the previously generated symbols as additional input when generating the next.\" The decoder's self-attention therefore must not look at future positions. During training, the decoder receives the target sequence shifted right, and a mask blocks attention to later positions. This keeps the training objective faithful to the factorization above, so position t is predicted only from y₁ through y₍ₜ₋₁₎. Without the mask, the model could copy the answer from the input it is supposed to predict.\n\n### A worked example\n\nSuppose the model generates \"the cat sat\" with these conditional probabilities:\n\n- p(the) = 0.5\n- p(cat | the) = 0.4\n- p(sat | the, cat) = 0.2\n\nThen the sequence probability is 0.5 × 0.4 × 0.2 = 0.04. Each factor depends only on earlier tokens, which is exactly what the decoder's masking enforces.\n\n### A common misconception\n\nIt is tempting to conclude that auto-regressive models must also train one token at a time. That is false. During training, the ground-truth outputs are known, so all positions are computed in parallel, with the mask ensuring each position sees only its prefix. The sequential bottleneck applies at inference, when the model must wait for its own previous outputs.",
+          "order": 2,
+          "dependsOn": [
+            "c2"
+          ],
+          "plainRole": "Explains why the decoder writes one word at a time, feeding back its own earlier words as input."
         },
         {
           "key": "c12",
@@ -65,7 +160,13 @@
           "quote": "The shorter these paths between any combination of positions in the input and output sequences, the easier it is to learn long-range dependencies",
           "section": "4 Why Self-Attention",
           "topicKey": "big-o-notation",
-          "explanation": "### What it is\n\nThese are two ways of counting how hard a network layer makes it to pass information across a sequence.\n\n- **Sequential operations** is the minimum number of steps that must run one after another. Steps that can run at the same time, such as all positions in one attention layer, count as a single step. This measures how much of the computation can be parallelized.\n- **Maximum path length** is the longest chain of connections a signal must travel to get from any input position to any output position. Shorter paths make it easier for the network to learn relationships between distant words.\n\n### How this paper uses it\n\nSection 4 uses both measures to justify self-attention. Table 1 compares layer types. A self-attention layer connects every pair of positions in O(1) sequential operations with O(1) maximum path length. A recurrent layer needs O(n) sequential operations, and its path length is also O(n), because information must pass through every intermediate position. The authors argue that the short paths are why self-attention helps with long-range dependencies.\n\n### Worked example\n\nTake a sentence of n = 8 tokens and ask how many hops information needs to go from token 1 to token 8.\n\n```python\nn = 8\nrnn_path = n - 1      # 7 sequential hops, each depending on the last\nattn_path = 1         # one attention layer links every pair directly\nprint(rnn_path, attn_path)  # 7 1\n```\n\nThe RNN's path grows linearly with n, while the attention path stays at 1 for any n.\n\n### Common misconception\n\nShorter path length and fewer sequential operations do not mean self-attention is cheaper overall. Its per-layer cost is O(n² · d), which grows quadratically with sequence length, while recurrence grows linearly in n. The paper's point is about how easily information flows and how much can be parallelized. Total computation is a separate measure, and the paper compares it on its own axis."
+          "explanation": "### What it is\n\nThese are two ways of counting how hard a network layer makes it to pass information across a sequence.\n\n- **Sequential operations** is the minimum number of steps that must run one after another. Steps that can run at the same time, such as all positions in one attention layer, count as a single step. This measures how much of the computation can be parallelized.\n- **Maximum path length** is the longest chain of connections a signal must travel to get from any input position to any output position. Shorter paths make it easier for the network to learn relationships between distant words.\n\n### How this paper uses it\n\nSection 4 uses both measures to justify self-attention. Table 1 compares layer types. A self-attention layer connects every pair of positions in O(1) sequential operations with O(1) maximum path length. A recurrent layer needs O(n) sequential operations, and its path length is also O(n), because information must pass through every intermediate position. The authors argue that the short paths are why self-attention helps with long-range dependencies.\n\n### Worked example\n\nTake a sentence of n = 8 tokens and ask how many hops information needs to go from token 1 to token 8.\n\n```python\nn = 8\nrnn_path = n - 1      # 7 sequential hops, each depending on the last\nattn_path = 1         # one attention layer links every pair directly\nprint(rnn_path, attn_path)  # 7 1\n```\n\nThe RNN's path grows linearly with n, while the attention path stays at 1 for any n.\n\n### Common misconception\n\nShorter path length and fewer sequential operations do not mean self-attention is cheaper overall. Its per-layer cost is O(n² · d), which grows quadratically with sequence length, while recurrence grows linearly in n. The paper's point is about how easily information flows and how much can be parallelized. Total computation is a separate measure, and the paper compares it on its own axis.",
+          "order": 11,
+          "dependsOn": [
+            "c4",
+            "c1"
+          ],
+          "plainRole": "Justifies self-attention: short paths between any two words make distant links easier to learn."
         }
       ]
     },
@@ -83,7 +184,10 @@
           "quote": "We suspect that for large values of dk , the dot products grow large in magnitude, pushing the softmax function into regions where it has extremely small gradients",
           "section": "3.2.1 Scaled Dot-Product Attention",
           "topicKey": "softmax-function",
-          "explanation": ""
+          "explanation": "",
+          "order": 5,
+          "dependsOn": [],
+          "plainRole": "Explains why scores are scaled, so learning signals do not fade when the numbers become large."
         },
         {
           "key": "c7",
@@ -93,8 +197,11 @@
           "whyNeeded": "The model runs several attention heads in parallel over projected queries, keys and values, which is central to the architecture.",
           "quote": "Multi-head attention allows the model to jointly attend to information from different representation subspaces at different positions.",
           "section": "3.2.2 Multi-Head Attention",
-          "topicKey": "attention-mechanism",
-          "explanation": ""
+          "topicKey": "multi-head-attention",
+          "explanation": "",
+          "order": 6,
+          "dependsOn": [],
+          "plainRole": "Lets the model examine several kinds of word relationships at once, increasing its power."
         },
         {
           "key": "c5",
@@ -105,7 +212,13 @@
           "quote": "We compute the dot products of the query with all keys, divide each by dk , and apply a softmax function to obtain the weights on the values.",
           "section": "3.2.1 Scaled Dot-Product Attention",
           "topicKey": "dot-product",
-          "explanation": ""
+          "explanation": "",
+          "order": 4,
+          "dependsOn": [
+            "c6",
+            "c7"
+          ],
+          "plainRole": "The basic building block every layer uses to weigh and combine information from the sentence."
         },
         {
           "key": "c4",
@@ -116,7 +229,12 @@
           "quote": "Self-attention, sometimes called intra-attention is an attention mechanism relating different positions of a single sequence in order to compute a representation of the sequence.",
           "section": "2 Background",
           "topicKey": "attention-mechanism",
-          "explanation": ""
+          "explanation": "",
+          "order": 3,
+          "dependsOn": [
+            "c5"
+          ],
+          "plainRole": "The central idea: each word looks at other words in the same sentence to build its meaning."
         }
       ]
     },
@@ -134,7 +252,10 @@
           "quote": "We employ a residual connection [11] around each of the two sub-layers, followed by layer normalization [1].",
           "section": "3.1 Encoder and Decoder Stacks",
           "topicKey": "batch-and-layer-normalization",
-          "explanation": ""
+          "explanation": "",
+          "order": 7,
+          "dependsOn": [],
+          "plainRole": "Shortcut and normalization steps wrapped around each layer that make deep stacks trainable."
         },
         {
           "key": "c9",
@@ -145,7 +266,10 @@
           "quote": "This consists of two linear transformations with a ReLU activation in between.",
           "section": "3.3 Position-wise Feed-Forward Networks",
           "topicKey": "feed-forward-neural-networks",
-          "explanation": ""
+          "explanation": "",
+          "order": 8,
+          "dependsOn": [],
+          "plainRole": "A small network applied to each word separately, adding extra processing power in every layer."
         },
         {
           "key": "c10",
@@ -156,7 +280,12 @@
           "quote": "we must inject some information about the relative or absolute position of the tokens in the sequence.",
           "section": "3.5 Positional Encoding",
           "topicKey": "word-embeddings",
-          "explanation": ""
+          "explanation": "",
+          "order": 9,
+          "dependsOn": [
+            "c4"
+          ],
+          "plainRole": "Without a reading order, these position signals are how the model knows which word comes first."
         },
         {
           "key": "c11",
@@ -166,8 +295,14 @@
           "whyNeeded": "Masking illegal connections preserves the auto-regressive property, so the decoder cannot see future outputs during training.",
           "quote": "We implement this inside of scaled dot-product attention by masking out (setting to −∞) all values in the input of the softmax which correspond to illegal connections.",
           "section": "3.2.3 Applications of Attention in our Model",
-          "topicKey": "attention-mechanism",
-          "explanation": ""
+          "topicKey": "masked-self-attention-in-the-decoder",
+          "explanation": "",
+          "order": 10,
+          "dependsOn": [
+            "c3",
+            "c5"
+          ],
+          "plainRole": "Stops the decoder from cheating by looking at future words during training."
         }
       ]
     },
@@ -185,7 +320,10 @@
           "quote": "We apply dropout [33] to the output of each sub-layer, before it is added to the sub-layer input and normalized.",
           "section": "5.4 Regularization",
           "topicKey": "dropout",
-          "explanation": ""
+          "explanation": "",
+          "order": 12,
+          "dependsOn": [],
+          "plainRole": "Techniques that reduce overfitting and make training more robust, needed to match the reported results."
         },
         {
           "key": "c15",
@@ -196,7 +334,10 @@
           "quote": "We varied the learning rate over the course of training, according to the formula:",
           "section": "5.3 Optimizer",
           "topicKey": "stochastic-gradient-descent",
-          "explanation": ""
+          "explanation": "",
+          "order": 14,
+          "dependsOn": [],
+          "plainRole": "The basic idea of nudging model settings downhill, which the optimizer and schedule build on."
         },
         {
           "key": "c16",
@@ -207,7 +348,10 @@
           "quote": "On the WMT 2014 English-to-German translation task, the big transformer model outperforms the best previously reported models (including ensembles) by more than 2.0 BLEU",
           "section": "Abstract and 6.1 Machine Translation",
           "topicKey": "evaluation-metrics-accuracy-precision-recall",
-          "explanation": ""
+          "explanation": "",
+          "order": 15,
+          "dependsOn": [],
+          "plainRole": "The standard score used to report translation quality, so different systems can be compared."
         },
         {
           "key": "c18",
@@ -218,7 +362,10 @@
           "quote": "Sentences were encoded using byte-pair encoding [3], which has a shared sourcetarget vocabulary of about 37000 tokens.",
           "section": "5.1 Training Data and Batching",
           "topicKey": "tokenization",
-          "explanation": ""
+          "explanation": "",
+          "order": 17,
+          "dependsOn": [],
+          "plainRole": "Splits words into smaller pieces so the model can handle rare and unseen words."
         },
         {
           "key": "c14",
@@ -229,7 +376,12 @@
           "quote": "We used the Adam optimizer [20] with β1 = 0.9, β2 = 0.98 and ϵ = 10−9 .",
           "section": "5.3 Optimizer",
           "topicKey": "adam-optimizer",
-          "explanation": ""
+          "explanation": "",
+          "order": 13,
+          "dependsOn": [
+            "c15"
+          ],
+          "plainRole": "Sets how each training update is made and how the learning speed changes over time."
         },
         {
           "key": "c17",
@@ -240,7 +392,12 @@
           "quote": "We used beam search with a beam size of 4 and length penalty α = 0.6 [38].",
           "section": "6.1 Machine Translation",
           "topicKey": "greedy-decoding-and-temperature",
-          "explanation": ""
+          "explanation": "",
+          "order": 16,
+          "dependsOn": [
+            "c3"
+          ],
+          "plainRole": "The search method that picks output words, which shapes the final translations being scored."
         }
       ]
     }
@@ -266,15 +423,11 @@
         "why": "A simple explanation of what softmax does to arbitrary scores and how to implement it, which is exactly what a beginner needs."
       }
     },
-    "attention-mechanism": {
-      "name": "Attention mechanism",
+    "multi-head-attention": {
+      "name": "Multi-head attention",
       "level": "core",
-      "description": "Weighting inputs by learned relevance (queries, keys, values).",
-      "resource": {
-        "title": "Attention in transformers, step-by-step | Deep ... | 3Blue1Brown",
-        "url": "https://www.3blue1brown.com/lessons/attention/",
-        "why": "Visual, step-by-step lesson on queries, keys, and values that gives beginners strong intuition for how attention weights inputs."
-      }
+      "description": "The model runs several attention heads in parallel over projected queries, keys and values, which is central to the architecture.",
+      "resource": null
     },
     "batch-and-layer-normalization": {
       "name": "Batch and layer normalization",
@@ -366,6 +519,22 @@
         "why": "Explains the intuition behind Adam with an accessible analogy before moving to implementation, making the adaptive per-parameter step sizes easy to grasp."
       }
     },
+    "auto-regressive-generation": {
+      "name": "Auto-regressive generation",
+      "level": "core",
+      "description": "The decoder produces one symbol at a time conditioned on earlier outputs, and the masking design depends on this property.",
+      "resource": null
+    },
+    "attention-mechanism": {
+      "name": "Attention mechanism",
+      "level": "core",
+      "description": "Weighting inputs by learned relevance (queries, keys, values).",
+      "resource": {
+        "title": "Attention in transformers, step-by-step | Deep ... | 3Blue1Brown",
+        "url": "https://www.3blue1brown.com/lessons/attention/",
+        "why": "Visual, step-by-step lesson on queries, keys, and values that gives beginners strong intuition for how attention weights inputs."
+      }
+    },
     "word-embeddings": {
       "name": "Word embeddings",
       "level": "core",
@@ -375,6 +544,12 @@
         "url": "https://www.tensorflow.org/text/tutorials/word_embeddings",
         "why": "Walks through training word embeddings from scratch in a simple Keras sentiment model and then visualizing them, so a beginner sees what a dense token vector is and how it gets learned."
       }
+    },
+    "masked-self-attention-in-the-decoder": {
+      "name": "Masked self-attention in the decoder",
+      "level": "core",
+      "description": "Masking illegal connections preserves the auto-regressive property, so the decoder cannot see future outputs during training.",
+      "resource": null
     },
     "big-o-notation": {
       "name": "Big-O notation",
