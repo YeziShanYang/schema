@@ -24,6 +24,17 @@
       "description": "Prior neural approaches to sequence-to-sequence tasks that the paper positions itself against.",
       "concepts": [
         {
+          "key": "c1",
+          "name": "Recurrent neural networks for sequence modeling",
+          "depth": "working",
+          "tier": 0,
+          "whyNeeded": "The paper defines its contribution as replacing the recurrent models that dominated sequence transduction, so the reader must know how hidden state ht depends on ht-1.",
+          "quote": "they generate a sequence of hidden states ht , as a function of the previous hidden state ht−1 and the input for position t.",
+          "section": "1 Introduction",
+          "topicKey": "recurrent-neural-networks",
+          "explanation": "### What it is\n\nA recurrent neural network (RNN) processes a sequence one step at a time, carrying a summary of everything it has seen so far in a vector called the hidden state. At each position *t*, it combines the previous hidden state *h*ₜ₋₁ with the current input to produce a new hidden state *h*ₜ. Because each step needs the result of the step before it, the whole sequence must be processed in order.\n\n### How this paper uses it\n\nThe Introduction describes recurrent models as generating hidden states *h*ₜ \"as a function of the previous hidden state *h*ₜ₋₁ and the input for position t.\" The paper treats this chain as the bottleneck. Since *h*ₜ can't be computed until *h*ₜ₋₁ is ready, training examples can't be parallelized along the sequence, which becomes costly for long sequences. The Transformer's central claim is that it removes this chain and computes relationships between positions directly through attention.\n\n### Worked example\n\nTake a scalar RNN with *h*ₜ = tanh(0.5·*h*ₜ₋₁ + 1·*x*ₜ), starting from *h*₀ = 0 with inputs *x* = [1, 0, 0]:\n\n- *h*₁ = tanh(0.5·0 + 1·1) = tanh(1) ≈ 0.76\n- *h*₂ = tanh(0.5·0.76 + 0) = tanh(0.38) ≈ 0.36\n- *h*₃ = tanh(0.5·0.36 + 0) = tanh(0.18) ≈ 0.18\n\nEach step has to wait for the previous one, and the first input's influence shrinks at every step.\n\n### Common misconception\n\nA common mistake is to think an RNN's hidden state keeps a complete, faithful memory of the whole input. In the example, the signal from *x*₁ is still present in *h*₃ but has been reduced to about 0.18 through repeated squashing and multiplication. Information from distant positions gets diluted, and the sequential structure also prevents parallel computation. Both problems motivate the paper's attention-only design."
+        },
+        {
           "key": "c2",
           "name": "Encoder-decoder sequence-to-sequence models",
           "depth": "working",
@@ -235,6 +246,16 @@
     }
   ],
   "topics": {
+    "recurrent-neural-networks": {
+      "name": "Recurrent neural networks",
+      "level": "core",
+      "description": "Networks that process sequences step by step (RNN, LSTM, GRU).",
+      "resource": {
+        "title": "An Introduction to Recurrent Neural Networks for Beginners - victorzhou.com",
+        "url": "https://victorzhou.com/blog/intro-to-rnns/",
+        "why": "A beginner-friendly walkthrough that explains how RNNs process sequences step by step and shows a from-scratch implementation."
+      }
+    },
     "softmax-function": {
       "name": "Softmax function",
       "level": "foundation",

@@ -212,8 +212,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   if (isLoaded && !isSignedIn) {
     return (
-      <div className="flex h-screen flex-col overflow-hidden bg-background">
-        <header data-testid="app-navigation" className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4">
+      <div className="flex min-h-screen flex-col bg-background">
+        <header data-testid="app-navigation" className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4">
           <Brand />
           <button
             type="button"
@@ -224,19 +224,20 @@ export function AppShell({ children }: { children: ReactNode }) {
             Sign in
           </button>
         </header>
-        <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
+        <main className="flex-1">{children}</main>
         {showAuth && <AuthOverlay onClose={() => setShowAuth(false)} />}
       </div>
     )
   }
 
   return (
-    <div className="grid h-screen grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-background md:grid-cols-[232px_minmax(0,1fr)] md:grid-rows-1">
-      <aside className="hidden min-w-0 border-r border-border bg-surface-2 md:block">
+    <div className="min-h-screen bg-background md:grid md:grid-cols-[232px_minmax(0,1fr)]">
+      {/* The document scrolls; the sidebar stays in view beside it. */}
+      <aside className="sticky top-0 hidden h-screen min-w-0 overflow-y-auto overscroll-contain border-r border-border bg-surface-2 md:block">
         <SidebarContent />
       </aside>
 
-      <header className="flex h-12 items-center justify-between border-b border-border bg-card px-3 md:hidden">
+      <header className="sticky top-0 z-30 flex h-12 items-center justify-between border-b border-border bg-card px-3 md:hidden">
         <Brand />
         <button type="button" aria-label="Open menu" aria-expanded={sheetOpen} onClick={() => setSheetOpen(true)} className="press grid size-[34px] cursor-pointer place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground">
           <MenuIcon size={18} />
@@ -255,7 +256,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       )}
 
-      <main className="min-h-0 min-w-0 overflow-y-auto">{children}</main>
+      <main className="min-w-0">{children}</main>
     </div>
   )
 }

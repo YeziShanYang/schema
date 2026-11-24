@@ -114,7 +114,7 @@ export default function WorkspacePage() {
         <Button variant="ghost" onClick={() => setConfirmRemove(true)}>Remove workspace</Button>
       </PageHeader>
 
-      <div className="mx-auto grid max-w-5xl gap-6 px-5 py-6 md:px-7">
+      <div className="grid max-w-5xl gap-6 px-5 py-6 md:px-7">
         <div className="-mt-2 text-sm text-muted-foreground">
           <InlineEdit
             value={ws.data.description}

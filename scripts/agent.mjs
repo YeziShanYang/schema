@@ -30,3 +30,21 @@ export function query(app, collection, where = undefined, limit = 1000) {
   const data = invoke(app, 'records_query', where ? { collection, where, limit } : { collection, limit })
   return data?.records ?? []
 }
+
+/**
+ * All concepts of a paper. The agent tool trims large responses, so this
+ * reads one branch at a time (a branch holds a handful of concepts).
+ */
+export function conceptsOf(app, paper) {
+  const out = []
+  const seen = new Set()
+  for (const b of paper.data.branches ?? []) {
+    for (const c of query(app, 'concepts', { paperId: paper.recordId, branchKey: b.key }, 100)) {
+      if (!seen.has(c.recordId)) {
+        seen.add(c.recordId)
+        out.push(c)
+      }
+    }
+  }
+  return out
+}

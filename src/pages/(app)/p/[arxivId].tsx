@@ -150,7 +150,7 @@ export default function PaperPage() {
         {d.mainContribution && <p className="mt-2 max-w-3xl text-sm">{d.mainContribution}</p>}
       </header>
 
-      <div className="mx-auto grid max-w-5xl gap-5 px-5 py-5 md:px-7">
+      <div className="grid max-w-5xl gap-5 px-5 py-5 md:px-7">
         {inProgress && (
           <section className="surface p-4" data-testid="paper-progress" aria-live="polite">
             <div className="flex items-baseline justify-between text-sm">
@@ -217,7 +217,7 @@ export default function PaperPage() {
               </section>
             )}
 
-            <nav className="flex gap-1 rounded-[7px] bg-surface-2 p-[3px] border border-border self-start" aria-label="Paper view">
+            <nav className="flex w-fit gap-1 rounded-[7px] border border-border bg-surface-2 p-[3px]" aria-label="Paper view">
               {(['branches', 'walkthrough'] as const).map((v) => (
                 <button
                   key={v}

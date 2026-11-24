@@ -25,7 +25,7 @@ export default function HomePage() {
   return (
     <div className="min-h-full" data-testid="home-page">
       <PageHeader label="Home" title="Learn the ideas a paper is built on" />
-      <div className="mx-auto grid max-w-5xl gap-5 px-5 py-6 md:px-7">
+      <div className="grid max-w-5xl gap-5 px-5 py-6 md:px-7">
         {isSignedIn && (lastWorkspace || lastPaper) && (
           <section className="surface enter p-4" style={{ ['--i' as string]: 0 }} data-testid="continue">
             <div className="label">Continue where you left off</div>

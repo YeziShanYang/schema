@@ -26,8 +26,8 @@ export default function LibraryPage() {
   return (
     <div className="min-h-full" data-testid="library-page">
       <PageHeader label="Library" title="Your papers" />
-      <div className="mx-auto grid max-w-4xl gap-4 px-5 py-6 md:px-7">
-        <div className="flex gap-1 self-start rounded-[7px] bg-surface-2 p-[3px] border border-border" role="group" aria-label="Filter papers">
+      <div className="grid max-w-4xl gap-4 px-5 py-6 md:px-7">
+        <div className="flex w-fit gap-1 rounded-[7px] border border-border bg-surface-2 p-[3px]" role="group" aria-label="Filter papers">
           {(['all', 'reading', 'finished'] as Filter[]).map((f) => (
             <button
               key={f}

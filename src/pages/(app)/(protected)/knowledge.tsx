@@ -102,7 +102,7 @@ export default function KnowledgePage() {
   return (
     <div className="min-h-full" data-testid="knowledge-page">
       <PageHeader label="Knowledge" title="What you know" />
-      <div className="mx-auto grid max-w-4xl gap-6 px-5 py-6 md:px-7">
+      <div className="grid max-w-4xl gap-6 px-5 py-6 md:px-7">
         <p className="-mt-1 text-sm text-muted-foreground">
           Topics are shared across papers. A topic you mark here shows as known in every paper that relies on it.
         </p>

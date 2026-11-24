@@ -9,6 +9,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Seo } from '../components/Seo'
 import { MarkIcon } from '../components/icons'
+import { cleanTitle } from '../components/Markdown'
 import { APP_DISPLAY_NAME, DEMO_ARXIV_ID } from '../constants'
 import { demoSnapshot } from '../data/demo'
 import { DAILY_PAPER_CAP } from '../lib/cap'
@@ -119,7 +120,7 @@ export default function Landing() {
                           )}
                           {topic?.resource && (
                             <a href={topic.resource.url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-[12.5px] text-primary hover:underline">
-                              {topic.resource.title}
+                              {cleanTitle(topic.resource.title)}
                             </a>
                           )}
                         </li>

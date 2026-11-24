@@ -32,7 +32,7 @@ export default function AppLayout() {
       <title>{APP_DISPLAY_NAME}</title>
       <AuthBoot>
         <AppShell>
-          <Suspense fallback={<div className="flex h-full items-center justify-center text-muted-foreground">Loading…</div>}>
+          <Suspense fallback={<div className="flex min-h-[50vh] items-center justify-center text-muted-foreground">Loading…</div>}>
             <Outlet />
           </Suspense>
         </AppShell>

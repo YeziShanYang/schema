@@ -7,14 +7,14 @@
  *   node scripts/export-demo-snapshot.mjs [arxivId] [app]
  */
 import { writeFileSync } from 'node:fs'
-import { query } from './agent.mjs'
+import { conceptsOf, query } from './agent.mjs'
 
 const arxivId = process.argv[2] ?? '1706.03762'
 const app = process.argv[3] ?? 'schema'
 
 const [paper] = query(app, 'papers', { arxivId }, 1)
 if (!paper || paper.data.status !== 'ready') throw new Error(`${arxivId} is not analyzed (status ${paper?.data.status ?? 'missing'})`)
-const concepts = query(app, 'concepts', { paperId: paper.recordId }, 500).sort((a, b) => a.data.tier - b.data.tier || a.data.order - b.data.order)
+const concepts = conceptsOf(app, paper).sort((a, b) => a.data.tier - b.data.tier || a.data.order - b.data.order)
 const topicKeys = new Set(concepts.map((c) => c.data.topicKey))
 // One query per key: the agent tool caps how many rows a single query returns.
 const topics = Object.fromEntries(

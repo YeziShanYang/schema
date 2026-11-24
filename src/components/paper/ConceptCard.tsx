@@ -13,6 +13,7 @@ import { actions } from '../../lib/actions-client'
 import { KnownToggle, LearningToggle } from '../StatusControl'
 import { Chip } from '../blueprint'
 import { ExternalIcon, SparkIcon } from '../icons'
+import { cleanTitle, Markdown } from '../Markdown'
 
 interface Props {
   concept: RecordData<ConceptData>
@@ -100,11 +101,11 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
             <ul className="flex w-full flex-col gap-1.5" data-testid="concept-resources">
               {topic.resources.map((r) => (
                 <li key={r.url} className="text-[12.5px]">
-                  <a href={r.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded bg-surface-2 px-2 py-1 text-foreground border border-border transition-[background-color] duration-150 hover:bg-accent-soft">
-                    {r.title}
-                    <ExternalIcon size={13} />
+                  <a href={r.url} target="_blank" rel="noreferrer" className="inline-flex max-w-full items-center gap-1 rounded border border-border bg-surface-2 px-2 py-1 text-foreground transition-[background-color] duration-150 hover:bg-accent-soft">
+                    <span className="truncate">{cleanTitle(r.title)}</span>
+                    <ExternalIcon size={13} className="shrink-0" />
                   </a>
-                  {r.why && <span className="ml-1.5 text-muted-foreground">{r.why}</span>}
+                  {r.why && <p className="mt-0.5 pl-0.5 text-xs text-muted-foreground">{r.why}</p>}
                 </li>
               ))}
             </ul>
@@ -138,7 +139,7 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
         {c.explanation && showExplain && (
           <div className="reveal mt-2.5 rounded bg-accent-soft px-3 py-2.5 text-[13px] leading-normal" data-testid="concept-explanation">
             <span className="label mb-1 block text-primary">Explained for this paper</span>
-            <div className="whitespace-pre-wrap">{c.explanation}</div>
+            <Markdown text={c.explanation} />
           </div>
         )}
 
