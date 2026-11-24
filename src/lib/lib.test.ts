@@ -33,10 +33,13 @@ describe('parseArxivId', () => {
     },
   )
 
-  it('round-trips slugs for old-style ids', () => {
-    expect(arxivSlug('math.AG/0601001')).toBe('math.AG_0601001')
+  it('round-trips slugs without dots or slashes', () => {
+    expect(arxivSlug('math.AG/0601001')).toBe('math~AG_0601001')
+    expect(arxivSlug('2611.29002')).toBe('2611~29002')
     expect(arxivFromSlug(arxivSlug('math.AG/0601001'))).toBe('math.AG/0601001')
     expect(arxivFromSlug(arxivSlug('2611.29002'))).toBe('2611.29002')
+    // Links typed with a plain dot still resolve.
+    expect(arxivFromSlug('2611.29002')).toBe('2611.29002')
   })
 })
 

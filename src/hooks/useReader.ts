@@ -70,7 +70,8 @@ export function useKnowledge(): KnowledgeApi {
 
   const statusOf = useCallback((topicKey: string) => byTopic.get(topicKey)?.data.status ?? null, [byTopic])
 
-  return { ready: ready && !!userId, status, rows, byTopic, statusOf, set, clear }
+  // Writes wait for the first query result so an upsert never creates a duplicate row.
+  return { ready: ready && !!userId && status === 'ready', status, rows, byTopic, statusOf, set, clear }
 }
 
 export interface RoadmapsApi {
@@ -86,7 +87,7 @@ const TOUCH_INTERVAL_MS = 60_000
 
 export function useRoadmaps(): RoadmapsApi {
   const { userId, isSignedIn } = useAuth()
-  const { records } = useQuery<RoadmapData>('roadmaps', { limit: 1000 })
+  const { records, status } = useQuery<RoadmapData>('roadmaps', { limit: 1000 })
   const { ready, create, put } = useMutations<RoadmapData>('roadmaps')
 
   const rows = useMemo(
@@ -123,5 +124,5 @@ export function useRoadmaps(): RoadmapsApi {
     [byPaper, put],
   )
 
-  return { ready: ready && !!userId, rows, byPaper, touch, setStatus }
+  return { ready: ready && !!userId && status === 'ready', rows, byPaper, touch, setStatus }
 }

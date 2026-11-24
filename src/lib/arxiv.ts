@@ -41,13 +41,18 @@ export function parseArxivId(input: string): ArxivRef | null {
   return { id: m[1], version: m[2] ?? '' }
 }
 
-/** URL-safe slug for routes. arXiv ids never contain "_", so this round-trips. */
+/**
+ * Route slug for a paper. "/" becomes "_" and "." becomes "~": arXiv ids
+ * contain neither "_" nor "~", so this round-trips. The dot matters because
+ * the worker treats a last path segment containing "." as a file request and
+ * answers 404 instead of serving the app on reload.
+ */
 export function arxivSlug(id: string): string {
-  return id.replace(/\//g, '_')
+  return id.replace(/\//g, '_').replace(/\./g, '~')
 }
 
 export function arxivFromSlug(slug: string): string {
-  return slug.replace(/_/g, '/')
+  return slug.replace(/_/g, '/').replace(/~/g, '.')
 }
 
 export function arxivAbsUrl(id: string): string {

@@ -75,7 +75,8 @@ const WRITES_PER_TICK = 20
 const TOPICS_PER_TICK = 5
 const MAX_CONCEPTS = 22
 const MAX_TOPICS_IN_PROMPT = 400
-const MIN_TEXT_CHARS = 1500
+/** Non-whitespace characters below which a PDF is treated as scanned or empty; real papers have tens of thousands. */
+const MIN_TEXT_CHARS = 600
 
 class PermanentError extends Error {}
 

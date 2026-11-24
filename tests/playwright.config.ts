@@ -22,6 +22,9 @@ export default defineConfig({
   testMatch: '**/*.spec.ts',
   timeout: 30_000,
   retries: 0,
+  // Specs share one local record room and job queue; run them one at a time.
+  workers: 1,
+  fullyParallel: false,
   use: {
     baseURL: BASE_URL,
     headless: true,
