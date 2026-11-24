@@ -5,12 +5,14 @@
  * that verdict into what is kept:
  * - an unsupported technical line is dropped (the step keeps its plain sentence),
  * - an unsupported role is dropped (the card hides "Where it fits"),
- * - a story sentence that is unsupported or uses unexplained jargon is dropped,
- *   as long as at least 4 sentences survive.
- * When fewer than 4 would survive, or the summary itself is unsupported, the
- * overview is written once more with the problems as feedback and checked
- * again. On that final check the story keeps at least 4 sentences, dropping
- * unsupported ones before jargon ones.
+ * - an unsupported story sentence is dropped, as long as at least 4 sentences
+ *   survive.
+ * Jargon is reported, never dropped: the judge flags everyday technical words
+ * ("GPUs", "projections"), and dropping from the end of the story cut off its
+ * conclusion. The flags are logged and go to a rewrite as feedback.
+ * When fewer than 4 sentences would survive, or the summary itself is
+ * unsupported, the overview is written once more with the problems as feedback
+ * and checked again. On that final check the story keeps at least 4 sentences.
  */
 
 import type { PaperOverview, StoryItem } from '../../types'
@@ -80,10 +82,7 @@ export function applyVerdict(
   const problems: string[] = []
   if (!verdict.plainSupported) problems.push(`Summary: ${verdict.plainNote || 'not supported by the paper.'}`)
 
-  const failing = (s: StoryItem) => {
-    const v = verdict.story.get(s.id)
-    return v ? !v.textSupported || v.jargon : false
-  }
+  const failing = (s: StoryItem) => verdict.story.get(s.id)?.textSupported === false
   for (const s of overview.story) {
     const v = verdict.story.get(s.id)
     if (!v) continue
@@ -101,13 +100,9 @@ export function applyVerdict(
 
   let kept = survivors
   if (!enough) {
-    // Final check: keep at least MIN_STORY_ITEMS, dropping unsupported sentences before jargon ones.
+    // Final check: keep at least MIN_STORY_ITEMS, dropping unsupported sentences from the end.
     kept = [...overview.story]
-    const drop = (pred: (s: StoryItem) => boolean) => {
-      for (const s of [...kept].reverse()) if (kept.length > MIN_STORY_ITEMS && pred(s)) kept = kept.filter((k) => k !== s)
-    }
-    drop((s) => verdict.story.get(s.id)?.textSupported === false)
-    drop((s) => verdict.story.get(s.id)?.jargon === true)
+    for (const s of [...kept].reverse()) if (kept.length > MIN_STORY_ITEMS && failing(s)) kept = kept.filter((k) => k !== s)
   }
 
   let droppedTechnical = 0

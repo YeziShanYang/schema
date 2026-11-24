@@ -188,6 +188,7 @@ Rules:
 - A story "text" uses no technical term, symbol, acronym or concept name unless the same sentence says what it means in everyday words ("a codeword, a string the sender and receiver agree on in advance, ..."). If a step can't be said that way, describe what it achieves instead.
 - Use only concept keys from the list. Each story item names the 1 to 4 concepts it really relies on. Most concepts should appear in some item, but only where they fit naturally.
 - Give one role for every concept in the list.
+- Each "technical" line must read as a grammatical sentence with the formulas removed. Put a formula after the words that say what it is ("maps the input sequence \\\\((x_1, \\\\dots, x_n)\\\\) to representations \\\\(\\\\mathbf{z}\\\\)"), never in place of a verb or object.
 - The plain sentences are for a curious newcomer: short words, no formulas, no unexplained terms.${source === 'pdf' ? '\n- The text came from a PDF, so its formulas may be damaged: in technical lines, write a formula only when the surrounding words make it unambiguous.' : ''}`
 }
 

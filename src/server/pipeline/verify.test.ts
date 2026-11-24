@@ -13,7 +13,7 @@ const order = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7']
 const verdict = (story: Record<string, unknown>[], extra: Record<string, unknown> = {}) => parseVerdict({ plain_supported: true, story, roles: [], ...extra })
 
 describe('applyVerdict', () => {
-  it('drops unsupported or jargon sentences and unsupported technical lines while 4 or more sentences remain', () => {
+  it('drops unsupported sentences and technical lines while 4 or more sentences remain, and only reports jargon', () => {
     const out = applyVerdict(
       overview(6),
       verdict([
@@ -25,31 +25,37 @@ describe('applyVerdict', () => {
       { final: false },
     )
     expect(out.regenerate).toBe(false)
-    expect(out.overview!.story.map((s) => s.id)).toEqual(['s1', 's4', 's5', 's6'])
-    expect(out.overview!.story[1].technical).toBe('')
-    expect(out.overview!.alsoNeeded).toEqual(['c2', 'c3', 'c7'])
-    expect([out.droppedStory, out.droppedTechnical]).toEqual([2, 1])
+    expect(out.overview!.story.map((s) => s.id)).toEqual(['s1', 's3', 's4', 's5', 's6'])
+    expect(out.overview!.story[2].technical).toBe('')
+    expect(out.overview!.alsoNeeded).toEqual(['c2', 'c7'])
+    expect([out.droppedStory, out.droppedTechnical]).toEqual([1, 1])
     expect(out.problems[0]).toContain('Wrong cause.')
+    expect(out.problems[1]).toContain('uses a term without saying what it means')
   })
 
   it('asks for one rewrite when fewer than 4 sentences would survive or the summary is unsupported', () => {
-    const bad = verdict([{ id: 's1', text_supported: false }, { id: 's2', jargon: true }])
+    const bad = verdict([{ id: 's1', text_supported: false }, { id: 's2', text_supported: false }])
     expect(applyVerdict(overview(5), bad, order, { final: false })).toMatchObject({ overview: null, regenerate: true })
+    // Jargon alone never asks for a rewrite, however many sentences it flags.
+    const wordy = verdict([1, 2, 3, 4, 5].map((i) => ({ id: `s${i}`, jargon: true })))
+    const kept = applyVerdict(overview(5), wordy, order, { final: false })
+    expect(kept.regenerate).toBe(false)
+    expect(kept.overview!.story).toHaveLength(5)
     const plain = verdict([], { plain_supported: false, plain_note: 'Overstates the result.' })
     const out = applyVerdict(overview(5), plain, order, { final: false })
     expect(out.regenerate).toBe(true)
     expect(out.problems).toEqual(['Summary: Overstates the result.'])
   })
 
-  it('on the final check keeps 4 sentences, dropping unsupported ones before jargon ones', () => {
+  it('on the final check keeps 4 sentences, dropping unsupported ones from the end and keeping jargon ones', () => {
     const out = applyVerdict(
       overview(5),
-      verdict([{ id: 's1', jargon: true }, { id: 's2', text_supported: false }, { id: 's5', jargon: true }]),
+      verdict([{ id: 's1', jargon: true }, { id: 's2', text_supported: false }, { id: 's4', text_supported: false }, { id: 's5', jargon: true }]),
       order,
       { final: true },
     )
     expect(out.regenerate).toBe(false)
-    expect(out.overview!.story.map((s) => s.id)).toEqual(['s1', 's3', 's4', 's5'])
+    expect(out.overview!.story.map((s) => s.id)).toEqual(['s1', 's2', 's3', 's5'])
   })
 
   it('drops unsupported plain roles, and counts a missing verdict as passing', () => {
