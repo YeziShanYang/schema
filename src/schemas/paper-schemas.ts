@@ -4,7 +4,9 @@
  * These are written only by server code (the analyze job and server actions,
  * which run with RBAC off). Every role, including signed-out visitors, can
  * read them, so a paper's page is shareable. No client role may create,
- * update or delete; admins may update/delete for moderation only.
+ * update or delete. Admins (the app owner) may update and delete for
+ * moderation, and may create topics so maintenance scripts such as
+ * scripts/split-shared-topics.mjs can add a topic.
  */
 
 import type { CollectionSchema, RolePermissions } from 'deepspace/schema'
@@ -14,6 +16,11 @@ const readOnlyForEveryone: Record<string, RolePermissions> = {
   viewer: { read: true, create: false, update: false, delete: false },
   member: { read: true, create: false, update: false, delete: false },
   admin: { read: true, create: false, update: true, delete: true },
+}
+
+const topicPermissions: Record<string, RolePermissions> = {
+  ...readOnlyForEveryone,
+  admin: { read: true, create: true, update: true, delete: true },
 }
 
 export const papersSchema: CollectionSchema = {
@@ -79,7 +86,7 @@ export const topicsSchema: CollectionSchema = {
     },
   ],
   uniqueOn: ['key'],
-  permissions: readOnlyForEveryone,
+  permissions: topicPermissions,
 }
 
 export const conceptsSchema: CollectionSchema = {

@@ -20,6 +20,81 @@ export function normalizeTopicKey(raw: string): string {
     .replace(/-+$/g, '')
 }
 
+const MATCH_STOP_WORDS = new Set(['a', 'an', 'and', 'as', 'by', 'for', 'from', 'in', 'its', 'of', 'on', 'the', 'to', 'with'])
+
+function matchWords(s: string): Set<string> {
+  return new Set(
+    normalizeTopicKey(s)
+      .split('-')
+      .filter((w) => w && !MATCH_STOP_WORDS.has(w))
+      .map((w) => (w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w)),
+  )
+}
+
+/** Word overlap between two names (Jaccard over words, ignoring stop words and plural s), 0 to 1. */
+export function nameMatch(a: string, b: string): number {
+  const x = matchWords(a)
+  const y = matchWords(b)
+  if (!x.size || !y.size) return 0
+  let shared = 0
+  for (const w of x) if (y.has(w)) shared++
+  return shared / (x.size + y.size - shared)
+}
+
+export interface TopicClaim {
+  /** Concept key within the paper. */
+  id: string
+  name: string
+  topicKey: string
+}
+
+export interface TopicSplit {
+  id: string
+  from: string
+  to: string
+}
+
+/**
+ * Within one paper every concept gets its own topic, because knowledge is
+ * stored per topic and concepts sharing one would be marked together. When
+ * several concepts claim the same key, the concept whose name best matches
+ * the topic's name keeps it (ties go to the earlier concept). Each other
+ * concept moves to a key made from its own name, with a numeric suffix if
+ * that key is already taken in this paper. Returns only the moves.
+ */
+export function splitSharedTopics(claims: TopicClaim[], topicName: (key: string) => string): TopicSplit[] {
+  const used = new Set(claims.map((c) => c.topicKey))
+  const groups = new Map<string, TopicClaim[]>()
+  for (const c of claims) {
+    const g = groups.get(c.topicKey)
+    if (g) g.push(c)
+    else groups.set(c.topicKey, [c])
+  }
+  const splits: TopicSplit[] = []
+  for (const [key, group] of groups) {
+    if (group.length < 2) continue
+    const name = topicName(key) || key.replace(/-/g, ' ')
+    let keeper = group[0]
+    let best = nameMatch(keeper.name, name)
+    for (const c of group.slice(1)) {
+      const score = nameMatch(c.name, name)
+      if (score > best) {
+        best = score
+        keeper = c
+      }
+    }
+    for (const c of group) {
+      if (c === keeper) continue
+      const base = normalizeTopicKey(c.name) || `topic-${normalizeTopicKey(c.id) || 'concept'}`
+      let to = base
+      for (let n = 2; used.has(to); n++) to = `${base.slice(0, 56).replace(/-+$/, '')}-${n}`
+      used.add(to)
+      splits.push({ id: c.id, from: key, to })
+    }
+  }
+  return splits
+}
+
 export function normalizeLevel(raw: unknown): TopicLevel {
   return raw === 'foundation' || raw === 'core' || raw === 'specialized' ? raw : 'core'
 }

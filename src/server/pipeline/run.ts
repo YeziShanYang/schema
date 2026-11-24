@@ -18,13 +18,14 @@
 import { appFiles } from 'deepspace/worker'
 import type { CronContext, Job, JobContext } from 'deepspace/worker'
 import type { Env } from '../../../worker'
-import type { ConceptDepth, Envelope, PaperData, TopicData, TopicLevel } from '../../types'
+import type { ConceptDepth, Envelope, PaperData, TopicData } from '../../types'
 import { arxivPdfUrl, arxivSlug } from '../../lib/arxiv'
 import { preparePaperText } from '../../lib/paper-text'
 import { normalizeForMatch, isQuoteVerified } from '../../lib/quotes'
 import { cleanGraph } from '../../lib/graph'
 import { asString, asStringArray } from '../../lib/json'
-import { normalizeLevel, normalizeTopicKey, STARTER_TOPICS } from '../../lib/topics'
+import { STARTER_TOPICS } from '../../lib/topics'
+import { assignTopics } from './assign-topics'
 import { cleanBranches } from '../../lib/branches'
 import { createPipelineClient, fixturesAllowed, ownerContext } from './client'
 import { refundAnalyze } from '../usage'
@@ -289,7 +290,6 @@ function parseConcepts(json: Record<string, unknown>): ParsedConcept[] {
 
 async function stepConcepts(state: AnalyzeState, { ctx, client, paper }: StepCtx) {
   const topics = (await ctx.records.query('topics', { limit: 1000 })) as Envelope<TopicData>[]
-  const byKey = new Map(topics.map((t) => [t.data.key, t]))
   const promptTopics = [...topics]
     .sort((a, b) => (a.data.origin === b.data.origin ? 0 : a.data.origin === 'starter' ? -1 : 1))
     .slice(0, MAX_TOPICS_IN_PROMPT)
@@ -312,28 +312,11 @@ async function stepConcepts(state: AnalyzeState, { ctx, client, paper }: StepCtx
   )
   const paperNorm = normalizeForMatch(state.text)
 
-  // Resolve each concept to a topic key, creating new topics as needed.
-  const newTopics = new Map<string, TopicData>()
-  const topicFor: Record<string, string> = {}
-  for (const c of parsed) {
-    if (!graph.ids.includes(c.id) || topicFor[c.id]) continue
-    let key = normalizeTopicKey(asString(c.topic.key, 120) || c.name)
-    if (!key) key = normalizeTopicKey(c.name) || `topic-${c.id}`
-    topicFor[c.id] = key
-    if (byKey.has(key) || newTopics.has(key)) continue
-    const name = asString(c.topic.name, 120) || c.name
-    newTopics.set(key, {
-      key,
-      name,
-      level: normalizeLevel(c.topic.level) as TopicLevel,
-      description: asString(c.topic.description, 400) || c.whyNeeded,
-      searchQuery: asString(c.topic.search_query, 200) || `${name} explained for beginners`,
-      resources: [],
-      resourcesStatus: 'none',
-      resourcesLoadingAt: 0,
-      origin: 'paper',
-    })
-  }
+  // Resolve each concept to its own topic key, creating new topics as needed.
+  const { topicFor, newTopics } = assignTopics(
+    parsed.filter((c) => graph.ids.includes(c.id)),
+    new Map(topics.map((t) => [t.data.key, t.data])),
+  )
 
   // Replace any concepts left by an earlier attempt for this paper.
   const old = (await ctx.records.query('concepts', { where: { paperId: paper.recordId }, limit: 200 })) as Envelope<unknown>[]
