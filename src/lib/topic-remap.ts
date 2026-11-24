@@ -6,7 +6,7 @@
  * the same key the analyze job would give it now.
  */
 
-import { normalizeTopicKey, sharesContentWord } from './topics'
+import { normalizeTopicKey, sharesContentWord } from './topics.ts'
 
 export interface RemapConceptInput {
   id: string

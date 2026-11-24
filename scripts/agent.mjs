@@ -47,9 +47,24 @@ export function appFileText(app, storedKey) {
   }
 }
 
+/**
+ * Up to `limit` matching records. The tool caps a page at about 30KB and
+ * returns `nextOffset` when more match, so this follows it page by page;
+ * without that, a collection of large records (papers with overviews) comes
+ * back cut short.
+ */
 export function query(app, collection, where = undefined, limit = 1000) {
-  const data = invoke(app, 'records_query', where ? { collection, where, limit } : { collection, limit })
-  return data?.records ?? []
+  const out = []
+  let offset = 0
+  while (out.length < limit) {
+    const input = { collection, limit: limit - out.length, ...(where ? { where } : {}), ...(offset ? { offset } : {}) }
+    const data = invoke(app, 'records_query', input)
+    const page = data?.records ?? []
+    out.push(...page)
+    if (data?.nextOffset === undefined || page.length === 0) break
+    offset = data.nextOffset
+  }
+  return out
 }
 
 /**
