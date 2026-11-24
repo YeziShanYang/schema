@@ -46,6 +46,11 @@ References
 const concepts = {
   main_contribution:
     'Adds a curvature correction from the second fundamental form to attention scores and shows small consistent gains.',
+  branches: [
+    { key: 'foundations', name: 'Foundations', description: 'Math and ML basics the paper assumes.' },
+    { key: 'attention', name: 'Attention', description: 'How attention layers weigh inputs.' },
+    { key: 'geometry', name: 'Geometry of representations', description: 'Curvature of embedding manifolds.' },
+  ],
   concepts: [
     {
       id: 'c1',
@@ -55,6 +60,7 @@ const concepts = {
       quote: 'The softmax function turns a vector of real-valued scores into a probability distribution over positions.',
       depends_on: [],
       depth: 'working',
+      branch_key: 'foundations',
       topic: { key: 'softmax-function' },
     },
     {
@@ -65,6 +71,7 @@ const concepts = {
       quote: 'Attention layers compute a weighted average of value vectors, where the weights come from a softmax over query-key scores.',
       depends_on: ['c1'],
       depth: 'deep',
+      branch_key: 'attention',
       topic: { key: 'attention-mechanism' },
     },
     {
@@ -75,6 +82,7 @@ const concepts = {
       quote: 'We add a curvature correction to each attention score, computed from the second fundamental form of the embedding manifold.',
       depends_on: ['c2', 'c9'],
       depth: 'deep',
+      branch_key: 'geometry',
       topic: {
         key: 'fixture-second-fundamental-form',
         name: 'Second fundamental form (fixture)',
@@ -91,6 +99,7 @@ const concepts = {
       quote: 'This sentence does not appear anywhere in the paper text at all, not even close.',
       depends_on: ['c3'],
       depth: 'skim',
+      branch_key: 'not-a-branch',
       topic: { key: 'gradient-descent' },
     },
   ],
@@ -117,6 +126,16 @@ function message(text: string) {
 /** Respond like the real integration would, keyed by endpoint and a stage hint. */
 export function fixtureIntegration(endpoint: string, body: Record<string, unknown>, hint?: string): unknown {
   if (endpoint === 'cloudconvert/convert-file') return { downloadUrl: 'fixture://paper.txt' }
+  if (endpoint === 'exa/search' && Array.isArray(body.includeDomains) && body.includeDomains.includes('arxiv.org')) {
+    return {
+      results: [
+        { title: 'Fixture survey of attention', url: 'https://arxiv.org/abs/0000.00011', text: 'A survey of attention mechanisms.' },
+        { title: 'Fixture tutorial on embeddings', url: 'https://arxiv.org/pdf/0000.00012v2', text: 'A tutorial on embedding geometry.' },
+        { title: 'Not an arXiv paper', url: 'https://example.org/blog', text: 'Off-domain result that must be dropped.' },
+        { title: 'Fixture advanced paper', url: 'https://arxiv.org/abs/0000.00013', text: 'Advanced follow-up work.' },
+      ],
+    }
+  }
   if (endpoint === 'exa/search') {
     const q = String(body.query ?? 'topic')
     return {
@@ -129,6 +148,12 @@ export function fixtureIntegration(endpoint: string, body: Record<string, unknow
   if (endpoint === 'anthropic/chat-completion') {
     if (hint === 'concepts') return message(JSON.stringify(concepts))
     if (hint === 'explain') return message(JSON.stringify(explain))
+    if (hint === 'recommend') {
+      return message(JSON.stringify({ picks: [{ n: 1, reason: 'A broad survey to start with.' }, { n: 2, reason: 'Builds geometric intuition.' }, { n: 9, reason: 'Invented result number that must be ignored.' }] }))
+    }
+    if (hint === 'explain-concept') {
+      return message('Fixture explanation.\n\n### Worked example\nScores [1, 2] become softmax [0.27, 0.73].')
+    }
     if (hint === 'resources') {
       // Pick the first candidate for every topic named in the prompt.
       const user = String((body.messages as { content: string }[])?.[0]?.content ?? '')

@@ -44,3 +44,32 @@
   --color-shell: #fafafa;
   --color-shell-panel: #ffffff;
 }
+
+/* Schema — warm paper with a teal accent. Functional placeholder until the
+ * visual design pass. */
+[data-theme="schema"] {
+  color-scheme: light;
+  --color-background: #faf9f6;
+  --color-foreground: #1c1b18;
+  --color-card: #ffffff;
+  --color-card-foreground: #1c1b18;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #1c1b18;
+  --color-primary: #0f766e;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f1efe9;
+  --color-secondary-foreground: #1c1b18;
+  --color-muted: #f1efe9;
+  --color-muted-foreground: #5f5b52;
+  --color-accent: #e7f3f1;
+  --color-accent-foreground: #0b3f3a;
+  --color-destructive: #b91c1c;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #e4e0d6;
+  --color-input: #dcd7cb;
+  --color-ring: #0f766e;
+  --shadow-card: 0 1px 2px 0 rgba(28, 27, 24, 0.04);
+  --shadow-card-hover: 0 2px 8px 0 rgba(28, 27, 24, 0.07);
+  --color-shell: #f4f2ec;
+  --color-shell-panel: #ffffff;
+}

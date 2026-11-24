@@ -23,9 +23,10 @@ Rules:
 - why_needed is one sentence on what in the paper a reader could not follow without it.
 - section is the section number and title where the concept is used.
 - depth is "skim" (recognize the term), "working" (follow the equations or arguments that use it), or "deep" (central to the contribution).
+- Group the concepts into 3 to 6 thematic branches, such as "Probability foundations", "Model architecture" or "Training objective". Each branch has a key (lowercase-hyphenated), a name and a one-line description. Order branches from most foundational to most specific. Give every concept a branch_key from your branches, and give every branch at least one concept.
 
 Output only JSON, no prose and no code fences:
-{"main_contribution": string, "concepts": [{"id": "c1", "name": string, "why_needed": string, "section": string, "quote": string, "depends_on": [string], "depth": "skim" | "working" | "deep", "topic": {"key": string, "name"?: string, "level"?: string, "description"?: string, "search_query"?: string}}]}`
+{"main_contribution": string, "branches": [{"key": string, "name": string, "description": string}], "concepts": [{"id": "c1", "name": string, "why_needed": string, "section": string, "quote": string, "depends_on": [string], "depth": "skim" | "working" | "deep", "branch_key": string, "topic": {"key": string, "name"?: string, "level"?: string, "description"?: string, "search_query"?: string}}]}`
 
 export function conceptsUser(args: {
   title: string
@@ -85,4 +86,57 @@ export function explainUser(args: {
 }): string {
   const list = args.concepts.map((c) => `${c.key}: ${c.name} (${c.whyNeeded})`).join('\n')
   return `Paper title: ${args.title}\n\nConcepts:\n${list}\n\nPaper text (references and appendices removed):\n<paper>\n${args.text}\n</paper>`
+}
+
+export const RECOMMEND_SYSTEM = `You recommend the next research paper for a learner's study workspace.
+
+You get the workspace name and description, topics the learner already knows (possibly none), papers already in the workspace, and numbered arXiv search results.
+
+Rules:
+- Pick the 3 best papers from the results for this learner to study next. Skip papers already in the workspace and results that are off-topic.
+- When the learner knows few topics, prefer clearly written papers that teach broadly useful ideas: surveys, tutorials, and foundational or widely cited work. When they know many, prefer more specialized or recent work that builds on what they know.
+- Refer to papers only by their result number. Never invent a paper.
+- reason is one sentence on why this paper fits this learner now.
+
+Output only JSON, no prose and no code fences:
+{"picks": [{"n": number, "reason": string}]}`
+
+export interface PaperCandidate {
+  n: number
+  arxivId: string
+  title: string
+  snippet: string
+}
+
+export function recommendUser(args: {
+  name: string
+  description: string
+  knownTopics: string[]
+  existing: string[]
+  candidates: PaperCandidate[]
+}): string {
+  const results = args.candidates.map((c) => `${c.n}. [${c.arxivId}] ${c.title}\n   ${c.snippet}`).join('\n')
+  return `Workspace: ${args.name}\nDescription: ${args.description || '(none)'}\n\nTopics the learner knows (${args.knownTopics.length}): ${args.knownTopics.join('; ') || '(none yet)'}\n\nAlready in the workspace: ${args.existing.join('; ') || '(none)'}\n\nSearch results:\n${results}`
+}
+
+export const EXPLAIN_CONCEPT_SYSTEM = `You explain one concept to a learner who is reading a specific research paper and got stuck on it.
+
+Write Markdown, 150 to 350 words, with these parts:
+1. What it is, in plain language.
+2. How this paper uses it, referring to the passage you are given.
+3. A small worked example with concrete numbers, a tiny derivation, or a few lines of Python.
+4. One common misconception to avoid.
+
+No preamble, no headings larger than ###, no closing summary.`
+
+export function explainConceptUser(args: {
+  paperTitle: string
+  mainContribution: string
+  name: string
+  whyNeeded: string
+  section: string
+  quote: string
+  excerpt: string
+}): string {
+  return `Paper: ${args.paperTitle}\nMain contribution: ${args.mainContribution}\n\nConcept: ${args.name}\nWhy the paper needs it: ${args.whyNeeded}\nWhere it is used: ${args.section}\nPassage: "${args.quote}"\n\nSurrounding text from the paper:\n<excerpt>\n${args.excerpt || '(not available)'}\n</excerpt>`
 }

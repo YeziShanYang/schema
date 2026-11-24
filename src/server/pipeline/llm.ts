@@ -28,6 +28,16 @@ export async function callModelJson(
   client: PipelineClient,
   args: { system: string; user: string; maxTokens: number; hint: string },
 ): Promise<Record<string, unknown>> {
+  const text = await callModelText(client, args)
+  const json = extractJsonObject(text)
+  if (!json) throw new Error('The model returned output that was not valid JSON.')
+  return json
+}
+
+export async function callModelText(
+  client: PipelineClient,
+  args: { system: string; user: string; maxTokens: number; hint: string },
+): Promise<string> {
   const raw = await client.call(
     'anthropic/chat-completion',
     {
@@ -48,7 +58,6 @@ export async function callModelJson(
   if (msg.stop_reason === 'max_tokens') {
     throw new Error('The model ran out of output space before finishing.')
   }
-  const json = extractJsonObject(text)
-  if (!json) throw new Error('The model returned output that was not valid JSON.')
-  return json
+  if (!text.trim()) throw new Error('The model returned an empty response.')
+  return text
 }

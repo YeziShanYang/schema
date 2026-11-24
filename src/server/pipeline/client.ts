@@ -23,12 +23,19 @@ export function fixturesAllowed(env: Env, arxivId: string): boolean {
   return env.ALLOW_DEBUG_ROUTES === 'true' && isFixtureId(arxivId)
 }
 
+/** Workspaces whose name starts with this marker get canned recommendations in local test runs. */
+export const FIXTURE_WORKSPACE_PREFIX = '[fixture]'
+
+export function fixtureWorkspace(env: Env, name: string): boolean {
+  return env.ALLOW_DEBUG_ROUTES === 'true' && name.startsWith(FIXTURE_WORKSPACE_PREFIX)
+}
+
 export function ownerContext(env: Env): CronContext {
   return buildCronContext(env, env.OWNER_USER_ID, `app:${env.DEEPSPACE_APP_ID}`)
 }
 
-export function createPipelineClient(env: Env, arxivId: string, ctx: CronContext): PipelineClient {
-  if (fixturesAllowed(env, arxivId)) {
+export function createPipelineClient(env: Env, useFixtures: boolean, ctx: CronContext = ownerContext(env)): PipelineClient {
+  if (useFixtures && env.ALLOW_DEBUG_ROUTES === 'true') {
     return {
       fixtures: true,
       call: async (endpoint, body, hint) => fixtureIntegration(endpoint, body, hint),

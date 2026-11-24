@@ -7,11 +7,15 @@
 import { enqueueJob } from 'deepspace/worker'
 import type { ActionHandler, ActionResult, ActionTools } from 'deepspace/worker'
 import type { Env } from '../../worker'
-import type { Envelope, PaperData, TopicData } from '../types'
+import type { ConceptData, Envelope, PaperData, TopicData, WorkspaceData } from '../types'
 import { isFixtureId, parseArxivId } from '../lib/arxiv'
 import { capState, DAILY_PAPER_CAP } from '../lib/cap'
 import { STARTER_TOPICS } from '../lib/topics'
+import { withTarget } from '../lib/workspace'
 import { lookupArxiv } from '../server/pipeline/arxiv-meta'
+import { recommendForWorkspace } from '../server/recommend'
+import { generateExplanation } from '../server/explain-concept'
+import { capMessage, recordUsage, usageState } from '../server/usage'
 
 /** Every continue counts as a JobRoom attempt; this leaves room for all ticks plus crash recovery. */
 const ANALYZE_MAX_ATTEMPTS = 60
@@ -28,6 +32,26 @@ async function findPaper(tools: ActionTools, arxivId: string): Promise<Envelope<
   const r = await tools.query('papers', { where: { arxivId }, limit: 1 })
   if (!r.success) throw new Error(r.error)
   return ((r.data.records as unknown as Envelope<PaperData>[])[0] as Envelope<PaperData> | undefined) ?? null
+}
+
+async function ownedWorkspace(tools: ActionTools, userId: string, workspaceId: string): Promise<Envelope<WorkspaceData> | null> {
+  if (!workspaceId) return null
+  const r = await tools.get('workspaces', workspaceId)
+  if (!r.success) return null
+  const ws = (r.data as unknown as { record: Envelope<WorkspaceData> }).record
+  return ws && ws.data.userId === userId ? ws : null
+}
+
+/** Point a workspace at a paper as its current target. */
+async function setWorkspaceTarget(
+  tools: ActionTools,
+  ws: Envelope<WorkspaceData>,
+  paper: { paperId: string; arxivId: string; title: string },
+) {
+  await tools.update('workspaces', ws.recordId, {
+    currentPaperId: paper.paperId,
+    papers: withTarget(ws.data.papers, paper, Date.now()),
+  })
 }
 
 function toMsTime(v: unknown): number {
@@ -59,8 +83,13 @@ const analyzePaper: ActionHandler<Env> = async ({ userId, params, tools, env }) 
   const debug = env.ALLOW_DEBUG_ROUTES === 'true'
   if (isFixtureId(ref.id) && !debug) return fail(INVALID_INPUT)
 
+  const workspaceId = typeof params.workspaceId === 'string' ? params.workspaceId : ''
+  const workspace = workspaceId ? await ownedWorkspace(tools, userId, workspaceId) : null
+  if (workspaceId && !workspace) return fail('Workspace not found.')
+
   const existing = await findPaper(tools, ref.id)
   if (existing) {
+    if (workspace) await setWorkspaceTarget(tools, workspace, { paperId: existing.recordId, arxivId: ref.id, title: existing.data.title })
     return {
       success: true,
       data: { paperId: existing.recordId, arxivId: ref.id, existing: true, status: existing.data.status } satisfies AnalyzeResult,
@@ -107,11 +136,13 @@ const analyzePaper: ActionHandler<Env> = async ({ userId, params, tools, env }) 
     textKey: '',
     conceptCount: 0,
     requestedBy: userId,
+    branches: [],
   })
   if (!created.success) {
     // Someone else started the same paper a moment ago (uniqueOn arxivId).
     const raced = await findPaper(tools, ref.id)
     if (raced) {
+      if (workspace) await setWorkspaceTarget(tools, workspace, { paperId: raced.recordId, arxivId: ref.id, title: raced.data.title })
       return { success: true, data: { paperId: raced.recordId, arxivId: ref.id, existing: true, status: raced.data.status } }
     }
     return fail(created.error)
@@ -128,6 +159,7 @@ const analyzePaper: ActionHandler<Env> = async ({ userId, params, tools, env }) 
     })
     return fail('Could not start the analysis. Try again.')
   }
+  if (workspace) await setWorkspaceTarget(tools, workspace, { paperId, arxivId: ref.id, title: m.title })
   console.info(`[analyzePaper] queued ${ref.id} for ${userId} (${cap.used + 1}/${DAILY_PAPER_CAP} today)`)
   return { success: true, data: { paperId, arxivId: ref.id, existing: false, status: 'queued' } satisfies AnalyzeResult }
 }
@@ -174,8 +206,53 @@ const seedTopics: ActionHandler<Env> = async ({ tools }) => {
   return { success: true, data: { remaining: Math.max(0, missing.length - SEED_BATCH) } }
 }
 
+const recommendPapers: ActionHandler<Env> = async ({ userId, params, tools, env }) => {
+  const ws = await ownedWorkspace(tools, userId, typeof params.workspaceId === 'string' ? params.workspaceId : '')
+  if (!ws) return fail('Workspace not found.')
+  const usage = await usageState(tools, userId, 'recommend')
+  if (!usage.allowed) return fail(capMessage('recommend', usage))
+
+  const outcome = await recommendForWorkspace(env, tools, userId, ws)
+  // A search that ran was paid for, so it counts toward the cap even if nothing usable came back.
+  if (outcome.ok || outcome.charged) await recordUsage(tools, userId, 'recommend', ws.recordId)
+  if (!outcome.ok) return fail(outcome.error)
+
+  await tools.update('workspaces', ws.recordId, { suggestions: outcome.suggestions, suggestionsAt: Date.now() })
+  return { success: true, data: { suggestions: outcome.suggestions, remaining: usage.remaining - 1 } }
+}
+
+const explainConcept: ActionHandler<Env> = async ({ userId, params, tools, env }) => {
+  const conceptId = typeof params.conceptId === 'string' ? params.conceptId : ''
+  if (!conceptId) return fail('Missing conceptId.')
+  const got = await tools.get('concepts', conceptId)
+  if (!got.success) return fail('Concept not found.')
+  const concept = (got.data as unknown as { record: Envelope<ConceptData> }).record
+  if (concept.data.explanation) {
+    return { success: true, data: { explanation: concept.data.explanation, cached: true } }
+  }
+
+  const usage = await usageState(tools, userId, 'explain')
+  if (!usage.allowed) return fail(capMessage('explain', usage))
+
+  const paperRes = await tools.get('papers', concept.data.paperId)
+  if (!paperRes.success) return fail('Paper not found.')
+  const paper = (paperRes.data as unknown as { record: Envelope<PaperData> }).record
+
+  let explanation: string
+  try {
+    explanation = await generateExplanation(env, concept, paper)
+  } catch (e) {
+    return fail(`Could not generate an explanation: ${e instanceof Error ? e.message : String(e)}`)
+  }
+  await tools.update('concepts', conceptId, { explanation, explanationAt: Date.now() })
+  await recordUsage(tools, userId, 'explain', conceptId)
+  return { success: true, data: { explanation, cached: false } }
+}
+
 export const actions: Record<string, ActionHandler<Env>> = {
   analyzePaper,
   retryPaper,
   seedTopics,
+  recommendPapers,
+  explainConcept,
 }

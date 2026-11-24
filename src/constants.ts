@@ -1,6 +1,9 @@
 /** App name — replaced by the CLI during scaffolding */
 export const APP_NAME = 'schema'
 
+/** Name shown in the UI. */
+export const APP_DISPLAY_NAME = 'Schema'
+
 /** Immutable app identity — data scope keys to this, so renames never
  *  strand your records.
  *

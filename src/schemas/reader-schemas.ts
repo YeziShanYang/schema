@@ -70,3 +70,50 @@ export const roadmapsSchema: CollectionSchema = {
   uniqueOn: ['userId', 'paperId'],
   permissions: ownOnly,
 }
+
+export const workspacesSchema: CollectionSchema = {
+  name: 'workspaces',
+  columns: [
+    {
+      name: 'userId',
+      storage: 'text',
+      interpretation: 'plain',
+      required: true,
+      userBound: true,
+      immutable: true,
+    },
+    { name: 'name', storage: 'text', interpretation: 'plain', required: true, maxLength: 120 },
+    { name: 'description', storage: 'text', interpretation: 'plain', maxLength: 1000 },
+    { name: 'currentPaperId', storage: 'text', interpretation: 'plain' },
+    { name: 'papers', storage: 'text', interpretation: { kind: 'json' } },
+    { name: 'suggestions', storage: 'text', interpretation: { kind: 'json' } },
+    { name: 'suggestionsAt', storage: 'number', interpretation: 'plain' },
+    { name: 'lastOpenedAt', storage: 'number', interpretation: 'plain' },
+  ],
+  ownerField: 'userId',
+  permissions: ownOnly,
+}
+
+/**
+ * Audit trail for metered AI actions (recommendations, explanations), used
+ * for per-user daily caps. Written only by server actions; no client role can
+ * read or write it except admins reading for audit.
+ */
+export const usageEventsSchema: CollectionSchema = {
+  name: 'usage_events',
+  columns: [
+    { name: 'userId', storage: 'text', interpretation: 'plain', required: true },
+    {
+      name: 'kind',
+      storage: 'text',
+      interpretation: { kind: 'select', options: ['recommend', 'explain'] },
+    },
+    { name: 'ref', storage: 'text', interpretation: 'plain' },
+  ],
+  permissions: {
+    '*': { read: false, create: false, update: false, delete: false },
+    viewer: { read: false, create: false, update: false, delete: false },
+    member: { read: false, create: false, update: false, delete: false },
+    admin: { read: true, create: false, update: false, delete: false },
+  },
+}

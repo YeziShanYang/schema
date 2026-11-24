@@ -24,7 +24,8 @@ import { normalizeForMatch, isQuoteVerified } from '../../lib/quotes'
 import { cleanGraph } from '../../lib/graph'
 import { asString, asStringArray } from '../../lib/json'
 import { normalizeLevel, normalizeTopicKey, STARTER_TOPICS } from '../../lib/topics'
-import { createPipelineClient, ownerContext } from './client'
+import { cleanBranches } from '../../lib/branches'
+import { createPipelineClient, fixturesAllowed, ownerContext } from './client'
 import type { PipelineClient } from './client'
 import { callModelJson } from './llm'
 import {
@@ -110,7 +111,7 @@ export async function runAnalyzeTick(job: Job, jobCtx: JobContext, env: Env): Pr
     if (next.writes.length > 0) {
       await flushWrites(ctx, next)
     } else {
-      const client = createPipelineClient(env, payload.arxivId, ctx)
+      const client = createPipelineClient(env, fixturesAllowed(env, payload.arxivId), ctx)
       const done = await runStep(next, { env, ctx, client, paper, jobCtx })
       if (done) return { ok: true, arxivId: payload.arxivId }
     }
@@ -255,6 +256,7 @@ interface ParsedConcept {
   quote: string
   dependsOn: string[]
   depth: ConceptDepth
+  branchKey: string
   topic: Record<string, unknown>
 }
 
@@ -276,6 +278,7 @@ function parseConcepts(json: Record<string, unknown>): ParsedConcept[] {
       quote: asString(c.quote, 600),
       dependsOn: asStringArray(c.depends_on, 20),
       depth,
+      branchKey: asString(c.branch_key, 80),
       topic: c.topic && typeof c.topic === 'object' ? (c.topic as Record<string, unknown>) : {},
     })
   }
@@ -301,6 +304,10 @@ async function stepConcepts(state: AnalyzeState, { ctx, client, paper }: StepCtx
   if (parsed.length < 2) throw new Error('The model did not return a usable concept list.')
 
   const graph = cleanGraph(parsed.map((c) => ({ id: c.id, dependsOn: c.dependsOn })))
+  const { branches, branchOf } = cleanBranches(
+    json.branches,
+    parsed.filter((c) => graph.ids.includes(c.id)).map((c) => ({ id: c.id, branchKey: c.branchKey })),
+  )
   const paperNorm = normalizeForMatch(state.text)
 
   // Resolve each concept to a topic key, creating new topics as needed.
@@ -353,6 +360,9 @@ async function stepConcepts(state: AnalyzeState, { ctx, client, paper }: StepCtx
         depth: c.depth,
         order: order++,
         check: null,
+        branchKey: branchOf[c.id],
+        explanation: '',
+        explanationAt: 0,
       },
     })
   }
@@ -373,6 +383,7 @@ async function stepConcepts(state: AnalyzeState, { ctx, client, paper }: StepCtx
     progress: 0.4,
     mainContribution: asString(json.main_contribution, 800),
     conceptCount: graph.ids.length,
+    branches,
     progressMessage: needed.length ? `Finding explainers for ${needed.length} topics` : 'Writing the walkthrough',
   })
 }

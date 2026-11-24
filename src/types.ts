@@ -24,6 +24,14 @@ export interface PaperData {
   textKey: string
   conceptCount: number
   requestedBy: string
+  branches: Branch[]
+}
+
+/** A thematic group of concepts in one paper (reader-independent). */
+export interface Branch {
+  key: string
+  name: string
+  description: string
 }
 
 export type TopicLevel = 'foundation' | 'core' | 'specialized'
@@ -71,6 +79,10 @@ export interface ConceptData {
   depth: ConceptDepth
   order: number
   check: CheckQuestion | null
+  branchKey: string
+  /** Cached "Explain with AI" text (Markdown), shared by every reader. */
+  explanation: string
+  explanationAt: number
 }
 
 export interface SectionData {
@@ -104,6 +116,42 @@ export interface RoadmapData {
   status: RoadmapStatus
   lastOpenedAt: number
   finishedAt: number
+}
+
+export type WorkspacePaperStatus = 'current' | 'finished' | 'previous'
+
+export interface WorkspacePaper {
+  paperId: string
+  arxivId: string
+  title: string
+  status: WorkspacePaperStatus
+  addedAt: number
+}
+
+export interface Suggestion {
+  arxivId: string
+  title: string
+  authors: string[]
+  reason: string
+}
+
+export interface WorkspaceData {
+  userId: string
+  name: string
+  description: string
+  currentPaperId: string
+  papers: WorkspacePaper[]
+  suggestions: Suggestion[]
+  suggestionsAt: number
+  lastOpenedAt: number
+}
+
+export type UsageKind = 'recommend' | 'explain'
+
+export interface UsageEventData {
+  userId: string
+  kind: UsageKind
+  ref: string
 }
 
 /** Envelope as returned by worker-side record queries. */
