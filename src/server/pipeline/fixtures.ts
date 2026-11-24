@@ -313,6 +313,17 @@ function message(text: string) {
   return { content: [{ type: 'text', text }], stop_reason: 'end_turn' }
 }
 
+/**
+ * Fixture ids ending in 55 answer every integration call (and the arXiv HTML
+ * fetch) after this delay, so
+ * a local run can watch the analysis move through its stages.
+ */
+export const SLOW_FIXTURE_MS = 4000
+
+export function fixtureDelayMs(arxivId: string): number {
+  return arxivId.endsWith('55') ? SLOW_FIXTURE_MS : 0
+}
+
 /** Respond like the real integration would, keyed by endpoint and a stage hint. */
 export function fixtureIntegration(endpoint: string, body: Record<string, unknown>, hint?: string): unknown {
   if (endpoint === 'cloudconvert/convert-file') {

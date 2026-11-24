@@ -349,101 +349,164 @@
 }
 
 /* ---------- Landing hero illustration (src/components/HeroSheet.tsx) ----------
-   A 480 x 420 frame in --u units: 1px at full size, smaller when the column
-   or the screen is narrower. The frame clips only at its bottom, which sits
-   on the hero's bottom border, so the sheet rises out of that edge.
-   Sequence, run once: the sheet rises (600ms), then each phrase's highlight
-   sweeps in 100ms after the last, its dashed link draws out, and its tag
-   arrives and drifts. Under reduced motion everything is in its final state
-   and the frame only fades in. */
+   A frame 600 units wide in --u units, set in STIX Two Text (a LaTeX-like
+   serif), with the body and figure blurred into texture and the highlighted
+   phrases sharp. The sheet is taller than the hero and is cut off by its
+   bottom edge, so it reads as rising out of the section. From 1024px the
+   frame sits beside the copy, out of flow, so the copy alone sets the hero's
+   height; the hero clips the sheet. On narrower screens it sits under the
+   copy, 400 units tall, and clips the sheet itself.
+   Sequence, run once (about 3.2s): the sheet rises (900ms), then each phrase
+   comes into focus under its highlight, 350ms after the last, its dashed
+   link draws out (400ms) and its tag settles as the link arrives. Tags then
+   drift, each with its own amplitude, period and phase. Under reduced motion
+   everything is in its final state and the frame only fades in. */
+.hero { --hero-copy-w: min(576px, 45vw); }
 .hero-art {
-  --u: min(1px, calc((100vw - 32px) / 480));
-  --t0: 600ms;
-  --hero-bar: color-mix(in oklab, var(--color-dot) 72%, var(--color-card));
+  --u: min(1px, calc((100vw - 32px) / 600));
+  height: calc(var(--u) * 400);
+  --t0: 1000ms;
+  --step: 350ms;
+  --paper-font: "STIX Two Text", "STIX Two", "Times New Roman", Times, serif;
+  --paper-ink: color-mix(in oklab, var(--color-foreground) 82%, var(--color-card));
   clip-path: inset(-48px -48px 0 -48px);
   animation: schema-fade 300ms linear 150ms both;
 }
+/* Beside the copy, 48px right of it (the container's 24px padding plus the
+   copy's width), with the sheet's top (20u into the frame) level with the
+   top of the headline's capitals: the container's 80px top padding plus
+   35px. The frame grows until its tags, which end 530u in, come within 40px
+   of the viewport's right edge (the container's left offset is
+   max(0, 50vw - 576px)), up to 1.12px per unit. */
 @media (min-width: 1024px) {
-  .hero-art { --u: min(1px, calc(40vw / 480)); }
+  .hero { overflow: clip; }
+  .hero-copy { width: var(--hero-copy-w); }
+  .hero-art {
+    --u: min(1.12px, calc((100vw - 40px - max(0px, 50vw - 576px) - 72px - var(--hero-copy-w)) / 530));
+    position: absolute;
+    left: calc(24px + var(--hero-copy-w) + 48px);
+    top: calc(80px + 35px - var(--u) * 20);
+    margin-top: 0;
+    clip-path: none;
+  }
 }
 .hero-sheet {
   position: absolute;
   left: 0;
+  font-family: var(--paper-font);
+  color: var(--paper-ink);
   background-color: var(--color-card);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-ring-hi);
 }
-.hero-sheet > * { position: absolute; }
+.hero-sheet > * { position: absolute; margin: 0; }
+.hero-blur { filter: blur(1.6px); }
+.hero-rule { background-color: var(--color-foreground); }
 .hero-title {
   overflow: hidden;
-  text-overflow: ellipsis;
   text-align: center;
-  font-size: calc(var(--u) * 15);
-  line-height: calc(var(--u) * 20);
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: calc(var(--u) * 17);
+  line-height: calc(var(--u) * 22);
+  font-weight: 600;
+  color: var(--color-foreground);
 }
 .hero-authors {
-  text-align: center;
-  font-size: calc(var(--u) * 7.5);
-  line-height: calc(var(--u) * 11);
-  color: var(--color-muted-foreground);
-  white-space: pre;
   overflow: hidden;
+  text-align: center;
+  white-space: pre;
+  font-size: calc(var(--u) * 7.5);
+  line-height: calc(var(--u) * 10.5);
 }
 .hero-heading {
-  font-size: calc(var(--u) * 9);
-  line-height: calc(var(--u) * 14);
-  font-weight: 600;
   white-space: nowrap;
+  font-size: calc(var(--u) * 9.5);
+  line-height: calc(var(--u) * 12);
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+.hero-body {
+  overflow: hidden;
+  text-align: justify;
+  hyphens: auto;
+  font-size: calc(var(--u) * 9);
+  line-height: calc(var(--u) * 11.5);
+}
+.hero-caption {
+  text-align: center;
+  font-size: calc(var(--u) * 7.5);
+  line-height: calc(var(--u) * 10);
+  color: var(--color-foreground);
 }
 .hero-stamp {
   writing-mode: vertical-rl;
   rotate: 180deg;
-  font-family: var(--font-mono);
-  font-size: calc(var(--u) * 7.5);
-  letter-spacing: 0.05em;
-  color: var(--color-faint);
   white-space: nowrap;
+  font-size: calc(var(--u) * 9);
+  letter-spacing: 0.02em;
+  color: var(--color-faint);
 }
-.hero-row {
+/* On a phone the caption and stamp would be sharp but too small to read, so
+   they blur into the texture with the body. */
+@media (max-width: 639px) {
+  .hero-caption, .hero-stamp { filter: blur(1.6px); }
+}
+/* Figure 1. Fills use Blueprint tints: amber for attention, blue for feed
+   forward, green for the embeddings, neutral for add & norm. */
+.hero-figure { overflow: visible; filter: blur(1.1px); }
+.hero-figure text {
+  font-family: var(--paper-font);
+  font-size: 4.2px;
+  text-anchor: middle;
+  fill: var(--color-foreground);
+}
+.hero-figure .fig-n { font-size: 5px; }
+.hero-figure rect { stroke: var(--color-muted-foreground); stroke-width: 0.4; }
+.hero-figure .fig-stack { fill: var(--color-surface-2); stroke-width: 0.5; }
+.hero-figure .fig-attn { fill: color-mix(in oklab, var(--color-learning) 18%, var(--color-card)); }
+.hero-figure .fig-ff { fill: var(--color-accent-soft); }
+.hero-figure .fig-norm { fill: color-mix(in oklab, var(--color-learning) 7%, var(--color-card)); }
+.hero-figure .fig-embed { fill: color-mix(in oklab, var(--color-known) 14%, var(--color-card)); }
+.hero-figure .fig-out { fill: color-mix(in oklab, var(--color-primary) 8%, var(--color-card)); }
+.hero-figure .fig-sum, .hero-figure .fig-wave, .hero-figure .fig-arrow {
+  fill: none;
+  stroke: var(--color-muted-foreground);
+  stroke-width: 0.5;
+}
+/* A highlighted phrase ends its line, on a paper-white base that hides the
+   blurred words underneath; the highlight sweeps in over that base. Never
+   smaller than 8.5px, so it stays legible when the frame is scaled down. */
+.hero-line {
   display: flex;
   align-items: center;
-  gap: calc(var(--u) * 4);
-}
-.hero-bar {
-  flex: 1 1 0;
-  min-width: calc(var(--u) * 8);
-  height: calc(var(--u) * 4);
-  border-radius: 1px;
-  background-color: var(--hero-bar);
+  justify-content: flex-end;
 }
 .hero-mark {
   position: relative;
   isolation: isolate;
-  flex: none;
-  padding: 0 calc(var(--u) * 2);
-  font-size: calc(var(--u) * 9.5);
-  line-height: calc(var(--u) * 14);
+  padding: 0 calc(var(--u) * 2.5);
   white-space: nowrap;
+  font-size: max(8.5px, calc(var(--u) * 9.5));
+  line-height: max(10.5px, calc(var(--u) * 11.5));
   color: var(--color-foreground);
+  background-color: var(--color-card);
 }
 .hero-mark::before {
   content: "";
   position: absolute;
-  inset: calc(var(--u) * 1) 0;
+  inset: calc(var(--u) * 0.5) 0;
   z-index: -1;
   border-radius: 2px;
   background-color: var(--color-accent-soft);
   transform-origin: left center;
 }
+.hero-mark-text { display: inline-block; }
 .hero-links {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  left: 0;
+  top: 0;
   overflow: visible;
   pointer-events: none;
 }
@@ -463,11 +526,12 @@
 /* Tag names never drop below 10.5px, so a scaled-down frame keeps them legible. */
 .hero-tag-card {
   display: block;
-  padding: calc(var(--u) * 6) calc(var(--u) * 9);
-  font-size: max(10.5px, calc(var(--u) * 12));
+  padding: calc(var(--u) * 6) calc(var(--u) * 10);
+  font-size: max(10.5px, calc(var(--u) * 12.5));
   line-height: 1.34;
   font-weight: 600;
   white-space: nowrap;
+  color: var(--color-foreground);
   background-color: var(--color-card);
   border: 1px solid transparent;
   border-radius: var(--radius);
@@ -475,23 +539,26 @@
 }
 @media (prefers-reduced-motion: no-preference) {
   .hero-art { animation: none; }
-  .hero-sheet { animation: hero-rise 600ms var(--ease-out-quint) 150ms both; }
-  .hero-mark::before { animation: hero-sweep 300ms ease-out calc(var(--t0) + var(--i) * 100ms) both; }
+  .hero-sheet { animation: hero-rise 900ms var(--ease-out-quint) 100ms both; }
+  .hero-mark::before { animation: hero-sweep 300ms ease-out calc(var(--t0) + var(--i) * var(--step)) both; }
+  .hero-mark-text { animation: hero-focus 300ms ease-out calc(var(--t0) + var(--i) * var(--step)) both; }
+  .hero-port { animation: schema-fade 150ms ease-out calc(var(--t0) + var(--i) * var(--step) + 200ms) both; }
   .hero-draw {
     stroke-dasharray: 1 1;
-    animation: hero-draw 400ms ease-out calc(var(--t0) + var(--i) * 100ms + 200ms) both;
+    animation: hero-draw 400ms ease-out calc(var(--t0) + var(--i) * var(--step) + 250ms) both;
   }
-  .hero-port { animation: schema-fade 150ms linear calc(var(--t0) + var(--i) * 100ms + 150ms) both; }
-  .hero-tag-card { animation: hero-tag-in 300ms ease-out calc(var(--t0) + var(--i) * 100ms + 450ms) both; }
-  .hero-tag { animation: hero-drift var(--drift, 6s) ease-in-out calc(var(--t0) + var(--i) * 100ms + 750ms) infinite alternate both; }
+  .hero-tag-card { animation: hero-tag-in 350ms ease-out calc(var(--t0) + var(--i) * var(--step) + 450ms) both; }
+  .hero-tag { animation: hero-drift var(--drift, 6s) ease-in-out var(--phase, 0s) infinite alternate; }
 }
-@keyframes hero-rise { from { translate: 0 calc(var(--u) * 444); } }
+/* The sheet's own height: it starts wholly below the clipping edge at any width. */
+@keyframes hero-rise { from { translate: 0 100%; } }
 @keyframes hero-sweep { from { scale: 0 1; } }
+@keyframes hero-focus { from { filter: blur(1.6px); opacity: 0.7; } }
 @keyframes hero-draw { from { stroke-dashoffset: 1; } }
 @keyframes hero-tag-in { from { opacity: 0; filter: blur(4px); translate: calc(var(--u) * -8) 0; } }
 @keyframes hero-drift {
-  from { translate: 0 calc(var(--u) * -2.5); }
-  to { translate: 0 calc(var(--u) * 2.5); }
+  from { translate: calc(var(--dx, 0px) * -1) calc(var(--dy, 0px) * -1); }
+  to { translate: var(--dx, 0px) var(--dy, 0px); }
 }
 
 /* Explanations rendered by MarkdownMath, matching PlainMarkdown's look. */

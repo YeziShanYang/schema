@@ -76,9 +76,9 @@ export default function Landing() {
         </header>
 
         <main>
-          <section className="dot-grid overflow-x-clip border-b border-border">
-            <div className="mx-auto max-w-6xl px-4 pt-14 md:px-6 md:pt-20 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-12">
-              <div className="lg:self-center lg:pb-14">
+          <section className="hero dot-grid overflow-x-clip border-b border-border">
+            <div className="relative mx-auto max-w-6xl px-4 pt-14 md:px-6 md:pt-20">
+              <div className="hero-copy lg:pb-14">
                 <p className="label enter" style={{ ['--i' as string]: 0 }}>Learning roadmaps for arXiv papers</p>
                 <h1 className="enter mt-3 max-w-3xl text-[34px] font-semibold leading-[1.1] tracking-[-0.01em] text-balance md:text-[44px]" style={{ ['--i' as string]: 1 }}>
                   See every idea a research paper relies on, and learn the ones you're missing.
@@ -95,7 +95,7 @@ export default function Landing() {
                   </Link>
                 </div>
               </div>
-              <HeroSheet snap={snap} className="mt-8 lg:mt-0 lg:self-end" />
+              <HeroSheet snap={snap} className="mt-8" />
             </div>
           </section>
 

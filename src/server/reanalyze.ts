@@ -11,6 +11,7 @@
 import { enqueueJob } from 'deepspace/worker'
 import type { Env } from '../../worker'
 import type { Envelope, PaperData } from '../types'
+import { queuedTimings } from '../lib/timings'
 
 /** Every continue counts as a JobRoom attempt; this leaves room for all ticks plus crash recovery. */
 export const ANALYZE_MAX_ATTEMPTS = 60
@@ -37,20 +38,24 @@ export function isOwner(env: Pick<Env, 'OWNER_USER_ID'>, userId: string): boolea
   return !!env.OWNER_USER_ID && userId === env.OWNER_USER_ID
 }
 
-/** The fields a re-analysis resets; the job fills them in again. */
-export const REANALYSIS_RESET: Record<string, unknown> = {
-  status: 'queued',
-  stage: 'queued',
-  progress: 0,
-  progressMessage: 'Waiting to start',
-  error: '',
-  mainContribution: '',
-  conceptCount: 0,
-  branches: [],
-  topicKeys: [],
-  overview: null,
-  overviewLoadingAt: 0,
-  overviewDropped: null,
+/** The fields a re-analysis resets; the job fills them in again. Like a retry, it is a new run: its timings and retry count start over. */
+export function reanalysisReset(now: number): Record<string, unknown> {
+  return {
+    status: 'queued',
+    stage: 'queued',
+    progress: 0,
+    progressMessage: 'Waiting to start',
+    error: '',
+    mainContribution: '',
+    conceptCount: 0,
+    branches: [],
+    topicKeys: [],
+    overview: null,
+    overviewLoadingAt: 0,
+    overviewDropped: null,
+    timings: queuedTimings(now),
+    retries: 0,
+  }
 }
 
 export type ReanalyzeResult = { ok: true; paperId: string; arxivId: string } | { ok: false; error: string }
@@ -65,7 +70,7 @@ export async function startReanalysis(
   const running =
     (paper.data.status === 'processing' || paper.data.status === 'queued') && Date.now() - toMsTime(paper.updatedAt) <= STUCK_AFTER_MS
   if (running) return { ok: false, error: 'This paper is being analyzed right now.' }
-  await update(paper.recordId, REANALYSIS_RESET)
+  await update(paper.recordId, reanalysisReset(Date.now()))
   try {
     await enqueueAnalyze(env, paper.recordId, paper.data.arxivId, userId)
   } catch (e) {

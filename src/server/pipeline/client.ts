@@ -8,7 +8,7 @@ import { buildCronContext } from 'deepspace/worker'
 import type { CronContext } from 'deepspace/worker'
 import type { Env } from '../../../worker'
 import { isFixtureId } from '../../lib/arxiv'
-import { fixtureHtml, fixtureIntegration, fixtureText } from './fixtures'
+import { fixtureDelayMs, fixtureHtml, fixtureIntegration, fixtureText } from './fixtures'
 
 /** A generic client name for arXiv; no contact details. */
 const USER_AGENT = 'Mozilla/5.0 (compatible; SchemaReader/1.0)'
@@ -66,13 +66,21 @@ export function ownerContext(env: Env): CronContext {
   return buildCronContext(env, env.OWNER_USER_ID, `app:${env.DEEPSPACE_APP_ID}`)
 }
 
-export function createPipelineClient(env: Env, useFixtures: boolean, ctx: CronContext = ownerContext(env)): PipelineClient {
+/** `arxivId` only selects a slow fixture (see fixtureDelayMs); real calls ignore it. */
+export function createPipelineClient(env: Env, useFixtures: boolean, ctx: CronContext = ownerContext(env), arxivId = ''): PipelineClient {
   if (useFixtures && env.ALLOW_DEBUG_ROUTES === 'true') {
+    const delay = fixtureDelayMs(arxivId)
     return {
       fixtures: true,
-      call: async (endpoint, body, hint) => fixtureIntegration(endpoint, body, hint),
+      call: async (endpoint, body, hint) => {
+        if (delay) await new Promise((resolve) => setTimeout(resolve, delay))
+        return fixtureIntegration(endpoint, body, hint)
+      },
       fetchText: async (url) => fixtureText(url),
-      fetchPage: async (url) => fixtureHtml(url),
+      fetchPage: async (url) => {
+        if (delay) await new Promise((resolve) => setTimeout(resolve, delay))
+        return fixtureHtml(url)
+      },
     }
   }
   return {

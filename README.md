@@ -35,6 +35,10 @@ Explainer links are not part of the job. When a reader opens a branch and asks f
 
 Record writes are queued in the checkpoint and flushed 20 per tick, so no tick approaches the Worker subrequest limit. A failing step is retried once after three seconds. A second failure marks the paper failed with a message, and the requester can retry it. A verify call that fails twice leaves the overview unchecked instead of failing the paper.
 
+The paper record keeps `timings`, the start and end (ms) of the queue wait and of each stage in the latest run, and `retries`, the number of steps that run retried. A stage's span is the time the record showed it, so a retried step's wait counts toward its stage. `stageDurations()` in `src/lib/timings.ts` turns them into per-stage and total durations, both for the progress view and for reviewing stored runs.
+
+While a paper is analyzed, the paper window shows a progress view (`src/components/paper/AnalysisProgress.tsx`) in place of the graph: a sheet whose motion follows the stage, a checklist of the five stages with their times, and branch nodes that join one at a time as concept records arrive. A failed run shows its error and Retry. When the paper turns ready, the view fades out over the paper window.
+
 ## Knowledge
 
 Each concept has its own checkmark, stored per reader in `concept_knowledge` (one row per concept, with the concept's name, topic and paper copied in). Checking a concept never checks anything in another paper. Instead, a concept the reader hasn't checked shows a muted note when they checked a concept with the same topic or the same normalized name in another paper ("You checked this in <paper>"), or when its topic is in their profile ("In your profile"). The profile is the `knowledge` collection: topics the reader declared known on the knowledge page, from the starter list or by search. Rows written before per-concept knowledge existed are read as profile topics. The sequence, branch and paper progress read only the current paper's checkmarks. Finishing a paper can check its remaining concepts, for that paper only. Signed out, checkmarks stay in memory and there are no hints.
@@ -43,7 +47,7 @@ Each concept has its own checkmark, stored per reader in `concept_knowledge` (on
 
 | Collection | Contents | Read | Write |
 | --- | --- | --- | --- |
-| `papers` | arXiv metadata, status and stage, branches, main contribution, distinct topic keys, text source, pipeline version, what verify dropped | everyone | server only |
+| `papers` | arXiv metadata, status and stage, stage timings and retries, branches, main contribution, distinct topic keys, text source, pipeline version, what verify dropped | everyone | server only |
 | `topics` | shared vocabulary: name, level, description, cached links and their loading state (`skipped` for a paper-only specialized topic) | everyone | server only |
 | `concepts` | per-paper concept: topic, branch, quote (and its LaTeX display), dependencies, tier, plain role, cached explanation. Older rows may still carry a `check` question, which nothing reads | everyone | server only |
 | `sections` | per-paper walkthrough entries | everyone | server only |
@@ -86,7 +90,7 @@ npx deepspace test run all   # unit, smoke, api and e2e suites
 npx deepspace deploy
 ```
 
-The Playwright suite needs two test accounts (`npx deepspace test accounts create`). In local test runs (`ALLOW_DEBUG_ROUTES=true`), papers with ids starting `0000.` and workspaces named `[fixture] ...` get canned arXiv HTML, CloudConvert, Claude, Exa and arXiv responses from `src/server/pipeline/fixtures.ts`. Fixture ids ending in 66, 77 or 99 have no HTML and take the PDF path; the file's header lists which server rule each fixture concept exercises. Everything else, including the actions, the job, the record rooms and permissions, runs for real.
+The Playwright suite needs two test accounts (`npx deepspace test accounts create`). In local test runs (`ALLOW_DEBUG_ROUTES=true`), papers with ids starting `0000.` and workspaces named `[fixture] ...` get canned arXiv HTML, CloudConvert, Claude, Exa and arXiv responses from `src/server/pipeline/fixtures.ts`. Fixture ids ending in 66, 77 or 99 have no HTML and take the PDF path, and ids ending in 55 answer each call after four seconds, which keeps every stage on screen long enough to watch the progress view. The file's header lists which server rule each fixture concept exercises. Everything else, including the actions, the job, the record rooms and permissions, runs for real.
 
 `tests/live` holds a check against the deployed app with real integration calls. It is not part of `test run` and costs credits:
 

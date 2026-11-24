@@ -34,6 +34,10 @@ export interface PaperData {
   overview?: PaperOverview | null
   /** Set while ensureOverview is generating one, so two readers don't both pay. */
   overviewLoadingAt?: number
+  /** When the latest run entered and left each stage (see lib/timings); missing for papers analyzed before timings existed. */
+  timings?: StageTimings
+  /** Steps the latest run retried after a transient error. */
+  retries?: number
   /** Source of the stored text; missing on papers analyzed before the HTML source existed (they used the PDF). */
   textSource?: TextSource
   /** PIPELINE_VERSION of the analysis that produced the current concepts; missing means version 1. */
@@ -41,6 +45,17 @@ export interface PaperData {
   /** Story sentences and technical lines the verify stage dropped as unsupported by the paper. */
   overviewDropped?: { story: number; technical: number; regenerated: boolean }
 }
+
+/** Stages with a recorded span: the queue wait, then the job's five stages. */
+export type TimedStage = 'queued' | 'text' | 'concepts' | 'overview' | 'explain' | 'verify'
+
+/** Milliseconds since the epoch, by the worker's clock. `endedAt` is missing while the stage runs. */
+export interface StageTiming {
+  startedAt: number
+  endedAt?: number
+}
+
+export type StageTimings = Partial<Record<TimedStage, StageTiming>>
 
 /** One step of the paper's argument in plain words, with the concepts it uses. */
 export interface StoryItem {
