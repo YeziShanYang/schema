@@ -15,6 +15,7 @@ const EXPLANATIONS = 4
 test('demo paper: analyze, load every branch, pre-generate explanations', async ({ users }) => {
   const [ada] = await users(['Schema ada'])
   const page = ada.page
+  await page.emulateMedia({ reducedMotion: 'reduce' }) // drifting nodes never settle for Playwright's click
 
   await page.goto(`/p/${SLUG}`)
   const paperPage = page.getByTestId('paper-page')
@@ -39,6 +40,8 @@ test('demo paper: analyze, load every branch, pre-generate explanations', async 
       await page.getByTestId('load-links').click()
     }
     await expect(links).toHaveAttribute('data-links', 'ready', { timeout: 3 * 60_000 })
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('branch-panel')).toHaveCount(0)
   }
 
   // Explanations for the first deep concepts, falling back to any concept.
@@ -59,6 +62,8 @@ test('demo paper: analyze, load every branch, pre-generate explanations', async 
       await expect(c.getByTestId('concept-explanation')).toBeVisible({ timeout: 90_000 })
       made++
     }
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('branch-panel')).toHaveCount(0)
   }
   console.log(`[demo] explanations present: ${made}`)
   expect(made).toBeGreaterThanOrEqual(3)
