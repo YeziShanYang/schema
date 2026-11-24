@@ -4,7 +4,15 @@ Schema turns an arXiv paper into a learning roadmap. A reader creates a workspac
 
 Live at https://schema.app.space. Built on the [DeepSpace SDK](https://docs.deep.space) (Cloudflare Workers, Durable Objects).
 
-The frontend uses the Blueprint theme (IBM Plex, dot-grid canvas). Its data access lives in the hooks in `src/hooks` and the modules in `src/lib`, so views can be redesigned without touching the backend.
+The frontend uses the Blueprint theme (IBM Plex, dot-grid canvas). Data access is in the hooks in `src/hooks` and the modules in `src/lib`, and views can be redesigned without touching the backend.
+
+## Interface
+
+A workspace page shows its papers as cards floating around the workspace name. Recommended papers appear as dashed cards with an Add button. A paper page shows its branches the same way, numbered in the recommended order. Clicking a branch opens a centered panel with that branch's concepts, and the branch's explainer links load when the panel opens. A toggle switches the paper page to the section walkthrough. Below 640px the cards stack in a list, and with reduced motion they hold still instead of drifting.
+
+`recommendedSequence()` in `src/lib/sequence.ts` orders branches by the mean prerequisite tier of their concepts, keeping the model's order on ties. Concepts are ordered by tier, then branch, then the model's order. The next concept is the first one the reader doesn't know whose dependencies are all known or being learned. The paper page shows the steps and a Next up button, and the workspace page names the paper to continue with its next concept.
+
+The Add button opens one window for papers and workspaces. For a paper, `peekPaper` looks up the link on arXiv and reports whether the paper is already analyzed. The reader then picks an existing workspace or a new one, with a name suggested from the arXiv category. A new workspace is created only after the paper checks out. A workspace created from this window asks `recommendPapers` for starter papers once.
 
 ## How a paper is analyzed
 
@@ -15,9 +23,9 @@ The frontend uses the Blueprint theme (IBM Plex, dot-grid canvas). Its data acce
 3. One Claude Haiku 5.5 call lists the concepts the paper relies on, from foundations up, with a quote, dependencies, depth, a branch and a topic in the shared vocabulary. The server drops dangling dependencies, breaks cycles, computes tiers and checks every quote against the paper text.
 4. One Haiku call writes the section walkthrough and a check question per concept.
 
-Explainer links are not part of the job. When a reader opens a branch and asks for links, `loadBranchResources` runs one `exa/search` per topic in that branch that has no links yet, then one Haiku call per five topics picks one or two results. Links are stored on the topic, so every later paper that needs it gets them free. Topics are marked `loading` with a timestamp before any paid call so two readers do not pay twice; a mark older than five minutes is treated as stale.
+Explainer links are not part of the job. When a reader opens a branch and asks for links, `loadBranchResources` runs one `exa/search` per topic in that branch that has no links yet, then one Haiku call per five topics picks one or two results. Links are stored on the topic, so every later paper that needs it gets them free. Topics are marked `loading` with a timestamp before any paid call, which keeps two readers from paying twice. A mark older than five minutes is treated as stale.
 
-Record writes are queued in the checkpoint and flushed 20 per tick, so no tick approaches the Worker subrequest limit. A failing step is retried once after three seconds; a second failure marks the paper failed with a message, and the requester can retry it.
+Record writes are queued in the checkpoint and flushed 20 per tick, so no tick approaches the Worker subrequest limit. A failing step is retried once after three seconds. A second failure marks the paper failed with a message, and the requester can retry it.
 
 The concept list does not depend on the reader. Readers mark what they already know, and progress (per paper and per branch) is computed from their knowledge profile.
 
@@ -32,7 +40,7 @@ The concept list does not depend on the reader. Readers mark what they already k
 | `knowledge` | one row per topic the reader knows or is learning | owner | owner |
 | `roadmaps` | papers the reader opened, last opened, finished | owner | owner |
 | `workspaces` | name, description, papers (each active or finished), last opened paper, suggestions | owner | owner |
-| `usage_events` | metered actions for the daily caps; an `analyze` event is also the record of who requested a paper | admin | server only |
+| `usage_events` | metered actions for the daily caps. An `analyze` event also records who requested a paper | admin | server only |
 
 Owner rows use a `userBound` `userId` column with `uniqueOn` so a client cannot write another reader's row or create duplicates.
 
@@ -40,11 +48,12 @@ Owner rows use a `userBound` `userId` column with `uniqueOn` so a client cannot 
 
 | Action | What it does | Limit |
 | --- | --- | --- |
-| `analyzePaper` | start or open an analysis; with `workspaceId`, also add it to that workspace | 5 new papers per user per rolling 24 hours; cached papers are free and a failed analysis is refunded |
-| `retryPaper` | restart a failed or stuck analysis | requester or owner only; uses a daily slot |
-| `loadBranchResources` | load explainer links for one branch's topics that have none | 20 branch loads per user per 24 hours; cached topics are free |
+| `peekPaper` | look up an arXiv link or id and report its title, category, a suggested workspace name and whether it is analyzed | none (signed in) |
+| `analyzePaper` | start or open an analysis, and add it to a workspace given by `workspaceId` or created from `newWorkspace: { name }` | 5 new papers per user per rolling 24 hours. Cached papers are free and a failed analysis is refunded |
+| `retryPaper` | restart a failed or stuck analysis | requester or owner only, uses a daily slot |
+| `loadBranchResources` | load explainer links for one branch's topics that have none | 20 branch loads per user per 24 hours. Cached topics are free |
 | `myAllowance` | the caller's remaining allowances | none |
-| `recommendPapers` | Exa search restricted to arxiv.org, one Haiku ranking call, every pick verified with the arXiv API | 10 runs per user per 24 hours |
+| `recommendPapers` | Exa search restricted to arxiv.org, one Haiku ranking call, every pick verified with the arXiv API. `starter` mode asks for introductory or survey papers, and `next` (the default) also uses the reader's known topics | 10 runs per user per 24 hours |
 | `explainConcept` | one Haiku explanation with a worked example, cached on the concept | 30 uncached explanations per user per 24 hours |
 | `seedTopics` | create missing starter topics, 20 per call | none (idempotent) |
 
@@ -73,7 +82,7 @@ LIVE_PAPER=2611.29224 npx playwright test -c tests/live/playwright.live.config.t
 
 ## Demo data
 
-The signed-out demo at `/p/1706~03762` and the example on the landing page use a real analysis of arXiv 1706.03762. `tests/live/demo-paper.check.ts` builds it on the deployed app (analyzes the paper, loads every branch's links and pre-generates a few explanations; anything cached is free), and `scripts/export-demo-snapshot.mjs` writes the trimmed snapshot the static landing page bundles:
+The signed-out demo at `/p/1706~03762` and the example on the landing page use a real analysis of arXiv 1706.03762. `tests/live/demo-paper.check.ts` builds it on the deployed app (it analyzes the paper, loads every branch's links and pre-generates a few explanations, and anything cached is free), and `scripts/export-demo-snapshot.mjs` writes the trimmed snapshot the static landing page bundles:
 
 ```bash
 npx playwright test -c tests/live/playwright.live.config.ts demo-paper
