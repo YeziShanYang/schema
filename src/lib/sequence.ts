@@ -3,9 +3,13 @@
  * only (no model call): branch order, concept order and the next concept to
  * learn for the current reader.
  *
- * - Branches go by the mean tier of their concepts, ascending; ties keep the
- *   model's branch order (its prompt lists foundational branches first).
- * - Concepts go by tier, then branch order, then the model's order.
+ * - Branches keep the model's order (its prompt lists foundational branches
+ *   first), moved only so that a branch comes after every branch it depends
+ *   on: when a concept in B depends on a concept in A, A goes first. A cycle
+ *   between branches falls back to the model's order. Branches with no
+ *   concepts go last.
+ * - Concepts go branch by branch in that order, then by tier, then by the
+ *   model's order.
  * - Next up is the first concept that is not known and whose prerequisites
  *   are all known or learning; failing that, the first concept not known.
  */
@@ -37,7 +41,6 @@ export interface SequenceStep {
   total: number
   done: boolean
   state: StepState
-  meanTier: number
 }
 
 export interface Sequence<C extends SeqConcept = SeqConcept> {
@@ -64,16 +67,32 @@ export function recommendedSequence<C extends SeqConcept>(
     list.push(c)
     byBranch.set(c.branchKey, list)
   }
-  const mean = (key: string) => {
-    const list = byBranch.get(key) ?? []
-    return list.length ? list.reduce((s, c) => s + (c.tier ?? 0), 0) / list.length : Number.POSITIVE_INFINITY
+  // Branch-level prerequisites from concept dependencies that cross branches.
+  const branchOfConcept = new Map(concepts.map((c) => [c.key, c.branchKey]))
+  const prereqs = new Map<string, Set<string>>(branches.map((b) => [b.key, new Set<string>()]))
+  for (const c of concepts) {
+    for (const d of c.dependsOn ?? []) {
+      const from = branchOfConcept.get(d)
+      if (from && from !== c.branchKey && prereqs.has(from)) prereqs.get(c.branchKey)?.add(from)
+    }
   }
-  const orderedBranches = [...branches].sort((a, b) => mean(a.key) - mean(b.key) || (modelRank.get(a.key)! - modelRank.get(b.key)!))
+  const modelOrder = [...branches].sort((a, b) => modelRank.get(a.key)! - modelRank.get(b.key)!)
+  const remaining = modelOrder.filter((b) => (byBranch.get(b.key)?.length ?? 0) > 0)
+  const orderedBranches: SeqBranch[] = []
+  const placed = new Set<string>()
+  while (remaining.length) {
+    // The earliest branch (in model order) whose prerequisite branches are all placed; on a cycle, the earliest.
+    const i = Math.max(0, remaining.findIndex((b) => [...(prereqs.get(b.key) ?? [])].every((p) => placed.has(p))))
+    const [next] = remaining.splice(i, 1)
+    orderedBranches.push(next)
+    placed.add(next.key)
+  }
+  orderedBranches.push(...modelOrder.filter((b) => !placed.has(b.key)))
   const branchRank = new Map(orderedBranches.map((b, i) => [b.key, i]))
   const rankOf = (key: string) => branchRank.get(key) ?? orderedBranches.length
 
   const ordered = [...concepts].sort(
-    (a, b) => (a.tier ?? 0) - (b.tier ?? 0) || rankOf(a.branchKey) - rankOf(b.branchKey) || (a.order ?? 0) - (b.order ?? 0),
+    (a, b) => rankOf(a.branchKey) - rankOf(b.branchKey) || (a.tier ?? 0) - (b.tier ?? 0) || (a.order ?? 0) - (b.order ?? 0),
   )
 
   const byKey = new Map(concepts.map((c) => [c.key, c]))
@@ -102,7 +121,6 @@ export function recommendedSequence<C extends SeqConcept>(
       total: list.length,
       done,
       state: done ? 'done' : nextUp?.branchKey === b.key ? 'current' : 'upcoming',
-      meanTier: mean(b.key),
     }
   })
 

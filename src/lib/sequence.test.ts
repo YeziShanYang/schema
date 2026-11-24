@@ -30,20 +30,35 @@ const concepts = [
 const statuses = (m: Record<string, KnowledgeStatus>) => (topicKey: string) => m[topicKey] ?? null
 
 describe('recommendedSequence', () => {
-  it('orders branches by mean tier, then the model order', () => {
+  it('moves a branch after the branches it depends on', () => {
     const s = recommendedSequence(branches, concepts, statuses({}))
-    expect(s.steps.map((x) => x.branchKey)).toEqual(['math', 'attn', 'arch']) // means 0, 1.5, 2
+    // attention depends on math concepts, and multihead (arch) on scaled (attn)
+    expect(s.steps.map((x) => x.branchKey)).toEqual(['math', 'attn', 'arch'])
     expect(s.steps.map((x) => x.index)).toEqual([1, 2, 3])
   })
 
-  it('breaks mean-tier ties with the model branch order', () => {
+  it('keeps the model order for independent branches', () => {
     const tie = [c('a', 'arch', 1, 0), c('b', 'attn', 1, 1)]
     expect(recommendedSequence(branches, tie, statuses({})).steps.map((x) => x.branchKey).slice(0, 2)).toEqual(['attn', 'arch'])
   })
 
-  it('orders concepts by tier, then branch order, then model order', () => {
+  it('does not pull a late, prerequisite-free branch to the front', () => {
+    // Training concepts have no prerequisites (tier 0), but the model lists the branch last.
+    const order = [{ key: 'seq', name: 'Sequence models' }, { key: 'attn', name: 'Attention' }, { key: 'train', name: 'Training' }]
+    const list = [c('rnn', 'seq', 0, 0), c('qkv', 'attn', 1, 1, ['rnn']), c('dropout', 'train', 0, 2), c('bleu', 'train', 0, 3)]
+    const s = recommendedSequence(order, list, statuses({}))
+    expect(s.steps.map((x) => x.branchKey)).toEqual(['seq', 'attn', 'train'])
+    expect(s.nextUp?.key).toBe('rnn')
+  })
+
+  it('falls back to the model order when branches depend on each other', () => {
+    const cyc = [c('a', 'attn', 0, 0, ['b']), c('b', 'math', 0, 1, ['a'])]
+    expect(recommendedSequence(branches, cyc, statuses({})).steps.map((x) => x.branchKey).slice(0, 2)).toEqual(['attn', 'math'])
+  })
+
+  it('orders concepts branch by branch, then by tier and model order', () => {
     const s = recommendedSequence(branches, concepts, statuses({}))
-    expect(s.concepts.map((x) => x.key)).toEqual(['softmax', 'dot', 'attention', 'posenc', 'scaled', 'multihead'])
+    expect(s.concepts.map((x) => x.key)).toEqual(['softmax', 'dot', 'attention', 'scaled', 'posenc', 'multihead'])
   })
 
   it('starts with the first concept when nothing is known', () => {
@@ -67,7 +82,7 @@ describe('recommendedSequence', () => {
     const s = recommendedSequence(branches, [c('x', 'math', 0, 0), c('y', 'attn', 1, 1, ['x']), c('z', 'arch', 1, 2)], statuses({ 't-x': 'known' }))
     expect(s.nextUp?.key).toBe('y')
     const blocked = recommendedSequence(branches, [c('y', 'attn', 1, 1, ['x']), c('x', 'math', 2, 0), c('z', 'arch', 1, 2)], statuses({}))
-    expect(blocked.nextUp?.key).toBe('z') // y waits for x; z has no prerequisites
+    expect(blocked.nextUp?.key).toBe('x') // math moves ahead of attn because y needs x
   })
 
   it('falls back to the first unknown concept when none is ready', () => {
