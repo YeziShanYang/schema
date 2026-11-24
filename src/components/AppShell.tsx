@@ -58,9 +58,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <div className="px-0 pb-3"><Brand /></div>
       <AddButton className="w-full justify-start" />
 
-      <nav aria-label="Workspaces" className="flex min-h-0 flex-col">
+      {/* A long workspace list scrolls inside its own section, so Recent papers and the footer stay in view. */}
+      <nav aria-label="Workspaces" className="flex min-h-[7.5rem] flex-col">
         <div className="label px-2 pb-1.5 pt-3">Workspaces</div>
-        <ul className="flex flex-col gap-0.5" data-testid="sidebar-workspaces">
+        <ul className="-mx-1 flex min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain px-1 py-px" data-testid="sidebar-workspaces">
           {workspaces.rows.map((w) => (
             <li key={w.recordId}>
               <NavLink to={`/w/${w.recordId}`} className={itemClass} onClick={onNavigate}>
@@ -75,7 +76,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         </ul>
       </nav>
 
-      <nav aria-label="Recent papers" className="flex min-h-0 flex-col">
+      <nav aria-label="Recent papers" className="flex shrink-0 flex-col">
         <div className="label px-2 pb-1.5 pt-3">Recent papers</div>
         {roadmaps.rows.length === 0 ? (
           <p className="px-2 text-[13px] text-faint">Papers you open show up here.</p>

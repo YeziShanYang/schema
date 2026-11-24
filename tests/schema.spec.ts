@@ -806,3 +806,25 @@ test('bad input shows a clear error', async ({ users }) => {
   await ada.page.getByTestId('analyze-submit').click()
   await expect(ada.page.getByTestId('analyze-error')).toContainText('does not look like an arXiv link')
 })
+
+test('a long workspace list scrolls inside the sidebar and leaves Recent papers and the footer in view', async ({ users }) => {
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await page.goto('/home')
+  const list = page.getByTestId('sidebar-workspaces')
+  await expect(list).toBeVisible()
+  // Thirty rows stand in for a reader with many workspaces; only the layout is measured.
+  await list.evaluate((ul) => {
+    const row = ul.querySelector('li') ?? Object.assign(document.createElement('li'), { textContent: 'Workspace' })
+    for (let i = 0; i < 30; i++) ul.appendChild(row.cloneNode(true))
+  })
+  const box = async (testId: string) => (await page.getByTestId(testId).boundingBox())!
+  const ws = await box('sidebar-workspaces')
+  const recent = await page.getByRole('navigation', { name: 'Recent papers' }).boundingBox()
+  const footer = await box('sidebar-knowledge')
+  expect(await list.evaluate((ul) => ul.scrollHeight > ul.clientHeight)).toBe(true)
+  expect(ws.y + ws.height).toBeLessThanOrEqual(recent!.y + 1)
+  expect(footer.y + footer.height).toBeLessThanOrEqual(720)
+  await expect(page.getByTestId('sidebar-allowance')).toBeInViewport()
+})
