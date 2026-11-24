@@ -4,7 +4,7 @@
  */
 
 export type PaperStatus = 'queued' | 'processing' | 'ready' | 'failed'
-export type PaperStage = 'queued' | 'text' | 'concepts' | 'resources' | 'explain' | 'ready' | 'failed'
+export type PaperStage = 'queued' | 'text' | 'concepts' | 'overview' | 'resources' | 'explain' | 'ready' | 'failed'
 
 export interface PaperData {
   arxivId: string
@@ -26,6 +26,27 @@ export interface PaperData {
   branches: Branch[]
   /** Distinct topic keys of this paper's concepts, for progress without loading concepts. */
   topicKeys: string[]
+  /** Plain-language story of the paper; missing for papers analyzed before overviews existed. */
+  overview?: PaperOverview | null
+  /** Set while ensureOverview is generating one, so two readers don't both pay. */
+  overviewLoadingAt?: number
+}
+
+/** One step of the paper's argument in plain words, with the concepts it uses. */
+export interface StoryItem {
+  id: string
+  text: string
+  technical: string
+  conceptKeys: string[]
+}
+
+export interface PaperOverview {
+  /** 2 to 3 jargon-free sentences on what the paper does and why it matters. */
+  plain: string
+  story: StoryItem[]
+  /** Concept keys no story item references, shown as "also needed". */
+  alsoNeeded: string[]
+  generatedAt: number
 }
 
 /** A thematic group of concepts in one paper (reader-independent). */
@@ -86,6 +107,8 @@ export interface ConceptData {
   /** Cached "Explain with AI" text (Markdown), shared by every reader. */
   explanation: string
   explanationAt: number
+  /** Under 20 plain words on why this concept matters for this paper. */
+  plainRole?: string
 }
 
 export interface SectionData {
@@ -119,6 +142,8 @@ export interface RoadmapData {
   status: RoadmapStatus
   lastOpenedAt: number
   finishedAt: number
+  /** When the reader marked the overview read; 0 or missing when unread. */
+  overviewReadAt?: number
 }
 
 /** "current" and "previous" are legacy values from the single-target model and read as "active". */
@@ -151,7 +176,7 @@ export interface WorkspaceData {
   lastOpenedAt: number
 }
 
-export type UsageKind = 'analyze' | 'recommend' | 'explain' | 'branch'
+export type UsageKind = 'analyze' | 'recommend' | 'explain' | 'branch' | 'overview'
 export type UsageState = 'counted' | 'refunded'
 
 export interface UsageEventData {

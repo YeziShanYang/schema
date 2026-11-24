@@ -145,3 +145,35 @@ export function explainConceptUser(args: {
 }): string {
   return `Paper: ${args.paperTitle}\nMain contribution: ${args.mainContribution}\n\nConcept: ${args.name}\nWhy the paper needs it: ${args.whyNeeded}\nWhere it is used: ${args.section}\nPassage: "${args.quote}"\n\nSurrounding text from the paper:\n<excerpt>\n${args.excerpt || '(not available)'}\n</excerpt>`
 }
+
+export const OVERVIEW_SYSTEM = `You explain one research paper to a reader with little background in its field. They will study the paper's concepts one at a time and first need to see the paper's story and where each concept fits.
+
+Return only one JSON object, with every string valid JSON (escape double quotes and backslashes), no Markdown:
+{
+  "plain": "2 to 3 sentences in everyday words: what the paper does and why it matters. No jargon, no symbols, no acronyms.",
+  "story": [
+    {
+      "text": "One plain sentence under 30 words, one step of the paper's argument, in the order the paper makes it.",
+      "technical": "One precise sentence of the form: Here the paper uses <concept> to <do what>.",
+      "concept_keys": ["keys from the concept list that this step relies on"]
+    }
+  ],
+  "roles": [{ "key": "<concept key>", "plain_role": "Under 20 plain words: why this concept matters for this paper." }]
+}
+
+Rules:
+- 4 to 8 story items. Start with the problem the paper addresses and end with what it achieves.
+- Use only concept keys from the list. Each story item names the 1 to 4 concepts it really relies on. Most concepts should appear in some item, but only where they fit naturally.
+- Give one role for every concept in the list.
+- The plain sentences are for a curious newcomer: short words, no formulas, no unexplained terms.`
+
+export function overviewUser(args: {
+  title: string
+  abstract: string
+  mainContribution: string
+  text: string
+  concepts: { key: string; name: string; whyNeeded: string; section: string }[]
+}): string {
+  const list = args.concepts.map((c) => `- ${c.key}: ${c.name} (used in ${c.section || 'the paper'}). ${c.whyNeeded}`).join('\n')
+  return `Paper: ${args.title}\n\nAbstract:\n${args.abstract}\n\nMain contribution: ${args.mainContribution || '(not given)'}\n\nConcepts:\n${list}\n\nStart of the paper's text:\n<paper>\n${args.text}\n</paper>`
+}

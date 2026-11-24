@@ -65,6 +65,7 @@ export const roadmapsSchema: CollectionSchema = {
     },
     { name: 'lastOpenedAt', storage: 'number', interpretation: 'plain' },
     { name: 'finishedAt', storage: 'number', interpretation: 'plain' },
+    { name: 'overviewReadAt', storage: 'number', interpretation: 'plain' },
   ],
   ownerField: 'userId',
   uniqueOn: ['userId', 'paperId'],
@@ -108,7 +109,7 @@ export const usageEventsSchema: CollectionSchema = {
     {
       name: 'kind',
       storage: 'text',
-      interpretation: { kind: 'select', options: ['analyze', 'recommend', 'explain', 'branch'] },
+      interpretation: { kind: 'select', options: ['analyze', 'recommend', 'explain', 'branch', 'overview'] },
     },
     { name: 'ref', storage: 'text', interpretation: 'plain' },
     {

@@ -3,7 +3,7 @@
  */
 
 import { getAuthToken } from 'deepspace'
-import type { Suggestion } from '../types'
+import type { PaperOverview, Suggestion } from '../types'
 
 export type ActionResponse<T> = { success: true; data: T } | { success: false; error: string }
 
@@ -65,6 +65,7 @@ export interface Allowances {
   recommend: Allowance
   explain: Allowance
   branch: Allowance
+  overview: Allowance
 }
 
 /** Fired after a metered action so allowance displays refresh. */
@@ -96,4 +97,6 @@ export const actions = {
         branchKey,
       }),
     ),
+  ensureOverview: (paperId: string) =>
+    metered(callAction<{ overview?: PaperOverview; cached?: boolean; pending?: boolean }>('ensureOverview', { paperId })),
 }

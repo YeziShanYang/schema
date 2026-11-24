@@ -13,6 +13,7 @@ export const USAGE_CAPS: Record<UsageKind, number> = {
   recommend: 10,
   explain: 30,
   branch: 20,
+  overview: 10,
 }
 
 const counted = (e: Envelope<UsageEventData>) => e.data.state !== 'refunded'
@@ -90,6 +91,6 @@ export function capMessage(kind: UsageKind, state: CapState): string {
   if (kind === 'analyze') {
     return `You have started ${USAGE_CAPS.analyze} new papers in the last 24 hours, the daily limit. You can start another after ${when} UTC. Papers someone already analyzed are always free to open.`
   }
-  const what = { recommend: 'recommendation runs', explain: 'new AI explanations', branch: 'branch link loads' }[kind]
+  const what = { recommend: 'recommendation runs', explain: 'new AI explanations', branch: 'branch link loads', overview: 'new paper overviews' }[kind]
   return `You have used your ${USAGE_CAPS[kind]} ${what} for the last 24 hours. More open up after ${when} UTC.`
 }

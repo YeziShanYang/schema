@@ -26,6 +26,7 @@ import { cleanGraph } from '../../lib/graph'
 import { asString, asStringArray } from '../../lib/json'
 import { STARTER_TOPICS } from '../../lib/topics'
 import { assignTopics } from './assign-topics'
+import { generateOverview, type OverviewConcept } from '../overview'
 import { cleanBranches } from '../../lib/branches'
 import { createPipelineClient, fixturesAllowed, ownerContext } from './client'
 import { refundAnalyze } from '../usage'
@@ -38,7 +39,7 @@ export interface AnalyzePayload {
   arxivId: string
 }
 
-type Step = 'seed' | 'text' | 'concepts' | 'explain' | 'finish'
+type Step = 'seed' | 'text' | 'concepts' | 'overview' | 'explain' | 'finish'
 
 interface PendingWrite {
   op: 'create' | 'update' | 'delete'
@@ -145,6 +146,9 @@ async function runStep(state: AnalyzeState, s: StepCtx): Promise<boolean> {
       return false
     case 'concepts':
       await stepConcepts(state, s)
+      return false
+    case 'overview':
+      await stepOverview(state, s)
       return false
     case 'explain':
       await stepExplain(state, s)
@@ -353,14 +357,39 @@ async function stepConcepts(state: AnalyzeState, { ctx, client, paper }: StepCtx
     })
   }
 
-  state.step = 'explain'
+  state.step = 'overview'
   await updatePaper(ctx, paper.recordId, {
-    stage: 'explain',
-    progress: 0.6,
+    stage: 'overview',
+    progress: 0.55,
     mainContribution: asString(json.main_contribution, 800),
     conceptCount: graph.ids.length,
     branches,
     topicKeys: [...new Set(Object.values(topicFor))],
+    progressMessage: 'Writing a plain-language overview',
+  })
+}
+
+/**
+ * One call for the plain-language overview and each concept's plain role.
+ * It is not essential to the analysis: if it fails, the paper goes on
+ * without one and ensureOverview generates it when a reader opens the paper.
+ */
+async function stepOverview(state: AnalyzeState, { ctx, client, paper }: StepCtx) {
+  const concepts = (await ctx.records.query('concepts', { where: { paperId: paper.recordId }, limit: 200 })) as Envelope<OverviewConcept>[]
+  try {
+    const { overview, roles } = await generateOverview(client, paper.data, state.text, concepts.map((c) => c.data))
+    for (const c of concepts) {
+      const role = roles[c.data.key]
+      if (role) state.writes.push({ op: 'update', collection: 'concepts', recordId: c.recordId, data: { plainRole: role } })
+    }
+    await updatePaper(ctx, paper.recordId, { overview })
+  } catch (e) {
+    console.warn(`[analyze] ${paper.data.arxivId}: overview skipped: ${errMsg(e)}`)
+  }
+  state.step = 'explain'
+  await updatePaper(ctx, paper.recordId, {
+    stage: 'explain',
+    progress: 0.7,
     progressMessage: 'Writing the section walkthrough and check questions',
   })
 }

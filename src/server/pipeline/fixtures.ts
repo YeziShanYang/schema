@@ -119,6 +119,21 @@ const explain = {
   ],
 }
 
+const overview = {
+  plain: 'Attention lets a model decide which words matter most. This paper bends that choice to follow the shape of the data, which helps a little on every test.',
+  story: [
+    { text: 'Models read a sentence by deciding how much each word should count.', technical: 'Here the paper uses a softmax over scores to turn them into weights.', concept_keys: ['c1'] },
+    { text: 'Those weights blend the words into one summary.', technical: 'Here the paper uses attention as a weighted average of value vectors.', concept_keys: ['c2', 'c1'] },
+    { text: 'The authors adjust each weight using how curved the data is.', technical: 'Here the paper uses the second fundamental form to correct attention scores.', concept_keys: ['c3', 'c2', 'not-a-concept'] },
+  ],
+  roles: [
+    { key: 'c1', plain_role: 'It turns raw scores into weights that add up to one.' },
+    { key: 'c2', plain_role: 'It is the step the paper changes.' },
+    { key: 'c3', plain_role: 'It measures the curve the correction follows.' },
+    { key: 'c9', plain_role: 'Unknown key that must be dropped.' },
+  ],
+}
+
 function message(text: string) {
   return { content: [{ type: 'text', text }], stop_reason: 'end_turn' }
 }
@@ -154,6 +169,7 @@ export function fixtureIntegration(endpoint: string, body: Record<string, unknow
     if (hint === 'recommend') {
       return message(JSON.stringify({ picks: [{ n: 1, reason: 'A broad survey to start with.' }, { n: 2, reason: 'Builds geometric intuition.' }, { n: 9, reason: 'Invented result number that must be ignored.' }] }))
     }
+    if (hint === 'overview') return message(JSON.stringify(overview))
     if (hint === 'explain-concept') {
       return message('Fixture explanation.\n\n### Worked example\nScores [1, 2] become softmax [0.27, 0.73].')
     }

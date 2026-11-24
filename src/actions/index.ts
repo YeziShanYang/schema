@@ -13,7 +13,8 @@ import { STARTER_TOPICS } from '../lib/topics'
 import { withPaper } from '../lib/workspace'
 import { categoryName, suggestWorkspaceName } from '../lib/categories'
 import { lookupArxiv } from '../server/pipeline/arxiv-meta'
-import { fixturesAllowed, fixtureWorkspace } from '../server/pipeline/client'
+import { createPipelineClient, fixturesAllowed, fixtureWorkspace } from '../server/pipeline/client'
+import { generateOverview, storedPaperText, type OverviewConcept } from '../server/overview'
 import { recommendForWorkspace } from '../server/recommend'
 import { generateExplanation } from '../server/explain-concept'
 import { loadBranch } from '../server/branch-resources'
@@ -343,15 +344,63 @@ const loadBranchResources: ActionHandler<Env> = async ({ userId, params, tools, 
   }
 }
 
+/** A run that started this recently is still in progress; an older mark is treated as abandoned. */
+const OVERVIEW_PENDING_MS = 2 * 60_000
+
+/**
+ * The paper overview for a paper analyzed before the overview stage existed:
+ * generated once, cached on the paper, free for everyone after that. The
+ * plain role of each concept is stored on the concept.
+ */
+const ensureOverview: ActionHandler<Env> = async ({ userId, params, tools, env }) => {
+  const paperId = typeof params.paperId === 'string' ? params.paperId : ''
+  if (!paperId) return fail('Missing paperId.')
+  const got = await tools.get('papers', paperId)
+  if (!got.success) return fail('Paper not found.')
+  const paper = (got.data as unknown as { record: Envelope<PaperData> }).record
+  if (paper.data.overview) return { success: true, data: { overview: paper.data.overview, cached: true } }
+  if (paper.data.status !== 'ready') return fail('The paper is not analyzed yet.')
+  if (paper.data.overviewLoadingAt && Date.now() - paper.data.overviewLoadingAt < OVERVIEW_PENDING_MS) {
+    return { success: true, data: { pending: true } }
+  }
+
+  const free = fixturesAllowed(env, paper.data.arxivId)
+  const usage = await usageState(tools, userId, 'overview')
+  if (!free && !usage.allowed) return fail(capMessage('overview', usage))
+
+  await tools.update('papers', paperId, { overviewLoadingAt: Date.now() })
+  const conceptsRes = await tools.query('concepts', { where: { paperId }, limit: 200 })
+  if (!conceptsRes.success) return fail(conceptsRes.error)
+  const concepts = conceptsRes.data.records as unknown as Envelope<ConceptData>[]
+
+  let result
+  try {
+    const text = await storedPaperText(env, paper, free)
+    const ordered: OverviewConcept[] = concepts.map((c) => ({ key: c.data.key, name: c.data.name, whyNeeded: c.data.whyNeeded, section: c.data.section, order: c.data.order }))
+    result = await generateOverview(createPipelineClient(env, free), paper.data, text, ordered)
+  } catch (e) {
+    await tools.update('papers', paperId, { overviewLoadingAt: 0 })
+    return fail(`Could not write the overview: ${e instanceof Error ? e.message : String(e)}`)
+  }
+  for (const c of concepts) {
+    const role = result.roles[c.data.key]
+    if (role) await tools.update('concepts', c.recordId, { plainRole: role })
+  }
+  await tools.update('papers', paperId, { overview: result.overview, overviewLoadingAt: 0 })
+  if (!free) await recordUsage(tools, userId, 'overview', paperId)
+  return { success: true, data: { overview: result.overview, cached: false } }
+}
+
 /** The caller's remaining daily allowances. No paid calls. */
 const myAllowance: ActionHandler<Env> = async ({ userId, tools }) => {
-  const [analyze, recommend, explain, branch] = await Promise.all([
+  const [analyze, recommend, explain, branch, overview] = await Promise.all([
     usageState(tools, userId, 'analyze'),
     usageState(tools, userId, 'recommend'),
     usageState(tools, userId, 'explain'),
     usageState(tools, userId, 'branch'),
+    usageState(tools, userId, 'overview'),
   ])
-  return { success: true, data: { analyze, recommend, explain, branch } }
+  return { success: true, data: { analyze, recommend, explain, branch, overview } }
 }
 
 export const actions: Record<string, ActionHandler<Env>> = {
@@ -363,4 +412,5 @@ export const actions: Record<string, ActionHandler<Env>> = {
   recommendPapers,
   explainConcept,
   loadBranchResources,
+  ensureOverview,
 }
