@@ -637,7 +637,7 @@ test('first-run prompt shows for an empty knowledge profile and can be dismissed
   await expect(page.getByTestId('first-run')).toHaveCount(0)
 })
 
-test('finishing a paper can mark its remaining topics known; Read again reopens it', async ({ users }) => {
+test('finishing a paper can check its remaining concepts; Read again reopens it', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada] = await users(['Schema ada'])
   const page = ada.page
