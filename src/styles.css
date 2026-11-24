@@ -349,18 +349,22 @@
 }
 
 /* ---------- Landing hero illustration (src/components/HeroSheet.tsx) ----------
-   A 600 x 520 frame in --u units: 1px at full size, smaller when the column
-   or the screen is narrower. The frame clips only at its bottom, which sits
-   on the hero's bottom border, so the sheet rises out of that edge. The
-   sheet is set in STIX Two Text, a LaTeX-like serif; its body and figure are
-   blurred into texture and the highlighted phrases stay sharp.
+   A frame 600 units wide in --u units, set in STIX Two Text (a LaTeX-like
+   serif), with the body and figure blurred into texture and the highlighted
+   phrases sharp. The sheet is taller than the hero and is cut off by its
+   bottom edge, so it reads as rising out of the section. From 1024px the
+   frame sits beside the copy, out of flow, so the copy alone sets the hero's
+   height; the hero clips the sheet. On narrower screens it sits under the
+   copy, 400 units tall, and clips the sheet itself.
    Sequence, run once (about 3.2s): the sheet rises (900ms), then each phrase
    comes into focus under its highlight, 350ms after the last, its dashed
    link draws out (400ms) and its tag settles as the link arrives. Tags then
    drift, each with its own amplitude, period and phase. Under reduced motion
    everything is in its final state and the frame only fades in. */
+.hero { --hero-copy-w: min(576px, 45vw); }
 .hero-art {
   --u: min(1px, calc((100vw - 32px) / 600));
+  height: calc(var(--u) * 400);
   --t0: 1000ms;
   --step: 350ms;
   --paper-font: "STIX Two Text", "STIX Two", "Times New Roman", Times, serif;
@@ -368,13 +372,22 @@
   clip-path: inset(-48px -48px 0 -48px);
   animation: schema-fade 300ms linear 150ms both;
 }
-/* Beside the copy: up to half the row, with the sheet's top (20u into the
-   frame) level with the top of the headline's capitals, about 35px below
-   the copy's top. */
+/* Beside the copy, 48px right of it (the container's 24px padding plus the
+   copy's width), with the sheet's top (20u into the frame) level with the
+   top of the headline's capitals: the container's 80px top padding plus
+   35px. The frame grows until its tags, which end 530u in, come within 40px
+   of the viewport's right edge (the container's left offset is
+   max(0, 50vw - 576px)), up to 1.12px per unit. */
 @media (min-width: 1024px) {
+  .hero { overflow: clip; }
+  .hero-copy { width: var(--hero-copy-w); }
   .hero-art {
-    --u: min(1px, calc((50vw - 56px) / 600));
-    margin-top: calc(35px - var(--u) * 20);
+    --u: min(1.12px, calc((100vw - 40px - max(0px, 50vw - 576px) - 72px - var(--hero-copy-w)) / 530));
+    position: absolute;
+    left: calc(24px + var(--hero-copy-w) + 48px);
+    top: calc(80px + 35px - var(--u) * 20);
+    margin-top: 0;
+    clip-path: none;
   }
 }
 .hero-sheet {
@@ -492,9 +505,8 @@
 .hero-mark-text { display: inline-block; }
 .hero-links {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  left: 0;
+  top: 0;
   overflow: visible;
   pointer-events: none;
 }
@@ -538,7 +550,8 @@
   .hero-tag-card { animation: hero-tag-in 350ms ease-out calc(var(--t0) + var(--i) * var(--step) + 450ms) both; }
   .hero-tag { animation: hero-drift var(--drift, 6s) ease-in-out var(--phase, 0s) infinite alternate; }
 }
-@keyframes hero-rise { from { translate: 0 calc(var(--u) * 540); } }
+/* The sheet's own height: it starts wholly below the clipping edge at any width. */
+@keyframes hero-rise { from { translate: 0 100%; } }
 @keyframes hero-sweep { from { scale: 0 1; } }
 @keyframes hero-focus { from { filter: blur(1.6px); opacity: 0.7; } }
 @keyframes hero-draw { from { stroke-dashoffset: 1; } }

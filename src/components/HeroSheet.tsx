@@ -8,10 +8,13 @@
  * name. The body text and the figure are blurred into texture; the
  * highlighted phrases stay sharp.
  *
- * Layout is a fixed 600 by 520 frame in `--u` units (1px at full size; see
- * .hero-art in styles.css), so the dashed links are plain SVG paths in the
- * same coordinates. A highlighted phrase ends its line, so its link starts at
- * the column's right edge whatever the phrase's width.
+ * Layout is a fixed 600-unit-wide frame in `--u` units (see .hero-art in
+ * styles.css), so the dashed links are plain SVG paths in the same
+ * coordinates. Every phrase and tag sits in the frame's top 360 units, which
+ * stay above the hero's bottom edge at every width beside the copy; the
+ * sheet runs on below and is cut off by that edge, or by the frame (400
+ * units tall) on a phone. A highlighted phrase ends its line, so its link
+ * starts at the column's right edge whatever the phrase's width.
  *
  * Static: no data hooks, safe for the prerendered landing.
  */
@@ -34,11 +37,13 @@ export const HERO_PICKS: readonly { name: string; phrase: string }[] = [
   { name: 'Positional encoding', phrase: 'position of the tokens' },
 ]
 
-// ---- Geometry, in frame units (600 x 520). Sheet coordinates are offset by SHEET_TOP.
+// ---- Geometry, in frame units. Sheet coordinates are offset by SHEET_TOP.
 export const W = 600
-export const H = 520
+/** Height of the part that holds the phrases, links and tags; the sheet is taller and gets cut off. */
+export const H = 400
 const SHEET_W = 360
 const SHEET_TOP = 20
+const SHEET_H = 680
 const PAD = 26
 const LINE = 11.5
 const ABSTRACT = { left: PAD + 22, right: SHEET_W - PAD - 22, top: 113, lines: 7 }
@@ -64,11 +69,11 @@ export const HERO_SLOTS: readonly {
   tagGap: number
   drift: { x: number; y: number; s: number; phase: number }
 }[] = [
-  { at: 'abstract', line: 1, tagY: 120, tagGap: 46, drift: { x: 1.2, y: 2.5, s: 6.2, phase: 1.3 } },
-  { at: 'abstract', line: 5, tagY: 180, tagGap: 60, drift: { x: -1.5, y: 1.8, s: 7.4, phase: 4.1 } },
-  { at: 'column', line: 2, tagY: 238, tagGap: 20, drift: { x: 0.8, y: -3, s: 5.6, phase: 2.2 } },
-  { at: 'column', line: 9, tagY: 352, tagGap: 38, drift: { x: -1, y: 2.2, s: 6.8, phase: 0.6 } },
-  { at: 'column', line: 17, tagY: 452, tagGap: 28, drift: { x: 1.6, y: -1.6, s: 7.9, phase: 3.4 } },
+  { at: 'abstract', line: 0, tagY: 100, tagGap: 34, drift: { x: 1.2, y: 2.5, s: 6.2, phase: 1.3 } },
+  { at: 'abstract', line: 3, tagY: 156, tagGap: 58, drift: { x: -1.5, y: 1.8, s: 7.4, phase: 4.1 } },
+  { at: 'abstract', line: 6, tagY: 230, tagGap: 20, drift: { x: 0.8, y: -3, s: 5.6, phase: 2.2 } },
+  { at: 'column', line: 3, tagY: 284, tagGap: 44, drift: { x: -1, y: 2.2, s: 6.8, phase: 0.6 } },
+  { at: 'column', line: 8, tagY: 336, tagGap: 28, drift: { x: 1.6, y: -1.6, s: 7.9, phase: 3.4 } },
 ]
 
 export interface HeroPick {
@@ -150,9 +155,9 @@ export function HeroSheet({ snap, className }: { snap: DemoSnapshot; className?:
   const authors = snap.paper.authors
 
   return (
-    <div className={cn('hero-art relative', className)} style={{ width: u(W), height: u(H) }} role="img" aria-label={label} data-testid="hero-art">
+    <div className={cn('hero-art relative', className)} style={{ width: u(W) }} role="img" aria-label={label} data-testid="hero-art">
       <link rel="stylesheet" href={PAPER_FONT} precedence="default" />
-      <div className="hero-sheet" lang="en" style={{ width: u(SHEET_W), height: u(H), top: u(SHEET_TOP) }}>
+      <div className="hero-sheet" lang="en" style={{ width: u(SHEET_W), height: u(SHEET_H), top: u(SHEET_TOP) }}>
         {page?.stamp && <span className="hero-stamp" style={{ left: u(7), top: u(150) }}>{page.stamp}</span>}
         <i className="hero-rule" style={box(PAD, 24, SHEET_W - 2 * PAD, 2.5)} />
         <span className="hero-title" style={box(PAD, 30, SHEET_W - 2 * PAD, 22)}>{snap.paper.title}</span>
@@ -178,18 +183,18 @@ export function HeroSheet({ snap, className }: { snap: DemoSnapshot; className?:
         {introLeft && (
           <>
             <span className="hero-heading" style={box(LEFT_COL.left, LEFT_TEXT_TOP - 15, COL_W, 12)}>1&ensp;Introduction</span>
-            <p className="hero-body hero-blur" style={box(LEFT_COL.left, LEFT_TEXT_TOP, COL_W, H - LEFT_TEXT_TOP)}>{introLeft}</p>
+            <p className="hero-body hero-blur" style={box(LEFT_COL.left, LEFT_TEXT_TOP, COL_W, SHEET_H - LEFT_TEXT_TOP)}>{introLeft}</p>
           </>
         )}
         {introRight && (
-          <p className="hero-body hero-blur" style={box(RIGHT_COL.left, COLS_TOP, COL_W, H - COLS_TOP)}>{introRight}</p>
+          <p className="hero-body hero-blur" style={box(RIGHT_COL.left, COLS_TOP, COL_W, SHEET_H - COLS_TOP)}>{introRight}</p>
         )}
         {picks.map((p) => (
           <Mark key={p.concept.key} pick={p} />
         ))}
       </div>
 
-      <svg className="hero-links" viewBox={`0 0 ${W} ${H}`} aria-hidden="true">
+      <svg className="hero-links" viewBox={`0 0 ${W} ${H}`} style={{ width: u(W), height: u(H) }} aria-hidden="true">
         {picks.map((p) => {
           const link = heroLink(p.slot)
           const mask = `${id}-m${p.index}`
