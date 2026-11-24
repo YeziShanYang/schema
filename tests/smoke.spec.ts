@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { test, expect } from '@playwright/test'
 import { captureConsoleErrors } from './helpers/errors'
 
@@ -50,6 +51,44 @@ test.describe('Smoke tests', () => {
     await expect(page.getByTestId('static-landing')).toBeVisible()
     await page.waitForTimeout(1500)
     expect(offenders).toEqual([])
+  })
+
+  test('landing hero draws its tags and phrases from the bundled snapshot', async ({ page }) => {
+    const snap = JSON.parse(readFileSync(new URL('../src/data/demo-snapshot.json', import.meta.url), 'utf8')) as {
+      branches: { key: string; concepts: { key: string; name: string; quote: string; quoteDisplay?: string }[] }[]
+    }
+    const concepts = new Map(snap.branches.flatMap((b) => b.concepts).map((c) => [c.key, c]))
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await page.goto('/')
+    await expect(page.getByTestId('hero-art')).toBeVisible()
+
+    const tags = page.getByTestId('hero-tag')
+    const count = await tags.count()
+    expect(count).toBeGreaterThanOrEqual(4)
+    expect(count).toBeLessThanOrEqual(5)
+    for (let i = 0; i < count; i++) {
+      const key = (await tags.nth(i).getAttribute('data-concept-key')) ?? ''
+      expect(concepts.has(key), `tag ${key} is a snapshot concept`).toBe(true)
+      await expect(tags.nth(i)).toHaveText(concepts.get(key)!.name)
+    }
+
+    // Each highlighted phrase is copied from its concept's quote (or the LaTeX quoteDisplay).
+    const phrases = page.getByTestId('hero-phrase')
+    await expect(phrases).toHaveCount(count)
+    for (let i = 0; i < count; i++) {
+      const key = (await phrases.nth(i).getAttribute('data-concept-key')) ?? ''
+      const phrase = (await phrases.nth(i).getAttribute('data-phrase')) ?? ''
+      const c = concepts.get(key)!
+      expect(phrase.length).toBeGreaterThan(0)
+      expect((c.quoteDisplay || c.quote).includes(phrase), `"${phrase}" is in the quote of ${key}`).toBe(true)
+    }
+    // A phrase taken from a quoteDisplay renders its math with KaTeX.
+    await expect(page.locator('[data-testid="hero-phrase"] .katex').first()).toBeAttached({ timeout: 10_000 })
+
+    // The branch panel shows quoteDisplay through MathText too.
+    const withMath = snap.branches.find((b) => b.concepts.some((c) => c.quote && c.quoteDisplay))!
+    await page.locator(`[data-testid="landing-branch"][data-branch-key="${withMath.key}"]`).click()
+    await expect(page.locator('[data-testid="landing-branch-concepts"] blockquote .katex').first()).toBeAttached({ timeout: 10_000 })
   })
 
   test('dynamic app boundary mounts on /home', async ({ page }) => {
