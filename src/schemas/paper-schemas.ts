@@ -57,6 +57,8 @@ export const papersSchema: CollectionSchema = {
     { name: 'topicKeys', storage: 'text', interpretation: { kind: 'json' } },
     { name: 'overview', storage: 'text', interpretation: { kind: 'json' } },
     { name: 'overviewLoadingAt', storage: 'number', interpretation: 'plain' },
+    { name: 'timings', storage: 'text', interpretation: { kind: 'json' } },
+    { name: 'retries', storage: 'number', interpretation: 'plain' },
   ],
   uniqueOn: ['arxivId'],
   permissions: readOnlyForEveryone,

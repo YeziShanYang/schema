@@ -30,7 +30,22 @@ export interface PaperData {
   overview?: PaperOverview | null
   /** Set while ensureOverview is generating one, so two readers don't both pay. */
   overviewLoadingAt?: number
+  /** When the latest run entered and left each stage (see lib/timings); missing for papers analyzed before timings existed. */
+  timings?: StageTimings
+  /** Steps the latest run retried after a transient error. */
+  retries?: number
 }
+
+/** Stages with a recorded span: the queue wait, then the job's four stages. */
+export type TimedStage = 'queued' | 'text' | 'concepts' | 'overview' | 'explain'
+
+/** Milliseconds since the epoch, by the worker's clock. `endedAt` is missing while the stage runs. */
+export interface StageTiming {
+  startedAt: number
+  endedAt?: number
+}
+
+export type StageTimings = Partial<Record<TimedStage, StageTiming>>
 
 /** One step of the paper's argument in plain words, with the concepts it uses. */
 export interface StoryItem {

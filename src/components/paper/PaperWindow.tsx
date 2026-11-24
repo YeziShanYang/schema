@@ -24,6 +24,7 @@ import { useAllowance } from '../../hooks/useAllowance'
 import { useWorkspaces } from '../../hooks/useWorkspaces'
 import { actions } from '../../lib/actions-client'
 import { AnalyzeForm } from '../AnalyzeForm'
+import { AnalysisProgress, useAnalysisPhase } from './AnalysisProgress'
 import { Chip, Meter } from '../blueprint'
 import { FloatingGraph } from '../graph/FloatingGraph'
 import { BranchNode, CenterCard } from '../graph/nodes'
@@ -33,20 +34,6 @@ import { OverviewWindow, type OverviewConcept } from './OverviewWindow'
 import { SequenceStrip } from './SequenceStrip'
 import { ConceptName, MathText } from '../MathText'
 import { BookIcon } from '../icons'
-
-const STAGES = ['queued', 'text', 'concepts', 'overview', 'explain', 'ready'] as const
-/** Matches retryPaper: a run with no update for this long can be restarted. */
-const STUCK_AFTER_MS = 20 * 60 * 1000
-
-/** The current time, refreshed every minute, for "stuck" checks. */
-function useMinuteClock(): number {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 60_000)
-    return () => clearInterval(t)
-  }, [])
-  return now
-}
 
 function readPref(key: string): string {
   try {
@@ -72,7 +59,9 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const finishPaper = useFinishPaper()
   const { allowance } = useAllowance()
   const ws = workspaceId ? workspaces.byId.get(workspaceId) : undefined
-  const now = useMinuteClock()
+  // The progress view stands in for the graph until the paper is ready, then cross-fades out over it.
+  const analysis = useAnalysisPhase(p.paper?.recordId, p.paper?.data.status)
+  const covered = analysis === 'on' || analysis === 'hold'
 
   const viewKey = `schema:view:${arxivId}`
   const [view, setView] = useState<'graph' | 'walkthrough'>(() => (readPref(viewKey) === 'walkthrough' ? 'walkthrough' : 'graph'))
@@ -81,7 +70,6 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const [finishOpen, setFinishOpen] = useState(false)
   const [markRest, setMarkRest] = useState(true)
   const [finishing, setFinishing] = useState(false)
-  const [retryError, setRetryError] = useState('')
   const [showAuth, setShowAuth] = useState(false)
   const [loadingBranches, setLoadingBranches] = useState<Set<string>>(() => new Set())
   const [linkErrors, setLinkErrors] = useState<Record<string, string>>({})
@@ -248,22 +236,6 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   }
 
   const d = paper.data
-  const inProgress = d.status === 'queued' || d.status === 'processing'
-  const stuck = inProgress && now - (Date.parse(paper.updatedAt) || now) > STUCK_AFTER_MS
-  const retry = async () => {
-    const r = await actions.retryPaper(paper.recordId)
-    setRetryError(r.success ? '' : r.error)
-  }
-  const retryControls = isSignedIn ? (
-    <>
-      <p className="mt-1 text-xs text-muted-foreground">Anyone signed in can retry. A retry uses one of your new papers for today.</p>
-      <Button className="mt-2" size="sm" onClick={retry}>Retry</Button>
-    </>
-  ) : (
-    <p className="mt-1 text-xs text-muted-foreground">
-      <button type="button" className="text-primary hover:underline" onClick={() => setShowAuth(true)}>Sign in</button> to retry it.
-    </p>
-  )
   const year = d.publishedAt ? d.publishedAt.slice(0, 4) : ''
   const firstAuthor = d.authors?.[0] ? `${d.authors[0].split(' ').slice(-1)[0]}${d.authors.length > 1 ? ' et al.' : ''}` : ''
   const seq = p.sequence
@@ -295,33 +267,8 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
       <p className="mb-3 text-[13px] text-muted-foreground">
         {firstAuthor}{year && ` · ${year}`} · <span className="font-mono">arXiv {d.arxivId}</span>
       </p>
-      {inProgress ? (
-        <div data-testid="paper-progress" aria-live="polite">
-          <div className="mb-1.5 flex items-baseline justify-between text-[12.5px] text-muted-foreground">
-            <span>{d.progressMessage || 'Analyzing'}</span>
-            <b className="font-semibold text-foreground tabular-nums">{Math.round((d.progress ?? 0) * 100)}%</b>
-          </div>
-          <Meter value={d.progress ?? 0} tone="primary" />
-          <ol className="mt-2 flex flex-wrap gap-2">
-            {STAGES.map((s) => (
-              <li key={s} className={cn('label', s === d.stage && 'text-foreground')}>{s}</li>
-            ))}
-          </ol>
-          {stuck && (
-            <div className="mt-3 border-t border-border pt-2.5" data-testid="paper-stuck">
-              <p className="text-[13px]">No progress for over 20 minutes.</p>
-              {retryControls}
-              {retryError && <p className="mt-1 text-xs text-destructive">{retryError}</p>}
-            </div>
-          )}
-        </div>
-      ) : d.status === 'failed' ? (
-        <div data-testid="paper-failed">
-          <p className="text-[13px]">Analysis failed: {d.error || 'unknown error'}</p>
-          {retryControls}
-          {retryError && <p className="mt-1 text-xs text-destructive">{retryError}</p>}
-        </div>
-      ) : (
+      {/* Queued, running and failed papers show AnalysisProgress in place of the graph. */}
+      {d.status === 'ready' && (
         <>
           <div className="mb-1.5 flex items-center justify-between text-[12.5px] text-muted-foreground" data-testid="paper-progress-count">
             <span>{knowledge.isDemo ? 'Concepts known (demo)' : 'Concepts known'}</span>
@@ -371,7 +318,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {p.concepts.length > 0 && (
+          {p.concepts.length > 0 && !covered && (
             <nav className="flex w-fit gap-1 rounded-[7px] border border-border bg-surface-2 p-[3px]" aria-label="Paper view">
               {(['graph', 'walkthrough'] as const).map((v) => (
                 <button
@@ -429,7 +376,17 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
         />
       )}
 
-      {view === 'walkthrough' && p.sections.length > 0 ? (
+      {analysis !== 'off' && (
+        <AnalysisProgress
+          phase={analysis}
+          paper={paper}
+          branches={p.branches}
+          order={seq.steps.map((s) => s.branchKey)}
+          signedIn={!!isSignedIn}
+          onSignIn={() => setShowAuth(true)}
+        />
+      )}
+      {covered ? null : view === 'walkthrough' && p.sections.length > 0 ? (
         <div className="grid max-w-4xl gap-3 px-5 py-5 md:px-7">
           {finishControls && <div>{finishControls}</div>}
           <ol className="grid gap-3" data-testid="walkthrough">
