@@ -54,7 +54,7 @@ export async function generateExplanation(
       quote: concept.data.quote,
       excerpt,
     }),
-    maxTokens: 1500,
+    maxTokens: 4000,
     hint: 'explain-concept',
   })
   return text.trim().slice(0, MAX_EXPLANATION_CHARS)

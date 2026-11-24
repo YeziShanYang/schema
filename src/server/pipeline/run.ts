@@ -297,7 +297,7 @@ async function stepConcepts(state: AnalyzeState, { ctx, client, paper }: StepCtx
   const json = await callModelJson(client, {
     system: CONCEPTS_SYSTEM,
     user: conceptsUser({ title: paper.data.title, abstract: paper.data.abstract, topics: promptTopics, text: state.text }),
-    maxTokens: 8000,
+    maxTokens: 16000, // thinking counts against this; 8000 ran out in production
     hint: 'concepts',
   })
 
@@ -437,7 +437,7 @@ async function stepResources(state: AnalyzeState, { ctx, client, paper }: StepCt
     const json = await callModelJson(client, {
       system: RESOURCES_SYSTEM,
       user: resourcesUser(withResults),
-      maxTokens: 3000,
+      maxTokens: 6000,
       hint: 'resources',
     })
     const topics = Array.isArray(json.topics) ? json.topics : []
@@ -496,7 +496,7 @@ async function stepExplain(state: AnalyzeState, { ctx, client, paper }: StepCtx)
       concepts: concepts.map((c) => ({ key: c.data.key, name: c.data.name, whyNeeded: c.data.whyNeeded })),
       text: state.text,
     }),
-    maxTokens: 8000,
+    maxTokens: 16000,
     hint: 'explain',
   })
 

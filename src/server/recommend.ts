@@ -102,7 +102,7 @@ export async function recommendForWorkspace(
         existing: (ws.papers ?? []).map((p) => p.title || p.arxivId),
         candidates,
       }),
-      maxTokens: 1200,
+      maxTokens: 4000,
       hint: 'recommend',
     })
     const list = Array.isArray(json.picks) ? json.picks : []

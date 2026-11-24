@@ -25,7 +25,7 @@ Rules:
 - depth is "skim" (recognize the term), "working" (follow the equations or arguments that use it), or "deep" (central to the contribution).
 - Group the concepts into 3 to 6 thematic branches, such as "Probability foundations", "Model architecture" or "Training objective". Each branch has a key (lowercase-hyphenated), a name and a one-line description. Order branches from most foundational to most specific. Give every concept a branch_key from your branches, and give every branch at least one concept.
 
-Output only JSON, no prose and no code fences:
+Output only valid JSON (escape any double quotes inside strings, no trailing commas), no prose and no code fences:
 {"main_contribution": string, "branches": [{"key": string, "name": string, "description": string}], "concepts": [{"id": "c1", "name": string, "why_needed": string, "section": string, "quote": string, "depends_on": [string], "depth": "skim" | "working" | "deep", "branch_key": string, "topic": {"key": string, "name"?: string, "level"?: string, "description"?: string, "search_query"?: string}}]}`
 
 export function conceptsUser(args: {
@@ -48,7 +48,7 @@ Rules:
 - If no result fits, return an empty list for that topic.
 - why is one sentence on what the resource covers and why it helps a beginner.
 
-Output only JSON, no prose and no code fences:
+Output only valid JSON (escape any double quotes inside strings, no trailing commas), no prose and no code fences:
 {"topics": [{"key": string, "resources": [{"url": string, "why": string}]}]}`
 
 export interface Candidate {
@@ -76,7 +76,7 @@ Write two things:
 1. sections: a walkthrough of the paper's main sections in order, 4 to 10 entries. For each: heading (the paper's section number and title), summary (3 to 5 plain sentences on what the section does and why it matters to the argument), and concept_ids (ids from the concept list that the section uses).
 2. checks: one multiple-choice question per concept that tests understanding of the concept as this paper uses it. Exactly 4 choices, one correct, with answer_index (0 to 3) and a one-sentence explanation. Vary which position holds the correct answer.
 
-Output only JSON, no prose and no code fences:
+Output only valid JSON (escape any double quotes inside strings, no trailing commas), no prose and no code fences:
 {"sections": [{"heading": string, "summary": string, "concept_ids": [string]}], "checks": [{"concept_id": string, "question": string, "choices": [string, string, string, string], "answer_index": number, "explanation": string}]}`
 
 export function explainUser(args: {
@@ -98,7 +98,7 @@ Rules:
 - Refer to papers only by their result number. Never invent a paper.
 - reason is one sentence on why this paper fits this learner now.
 
-Output only JSON, no prose and no code fences:
+Output only valid JSON (escape any double quotes inside strings, no trailing commas), no prose and no code fences:
 {"picks": [{"n": number, "reason": string}]}`
 
 export interface PaperCandidate {
