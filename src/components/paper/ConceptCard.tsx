@@ -46,6 +46,9 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
   const [showExplain, setShowExplain] = useState(false)
   const [explaining, setExplaining] = useState(false)
   const [explainError, setExplainError] = useState('')
+  // A loading mark older than 5 minutes is stale (see branchLinkState): the topic just has no links yet.
+  const linksLoading = topic?.resourcesStatus === 'loading' && Date.now() - (topic.resourcesLoadingAt || 0) < 5 * 60 * 1000
+  const noLinks = !topic?.resourcesStatus || topic.resourcesStatus === 'none' || (topic.resourcesStatus === 'loading' && !linksLoading)
   const answered = choice !== null && c.check
   const correct = answered && choice === c.check!.answerIndex
 
@@ -147,10 +150,10 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
               ))}
             </ul>
           )}
-          {(topic?.resourcesStatus === 'loading' || (linksState === 'loading' && (!topic?.resourcesStatus || topic.resourcesStatus === 'none'))) && (
+          {(linksLoading || (linksState === 'loading' && noLinks)) && (
             <span className="w-full text-xs text-muted-foreground motion-safe:animate-pulse" data-testid="concept-links-loading">Finding explainer links…</span>
           )}
-          {linksState === 'signin' && (!topic?.resourcesStatus || topic.resourcesStatus === 'none') && (
+          {linksState === 'signin' && noLinks && (
             <span className="w-full text-xs text-muted-foreground" data-testid="links-signin">
               <button type="button" onClick={onSignIn} className="text-primary hover:underline">Sign in</button> to load links
             </span>
