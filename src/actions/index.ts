@@ -10,6 +10,7 @@ import type { Env } from '../../worker'
 import type { ConceptData, Envelope, PaperData, TopicData, WorkspaceData } from '../types'
 import { isFixtureId, parseArxivId } from '../lib/arxiv'
 import { STARTER_TOPICS } from '../lib/topics'
+import { queuedTimings } from '../lib/timings'
 import { categoryName, suggestWorkspaceName } from '../lib/categories'
 import { lookupArxiv } from '../server/pipeline/arxiv-meta'
 import { createPipelineClient, fixturesAllowed, fixtureWorkspace } from '../server/pipeline/client'
@@ -201,6 +202,8 @@ const analyzePaper: ActionHandler<Env> = async ({ userId, params, tools, env }) 
     textKey: '',
     conceptCount: 0,
     branches: [],
+    timings: queuedTimings(Date.now()),
+    retries: 0,
   })
   if (!created.success) {
     // Someone else started the same paper a moment ago (uniqueOn arxivId).
@@ -247,7 +250,16 @@ const retryPaper: ActionHandler<Env> = async ({ userId, params, tools, env }) =>
   const slot = await reserveUsage(tools, userId, 'analyze', paperId)
   if (!slot.ok) return fail(slot.message)
 
-  await tools.update('papers', paperId, { status: 'queued', stage: 'queued', error: '', progress: 0, progressMessage: 'Waiting to start' })
+  // A retry is a new run: its timings and retry count start over.
+  await tools.update('papers', paperId, {
+    status: 'queued',
+    stage: 'queued',
+    error: '',
+    progress: 0,
+    progressMessage: 'Waiting to start',
+    timings: queuedTimings(Date.now()),
+    retries: 0,
+  })
   try {
     await enqueueAnalyze(env, paperId, paper.data.arxivId, userId)
   } catch {

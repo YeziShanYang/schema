@@ -18,13 +18,14 @@
 import { appFiles } from 'deepspace/worker'
 import type { CronContext, Job, JobContext } from 'deepspace/worker'
 import type { Env } from '../../../worker'
-import type { ConceptDepth, Envelope, PaperData, TopicData } from '../../types'
+import type { ConceptDepth, Envelope, PaperData, TimedStage, TopicData } from '../../types'
 import { arxivPdfUrl, arxivSlug } from '../../lib/arxiv'
 import { preparePaperText } from '../../lib/paper-text'
 import { normalizeForMatch, isQuoteVerified } from '../../lib/quotes'
 import { cleanGraph } from '../../lib/graph'
 import { asString, asStringArray } from '../../lib/json'
 import { STARTER_TOPICS } from '../../lib/topics'
+import { closeTimings, enterStage } from '../../lib/timings'
 import { assignTopics } from './assign-topics'
 import { generateOverview, type OverviewConcept } from '../overview'
 import { cleanBranches } from '../../lib/branches'
@@ -87,7 +88,12 @@ export async function runAnalyzeTick(job: Job, jobCtx: JobContext, env: Env): Pr
   if (!paper) return { skipped: 'paper_missing' }
 
   if (jobCtx.signal.aborted) {
-    await updatePaper(ctx, paper.recordId, { status: 'failed', stage: 'failed', error: 'Analysis was canceled.' })
+    await updatePaper(ctx, paper.recordId, {
+      status: 'failed',
+      stage: 'failed',
+      error: 'Analysis was canceled.',
+      timings: closeTimings(paper.data.timings, Date.now()),
+    })
     if (!state.spent) await refundAnalyze(ctx.records, paper.recordId)
     return { canceled: true }
   }
@@ -122,11 +128,18 @@ export async function runAnalyzeTick(job: Job, jobCtx: JobContext, env: Env): Pr
     state.failures += 1
     state.spent = state.spent || next.spent
     if (!(e instanceof PermanentError) && state.failures < 2) {
-      await updatePaper(ctx, paper.recordId, { progressMessage: `Retrying after an error: ${message}` })
+      await updatePaper(ctx, paper.recordId, { progressMessage: `Retrying after an error: ${message}`, retries: (paper.data.retries ?? 0) + 1 })
       jobCtx.continue(state, { afterMs: 3000 })
       return
     }
-    await updatePaper(ctx, paper.recordId, { status: 'failed', stage: 'failed', error: message, progressMessage: '' })
+    // `paper.data.timings` is kept current by enterPaperStage, so a stage entered in this tick is closed too.
+    await updatePaper(ctx, paper.recordId, {
+      status: 'failed',
+      stage: 'failed',
+      error: message,
+      progressMessage: '',
+      timings: closeTimings(paper.data.timings, Date.now()),
+    })
     // The requester's daily slot is given back only if nothing was paid for yet.
     try {
       if (!state.spent) await refundAnalyze(ctx.records, paper.recordId)
@@ -178,6 +191,7 @@ async function runStep(state: AnalyzeState, s: StepCtx): Promise<boolean> {
       await updatePaper(s.ctx, s.paper.recordId, {
         status: 'ready',
         stage: 'ready',
+        timings: closeTimings(s.paper.data.timings, Date.now()),
         progress: 1,
         progressMessage: '',
         error: '',
@@ -193,8 +207,9 @@ async function runStep(state: AnalyzeState, s: StepCtx): Promise<boolean> {
 // Steps
 // ---------------------------------------------------------------------------
 
-async function stepSeed(state: AnalyzeState, { ctx, paper }: StepCtx) {
-  await updatePaper(ctx, paper.recordId, { status: 'processing', stage: 'text', progress: 0.05, progressMessage: 'Preparing', error: '' })
+async function stepSeed(state: AnalyzeState, s: StepCtx) {
+  const { ctx } = s
+  await enterPaperStage(s, 'text', { status: 'processing', progress: 0.05, progressMessage: 'Preparing', error: '' })
   const existing = (await ctx.records.query('topics', { where: { origin: 'starter' }, limit: 200 })) as Envelope<TopicData>[]
   const have = new Set(existing.map((t) => t.data.key))
   for (const t of STARTER_TOPICS) {
@@ -209,8 +224,9 @@ async function stepSeed(state: AnalyzeState, { ctx, paper }: StepCtx) {
   state.step = 'text'
 }
 
-async function stepText(state: AnalyzeState, { env, ctx, client, paper, jobCtx }: StepCtx) {
-  await updatePaper(ctx, paper.recordId, { stage: 'text', progress: 0.1, progressMessage: 'Converting the PDF to text' })
+async function stepText(state: AnalyzeState, s: StepCtx) {
+  const { env, client, paper, jobCtx } = s
+  await enterPaperStage(s, 'text', { progress: 0.1, progressMessage: 'Converting the PDF to text' })
   let raw = ''
   const files = appFiles(env, { scope: 'app', userId: env.OWNER_USER_ID })
 
@@ -256,8 +272,7 @@ async function stepText(state: AnalyzeState, { env, ctx, client, paper, jobCtx }
 
   state.text = prepared.text
   state.step = 'concepts'
-  await updatePaper(ctx, paper.recordId, {
-    stage: 'concepts',
+  await enterPaperStage(s, 'concepts', {
     progress: 0.2,
     textChars: prepared.text.length,
     textKey,
@@ -304,7 +319,8 @@ function parseConcepts(json: Record<string, unknown>): ParsedConcept[] {
   return out
 }
 
-async function stepConcepts(state: AnalyzeState, { ctx, client, paper }: StepCtx) {
+async function stepConcepts(state: AnalyzeState, s: StepCtx) {
+  const { ctx, client, paper } = s
   const topics = (await ctx.records.query('topics', { limit: 1000 })) as Envelope<TopicData>[]
   const promptTopics = [...topics]
     .sort((a, b) => (a.data.origin === b.data.origin ? 0 : a.data.origin === 'starter' ? -1 : 1))
@@ -370,8 +386,7 @@ async function stepConcepts(state: AnalyzeState, { ctx, client, paper }: StepCtx
   }
 
   state.step = 'overview'
-  await updatePaper(ctx, paper.recordId, {
-    stage: 'overview',
+  await enterPaperStage(s, 'overview', {
     progress: 0.55,
     mainContribution: asString(json.main_contribution, 800),
     conceptCount: graph.ids.length,
@@ -386,7 +401,8 @@ async function stepConcepts(state: AnalyzeState, { ctx, client, paper }: StepCtx
  * It is not essential to the analysis: if it fails, the paper goes on
  * without one and ensureOverview generates it when a reader opens the paper.
  */
-async function stepOverview(state: AnalyzeState, { ctx, client, paper }: StepCtx) {
+async function stepOverview(state: AnalyzeState, s: StepCtx) {
+  const { ctx, client, paper } = s
   const concepts = (await ctx.records.query('concepts', { where: { paperId: paper.recordId }, limit: 200 })) as Envelope<
     OverviewConcept & { quoteVerified?: boolean }
   >[]
@@ -404,8 +420,7 @@ async function stepOverview(state: AnalyzeState, { ctx, client, paper }: StepCtx
     console.warn(`[analyze] ${paper.data.arxivId}: overview skipped: ${errMsg(e)}`)
   }
   state.step = 'explain'
-  await updatePaper(ctx, paper.recordId, {
-    stage: 'explain',
+  await enterPaperStage(s, 'explain', {
     progress: 0.7,
     progressMessage: 'Writing the section walkthrough and check questions',
   })
@@ -495,6 +510,16 @@ async function loadPaper(ctx: CronContext, arxivId: string): Promise<Envelope<Pa
 
 async function updatePaper(ctx: CronContext, recordId: string, data: Partial<PaperData>) {
   await ctx.records.update('papers', recordId, data as Record<string, unknown>)
+}
+
+/**
+ * Moves the paper to `stage` and records the change in its timings. The
+ * tick's copy of the paper is updated first, so a failure later in the same
+ * tick closes the stage that was just entered.
+ */
+async function enterPaperStage(s: StepCtx, stage: TimedStage, data: Partial<PaperData>) {
+  s.paper.data.timings = enterStage(s.paper.data.timings, stage, Date.now())
+  await updatePaper(s.ctx, s.paper.recordId, { ...data, stage, timings: s.paper.data.timings })
 }
 
 async function flushWrites(ctx: CronContext, state: AnalyzeState) {
