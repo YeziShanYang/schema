@@ -19,6 +19,7 @@
 import { useId, type CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
 import { MathText } from './MathText'
+import { DEMO_ARXIV_ID } from '../constants'
 import type { DemoConcept, DemoSnapshot } from '../data/demo'
 
 /** STIX Two Text reads like LaTeX output. Loaded only where the sheet renders. */
@@ -140,6 +141,8 @@ export function HeroSheet({ snap, className }: { snap: DemoSnapshot; className?:
   const picks = heroPicks(snap)
   const page = snap.paper.firstPage
   const [introLeft, introRight] = splitIntro(page?.introduction ?? '')
+  // The drawing is this paper's Figure 1; another paper keeps the space for text.
+  const figureCaption = snap.paper.arxivId === DEMO_ARXIV_ID ? page?.figureCaption : ''
   const names = new Intl.ListFormat('en', { type: 'conjunction' }).format(picks.map((p) => p.concept.name))
   const label = picks.length
     ? `Illustration: the first page of ${snap.paper.title} with ${picks.length} phrases highlighted, each linked to the concept it uses: ${names}.`
@@ -166,10 +169,10 @@ export function HeroSheet({ snap, className }: { snap: DemoSnapshot; className?:
           </p>
         )}
 
-        {page?.figureCaption && (
+        {figureCaption && (
           <>
             <PaperFigure style={box(LEFT_COL.left, FIGURE.top, COL_W, FIGURE.height)} />
-            <span className="hero-caption" style={box(LEFT_COL.left, FIGURE.top + FIGURE.height + 4, COL_W, 20)}>{page.figureCaption}</span>
+            <span className="hero-caption" style={box(LEFT_COL.left, FIGURE.top + FIGURE.height + 4, COL_W, 20)}>{figureCaption}</span>
           </>
         )}
         {introLeft && (
