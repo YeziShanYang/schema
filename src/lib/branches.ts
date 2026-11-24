@@ -57,26 +57,26 @@ export interface BranchProgress {
   total: number
 }
 
-/** Known/total per branch for one reader. A concept counts as known when its topic is known. */
-export function branchProgress(
+/** Known/total per branch for one reader. `statusOf` gets the concept (knowledge is stored per concept). */
+export function branchProgress<C extends { branchKey: string }>(
   branches: Branch[],
-  concepts: { branchKey: string; topicKey: string }[],
-  statusOf: (topicKey: string) => KnowledgeStatus | null,
+  concepts: C[],
+  statusOf: (concept: C) => KnowledgeStatus | null,
 ): BranchProgress[] {
   const rows = (branches.length ? branches : [OTHER_BRANCH]).map((b) => ({ ...b, known: 0, learning: 0, total: 0 }))
   const byKey = new Map(rows.map((r) => [r.key, r]))
   for (const c of concepts) {
     const row = byKey.get(c.branchKey) ?? byKey.get(OTHER_BRANCH.key) ?? rows[0]
     row.total++
-    const s = statusOf(c.topicKey)
+    const s = statusOf(c)
     if (s === 'known') row.known++
     else if (s === 'learning') row.learning++
   }
   return rows
 }
 
-export function paperProgress(concepts: { topicKey: string }[], statusOf: (topicKey: string) => KnowledgeStatus | null) {
+export function paperProgress<C>(concepts: C[], statusOf: (concept: C) => KnowledgeStatus | null) {
   const total = concepts.length
-  const known = concepts.filter((c) => statusOf(c.topicKey) === 'known').length
+  const known = concepts.filter((c) => statusOf(c) === 'known').length
   return { known, total, ratio: total ? known / total : 0 }
 }

@@ -27,7 +27,7 @@ const concepts = [
   c('multihead', 'arch', 3, 5, ['scaled']),
 ]
 
-const statuses = (m: Record<string, KnowledgeStatus>) => (topicKey: string) => m[topicKey] ?? null
+const statuses = (m: Record<string, KnowledgeStatus>) => (concept: SeqConcept) => m[concept.topicKey] ?? null
 
 describe('recommendedSequence', () => {
   it('moves a branch after the branches it depends on', () => {

@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils'
 import { Button } from './ui'
 import { AddButton } from './AddDialog'
 import { CloseIcon, MarkIcon, MenuIcon } from './icons'
-import { useKnowledge, useRoadmaps } from '../hooks/useReader'
+import { useConceptKnowledge, useRoadmaps } from '../hooks/useReader'
 import { useWorkspaces } from '../hooks/useWorkspaces'
 import { useAllowance } from '../hooks/useAllowance'
 import { arxivSlug } from '../lib/arxiv'
@@ -40,11 +40,11 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { user } = useAuthProfileReady({ requireUser: true })
   const workspaces = useWorkspaces()
   const roadmaps = useRoadmaps()
-  const knowledge = useKnowledge()
+  const knowledge = useConceptKnowledge()
   const { allowance } = useAllowance()
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const knownCount = knowledge.rows.filter((r) => r.data.status === 'known').length
+  const knownCount = knowledge.rows.filter((r) => r.data.status === 'known' && !r.data.stale).length
   const a = allowance?.analyze
 
   const itemClass = ({ isActive }: { isActive: boolean }) =>
@@ -108,7 +108,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <NavLink to="/knowledge" onClick={onNavigate} className="flex items-center justify-between rounded hover:text-foreground" data-testid="sidebar-knowledge">
           <span>Knowledge</span>
           <span className="tabular-nums">
-            <b className="font-semibold text-foreground">{knownCount}</b> known
+            <b className="font-semibold text-foreground">{knownCount}</b> checked
           </span>
         </NavLink>
         <div className="flex items-center justify-between" data-testid="sidebar-allowance" data-remaining={a?.remaining ?? ""} title="New papers you can start in a rolling 24 hours. Papers someone already analyzed are free.">

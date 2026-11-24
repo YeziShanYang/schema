@@ -1,13 +1,14 @@
 /**
- * Per-reader state hooks: the knowledge profile (one row per topic) and the
- * papers this reader has opened (one roadmap row per paper). Both collections
- * are own-only, so these queries return just the signed-in reader's rows.
+ * Per-reader state hooks: the reader's checked concepts (one row per
+ * concept), their profile topics (one row per topic), and the papers they
+ * have opened (one roadmap row per paper). All three collections are
+ * own-only, so these queries return just the signed-in reader's rows.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth, useMutations, useQuery } from 'deepspace'
 import type { RecordData } from 'deepspace'
-import type { KnowledgeData, KnowledgeSource, KnowledgeStatus, RoadmapData, RoadmapStatus, TopicData } from '../types'
+import type { ConceptKnowledgeData, ConceptKnowledgeSource, KnowledgeData, KnowledgeSource, KnowledgeStatus, RoadmapData, RoadmapStatus, TopicData } from '../types'
 
 export function useTopics() {
   const { records, status } = useQuery<TopicData>('topics', { limit: 5000 })
@@ -19,105 +20,85 @@ export function useTopics() {
   return { topics: records, byKey, status }
 }
 
-export interface KnowledgeApi {
-  ready: boolean
-  status: 'loading' | 'ready' | 'error'
-  rows: RecordData<KnowledgeData>[]
-  byTopic: Map<string, RecordData<KnowledgeData>>
-  statusOf: (topicKey: string) => KnowledgeStatus | null
-  /** True while a write for this topic is in flight; its control should be disabled. */
-  isPending: (topicKey: string) => boolean
-  set: (
-    topicKey: string,
-    status: KnowledgeStatus,
-    source: KnowledgeSource,
-    from?: { paperId?: string; arxivId?: string },
-  ) => Promise<void>
-  clear: (topicKey: string) => Promise<void>
-}
-
-type Override = { status: KnowledgeStatus | null }
+type Shown = 'known' | null
 
 /**
- * Writes are serialized per topic. A topic's writes run one after another on
- * a promise chain that carries the row id, so a second click inside the
- * round trip of the first becomes an update of the row the first created
- * instead of a second create (which uniqueOn would refuse). The new status
- * shows at once through a local override until the chain settles.
+ * Rows of an own-only collection keyed by one field, with writes serialized
+ * per key. A key's writes run one after another on a promise chain that
+ * carries the row id, so a second click inside the round trip of the first
+ * becomes an update of the row the first created instead of a second create
+ * (which uniqueOn would refuse). The new state shows at once through a local
+ * override until the chain settles.
  */
-export function useKnowledge(): KnowledgeApi {
+function useKeyedRows<T extends { userId: string; status: string }>(collection: string, keyOf: (d: T) => string) {
   const { userId, isSignedIn } = useAuth()
-  const { records, status } = useQuery<KnowledgeData>('knowledge', { limit: 5000 })
-  const { ready, createConfirmed, putConfirmed, removeConfirmed } = useMutations<KnowledgeData>('knowledge')
-  const rows = isSignedIn ? records : []
+  const { records, status } = useQuery<T>(collection, { limit: 5000 })
+  const { ready, createConfirmed, putConfirmed, removeConfirmed } = useMutations<T>(collection)
+  const rows = useMemo(() => (isSignedIn ? records : []), [isSignedIn, records])
 
-  const byTopic = useMemo(() => {
-    const m = new Map<string, RecordData<KnowledgeData>>()
-    for (const r of rows) m.set(r.data.topicKey, r)
+  const byKey = useMemo(() => {
+    const m = new Map<string, RecordData<T>>()
+    for (const r of rows) m.set(keyOf(r.data), r)
     return m
-  }, [rows])
-  const byTopicRef = useRef(byTopic)
-  byTopicRef.current = byTopic
+  }, [rows, keyOf])
+  const byKeyRef = useRef(byKey)
+  byKeyRef.current = byKey
 
-  // topicKey -> tail of that topic's write chain, resolving to the row id (or null once removed).
+  // key -> tail of that key's write chain, resolving to the row id (or null once removed).
   const chains = useRef(new Map<string, Promise<string | null>>())
-  // topicKey -> the row id our last write left (null after a removal), kept until the query shows the same,
+  // key -> the row id our last write left (null after a removal), kept until the query shows the same,
   // so a write right after a removal never reuses the removed row's id.
   const lastIds = useRef(new Map<string, string | null>())
-  const [overrides, setOverrides] = useState<Map<string, Override>>(() => new Map())
+  const [overrides, setOverrides] = useState<Map<string, Shown>>(() => new Map())
   useEffect(() => {
-    for (const [k, id] of lastIds.current) if ((byTopic.get(k)?.recordId ?? null) === id) lastIds.current.delete(k)
-  }, [byTopic])
+    for (const [k, id] of lastIds.current) if ((byKey.get(k)?.recordId ?? null) === id) lastIds.current.delete(k)
+  }, [byKey])
 
-  const enqueue = useCallback(
-    (topicKey: string, shown: KnowledgeStatus | null, write: (id: string | null) => Promise<string | null>) => {
-      setOverrides((m) => new Map(m).set(topicKey, { status: shown }))
-      const currentId = () => (lastIds.current.has(topicKey) ? lastIds.current.get(topicKey)! : byTopicRef.current.get(topicKey)?.recordId ?? null)
-      const start = chains.current.get(topicKey) ?? Promise.resolve(currentId())
-      const tail = start
-        .then(write)
-        .then((id) => {
-          lastIds.current.set(topicKey, id)
-          return id
-        })
-        .catch((e) => {
-          console.warn(`[knowledge] write for ${topicKey} failed: ${e instanceof Error ? e.message : String(e)}`)
-          return currentId()
-        })
-      chains.current.set(topicKey, tail)
-      void tail.finally(() => {
-        if (chains.current.get(topicKey) !== tail) return
-        chains.current.delete(topicKey)
-        setOverrides((m) => {
-          const n = new Map(m)
-          n.delete(topicKey)
-          return n
-        })
+  const enqueue = useCallback((key: string, shown: Shown, write: (id: string | null) => Promise<string | null>) => {
+    setOverrides((m) => new Map(m).set(key, shown))
+    const currentId = () => (lastIds.current.has(key) ? lastIds.current.get(key)! : byKeyRef.current.get(key)?.recordId ?? null)
+    const start = chains.current.get(key) ?? Promise.resolve(currentId())
+    const tail = start
+      .then(write)
+      .then((id) => {
+        lastIds.current.set(key, id)
+        return id
       })
-      return tail.then(() => undefined)
-    },
-    [],
-  )
+      .catch((e) => {
+        console.warn(`[${collection}] write for ${key} failed: ${e instanceof Error ? e.message : String(e)}`)
+        return currentId()
+      })
+    chains.current.set(key, tail)
+    void tail.finally(() => {
+      if (chains.current.get(key) !== tail) return
+      chains.current.delete(key)
+      setOverrides((m) => {
+        const n = new Map(m)
+        n.delete(key)
+        return n
+      })
+    })
+    return tail.then(() => undefined)
+  }, [collection])
 
-  const set = useCallback<KnowledgeApi['set']>(
-    async (topicKey, next, source, from) => {
+  /** Create or update the key's row with `data` (the create also gets userId and `create`). */
+  const upsert = useCallback(
+    async (key: string, data: Partial<T>, create: Partial<T>) => {
       if (!userId) return
-      await enqueue(topicKey, next, async (id) => {
-        const row = byTopicRef.current.get(topicKey)
-        const data = { status: next, source, paperId: from?.paperId ?? row?.data.paperId ?? '', arxivId: from?.arxivId ?? row?.data.arxivId ?? '' }
+      await enqueue(key, 'known', async (id) => {
         if (id) {
-          await putConfirmed(id, data)
+          await putConfirmed(id, data as T)
           return id
         }
-        return createConfirmed({ userId, topicKey, ...data })
+        return createConfirmed({ userId, ...create, ...data } as T)
       })
     },
     [createConfirmed, enqueue, putConfirmed, userId],
   )
 
-  const clear = useCallback(
-    async (topicKey: string) => {
-      await enqueue(topicKey, null, async (id) => {
+  const remove = useCallback(
+    async (key: string) => {
+      await enqueue(key, null, async (id) => {
         if (id) await removeConfirmed(id)
         return null
       })
@@ -125,19 +106,92 @@ export function useKnowledge(): KnowledgeApi {
     [enqueue, removeConfirmed],
   )
 
+  // Two states in the UI: rows stored as "learning" by earlier versions read as not known.
   const statusOf = useCallback(
-    (topicKey: string) => {
-      // Two states in the UI: rows stored as "learning" read as not known.
-      const o = overrides.get(topicKey)
-      const s = o ? o.status : byTopic.get(topicKey)?.data.status ?? null
+    (key: string): KnowledgeStatus | null => {
+      const s = overrides.has(key) ? overrides.get(key)! : byKey.get(key)?.data.status ?? null
       return s === 'known' ? 'known' : null
     },
-    [byTopic, overrides],
+    [byKey, overrides],
   )
-  const isPending = useCallback((topicKey: string) => overrides.has(topicKey), [overrides])
+  const isPending = useCallback((key: string) => overrides.has(key), [overrides])
 
   // Writes wait for the first query result so an upsert never creates a duplicate row.
-  return { ready: ready && !!userId && status === 'ready', status, rows, byTopic, statusOf, isPending, set, clear }
+  return { ready: ready && !!userId && status === 'ready', status, rows, byKey, statusOf, isPending, upsert, remove }
+}
+
+/** Topics the reader declared known on the knowledge page. They only produce hints; they never check a concept. */
+export interface ProfileApi {
+  ready: boolean
+  status: 'loading' | 'ready' | 'error'
+  rows: RecordData<KnowledgeData>[]
+  byTopic: Map<string, RecordData<KnowledgeData>>
+  statusOf: (topicKey: string) => KnowledgeStatus | null
+  /** True while a write for this topic is in flight; its control should be disabled. */
+  isPending: (topicKey: string) => boolean
+  set: (topicKey: string, source?: KnowledgeSource) => Promise<void>
+  clear: (topicKey: string) => Promise<void>
+}
+
+const topicOf = (d: KnowledgeData) => d.topicKey
+
+export function useProfile(): ProfileApi {
+  const k = useKeyedRows<KnowledgeData>('knowledge', topicOf)
+  const { upsert, remove } = k
+  const set = useCallback<ProfileApi['set']>(
+    (topicKey, source = 'self') => upsert(topicKey, { status: 'known', source }, { topicKey, paperId: '', arxivId: '' }),
+    [upsert],
+  )
+  return { ready: k.ready, status: k.status, rows: k.rows, byTopic: k.byKey, statusOf: k.statusOf, isPending: k.isPending, set, clear: remove }
+}
+
+/** What a checkmark records about its concept, for hints and the knowledge page. */
+export interface ConceptRef {
+  conceptId: string
+  paperId: string
+  arxivId: string
+  conceptName: string
+  topicKey: string
+}
+
+/** Per-concept checkmarks. Checking a concept never checks anything in another paper. */
+export interface ConceptKnowledgeApi {
+  ready: boolean
+  status: 'loading' | 'ready' | 'error'
+  rows: RecordData<ConceptKnowledgeData>[]
+  byConcept: Map<string, RecordData<ConceptKnowledgeData>>
+  /** By the concept's record id. */
+  statusOf: (conceptId: string) => KnowledgeStatus | null
+  isPending: (conceptId: string) => boolean
+  set: (concept: ConceptRef, source: ConceptKnowledgeSource) => Promise<void>
+  clear: (conceptId: string) => Promise<void>
+}
+
+const conceptOf = (d: ConceptKnowledgeData) => d.conceptId
+
+export function useConceptKnowledge(): ConceptKnowledgeApi {
+  const k = useKeyedRows<ConceptKnowledgeData>('concept_knowledge', conceptOf)
+  const { upsert, remove } = k
+  const set = useCallback<ConceptKnowledgeApi['set']>(
+    (c, source) =>
+      upsert(
+        c.conceptId,
+        { status: 'known', source, conceptName: c.conceptName, topicKey: c.topicKey, paperId: c.paperId, arxivId: c.arxivId, stale: false },
+        { conceptId: c.conceptId },
+      ),
+    [upsert],
+  )
+  return { ready: k.ready, status: k.status, rows: k.rows, byConcept: k.byKey, statusOf: k.statusOf, isPending: k.isPending, set, clear: remove }
+}
+
+/** Checked concepts per paper id, without stale rows (left by a re-analysis with no matching concept). */
+export function checkedPerPaper(rows: RecordData<ConceptKnowledgeData>[]): Map<string, number> {
+  const m = new Map<string, number>()
+  for (const r of rows) {
+    if (r.data.status !== 'known' || r.data.stale) continue
+    m.set(r.data.paperId, (m.get(r.data.paperId) ?? 0) + 1)
+  }
+  return m
 }
 
 export interface RoadmapsApi {

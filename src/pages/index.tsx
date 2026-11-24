@@ -26,9 +26,9 @@ import { HeroSheet } from '../components/HeroSheet'
 const STEPS = [
   ['Pick a paper', 'Paste an arXiv link, or create a workspace for a subject and get three recommended papers.'],
   ['See its branches', 'The paper is read once and its concepts are grouped into three to six branches, ordered so prerequisites come first.'],
-  ['Mark what you know', 'Each concept is tied to the passage where the paper uses it. What you mark is saved to your knowledge profile and carries over to the next paper.'],
-  ['Learn the rest', 'Open a branch to load explainer links found on the web, ask for an AI explanation with a worked example, or answer a check question.'],
-  ['Finish', 'Mark the paper finished, optionally marking its remaining topics known, and move to the next one.'],
+  ['Mark what you know', 'Each concept is tied to the passage where the paper uses it and has its own checkmark. A later paper that uses an idea you checked says so on that concept.'],
+  ['Learn the rest', 'Open a branch to load explainer links found on the web, or ask for an AI explanation with a worked example.'],
+  ['Finish', 'Mark the paper finished, optionally checking its remaining concepts, and move to the next one.'],
 ] as const
 
 const WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten']
@@ -84,7 +84,7 @@ export default function Landing() {
                   See every idea a research paper relies on, and learn the ones you're missing.
                 </h1>
                 <p className="enter mt-4 max-w-2xl text-[15px] leading-relaxed text-muted-foreground text-pretty" style={{ ['--i' as string]: 2 }}>
-                  Schema reads an arXiv paper once and lists the concepts it builds on, from foundations to the paper's own ideas, grouped into branches and ordered by prerequisite. You mark what you already know, and the rest comes with the passage that uses it, explainer links and an optional AI explanation. Your knowledge carries over from paper to paper.
+                  Schema reads an arXiv paper once and lists the concepts it builds on, from foundations to the paper's own ideas, grouped into branches and ordered by prerequisite. You check off what you already know, and the rest comes with the passage that uses it, explainer links and an optional AI explanation. When a later paper uses an idea you checked, it points that out.
                 </p>
                 <div className="enter mt-7 flex flex-wrap gap-2" style={{ ['--i' as string]: 3 }}>
                   <Link to={demoHref} className="press inline-flex h-10 items-center rounded bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-[color-mix(in_oklab,var(--color-primary)_88%,black)]" data-testid="landing-demo">
@@ -194,7 +194,7 @@ export default function Landing() {
               )}
             </BranchPanel>
             <p className="mt-3 text-[13px] text-muted-foreground">
-              <Link to={demoHref} className="text-primary hover:underline">Open this paper</Link> to try marking concepts, the recommended order and the check questions, no sign-in needed.{' '}
+              <Link to={demoHref} className="text-primary hover:underline">Open this paper</Link> to try checking concepts and following the recommended order, no sign-in needed.{' '}
               {explained > 0 && (
                 <>
                   {countWord(explained)} {explained === 1 ? 'concept has' : 'concepts have'} a saved AI explanation.{' '}
@@ -225,7 +225,7 @@ export default function Landing() {
               <li>arXiv papers only, and the analysis works best on papers written in English.</li>
               <li>A paper nobody has analyzed takes about one to two minutes. One already analyzed opens right away.</li>
               <li>Each account can start {DAILY_PAPER_CAP} new papers a day. A failed analysis does not count.</li>
-              <li>Concepts and quotes come from a language model reading the extracted PDF text. Quotes are checked against the paper and hidden when they do not match.</li>
+              <li>Concepts and quotes come from a language model reading the paper's text, taken from the arXiv HTML version when there is one and from the PDF otherwise. Quotes are checked against the paper and hidden when they do not match.</li>
             </ul>
           </section>
         </main>

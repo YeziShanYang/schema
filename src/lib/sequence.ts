@@ -12,6 +12,9 @@
  *   model's order.
  * - Next up is the first concept that is not known and whose prerequisites
  *   are all known; failing that, the first concept not known.
+ *
+ * `statusOf` gets the concept itself: knowledge is stored per concept, so the
+ * caller looks it up by the concept's record id.
  */
 
 import type { KnowledgeStatus } from '../types'
@@ -29,6 +32,8 @@ export interface SeqConcept {
   branchKey: string
   topicKey: string
   dependsOn: string[]
+  /** The concept's record id, which per-concept knowledge is keyed by. */
+  id?: string
 }
 
 export type StepState = 'done' | 'current' | 'upcoming'
@@ -58,7 +63,7 @@ export interface Sequence<C extends SeqConcept = SeqConcept> {
 export function recommendedSequence<C extends SeqConcept>(
   branches: SeqBranch[],
   concepts: C[],
-  statusOf: (topicKey: string) => KnowledgeStatus | null,
+  statusOf: (concept: C) => KnowledgeStatus | null,
 ): Sequence<C> {
   const modelRank = new Map(branches.map((b, i) => [b.key, i]))
   const byBranch = new Map<string, C[]>()
@@ -96,12 +101,12 @@ export function recommendedSequence<C extends SeqConcept>(
   )
 
   const byKey = new Map(concepts.map((c) => [c.key, c]))
-  const isKnown = (c: C) => statusOf(c.topicKey) === 'known'
+  const isKnown = (c: C) => statusOf(c) === 'known'
   const ready = (c: C) =>
     (c.dependsOn ?? []).every((d) => {
       const dep = byKey.get(d)
       if (!dep) return true
-      return statusOf(dep.topicKey) === 'known'
+      return statusOf(dep) === 'known'
     })
 
   const nextUp = ordered.find((c) => !isKnown(c) && ready(c)) ?? ordered.find((c) => !isKnown(c)) ?? null

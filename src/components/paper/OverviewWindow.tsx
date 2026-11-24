@@ -16,12 +16,15 @@ import { cn } from '@/lib/utils'
 import { Button, Checkbox, Label } from '@/components/ui'
 import { BranchPanel } from '../graph/BranchPanel'
 import { ConceptName, MathText } from '../MathText'
+import { CheckIcon } from '../icons'
 import type { PaperOverview } from '../../types'
 
 export interface OverviewConcept {
   key: string
   name: string
   known: boolean
+  /** Muted note for a concept not checked here: "In your profile" or "You checked this in …". */
+  hint?: string
 }
 
 /** The sentence or chip under a mouse pointer or keyboard focus. Touch skips hover, so a tap never leaves a highlight stuck on. */
@@ -262,7 +265,7 @@ export function OverviewWindow({
         data-concept-key={key}
         data-status={c.known ? 'known' : 'unknown'}
         data-hot={isHot ? 'true' : undefined}
-        aria-label={`${c.name}, ${c.known ? 'known' : 'not known yet'}. Open it in its branch`}
+        aria-label={`${c.name}, ${c.known ? 'known' : 'not known yet'}${!c.known && c.hint ? ` (${c.hint})` : ''}. Open it in its branch`}
         title={c.name}
         className={cn(
           'overview-chip press flex cursor-pointer items-center gap-2 rounded border px-2.5 py-1.5 text-left text-[13px] leading-snug',
@@ -275,7 +278,15 @@ export function OverviewWindow({
           aria-hidden="true"
           className={cn('size-2 shrink-0 rounded-full', c.known ? 'bg-known' : 'border-[1.5px] border-faint bg-card')}
         />
-        <ConceptName name={c.name} className="line-clamp-2 min-w-0" />
+        <span className="grid min-w-0">
+          <ConceptName name={c.name} className="line-clamp-2 min-w-0" />
+          {!c.known && c.hint && (
+            <span className="mt-0.5 flex min-w-0 items-center gap-1 text-[11.5px] text-muted-foreground" data-testid="overview-chip-hint">
+              <CheckIcon size={11} className="shrink-0 text-faint" aria-hidden="true" />
+              <span className="truncate">{c.hint}</span>
+            </span>
+          )}
+        </span>
       </button>
     )
   }

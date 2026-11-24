@@ -7,7 +7,7 @@
 
 import type { ActionTools } from 'deepspace/worker'
 import type { Env } from '../../worker'
-import type { Envelope, KnowledgeData, Suggestion, TopicData, WorkspaceData, WorkspacePaperData } from '../types'
+import type { ConceptKnowledgeData, Envelope, KnowledgeData, Suggestion, TopicData, WorkspaceData, WorkspacePaperData } from '../types'
 import { parseArxivId } from '../lib/arxiv'
 import { asString } from '../lib/json'
 import { lookupArxiv } from './pipeline/arxiv-meta'
@@ -60,15 +60,22 @@ export async function recommendForWorkspace(
   mode: RecommendMode = 'next',
 ): Promise<RecommendOutcome> {
   const ws = workspace.data
-  const known = await tools.query('knowledge', { where: { userId, status: 'known' }, limit: 1000 })
-  const topicsRes = await tools.query('topics', { limit: 5000 })
+  // What the reader knows: their profile topics plus the topics of the concepts they checked.
+  const [profile, checked, topicsRes] = await Promise.all([
+    tools.query('knowledge', { where: { userId, status: 'known' }, limit: 1000 }),
+    tools.query('concept_knowledge', { where: { userId, status: 'known' }, limit: 2000 }),
+    tools.query('topics', { limit: 5000 }),
+  ])
   const names = new Map<string, string>()
   if (topicsRes.success) {
     for (const t of topicsRes.data.records as unknown as Envelope<TopicData>[]) names.set(t.data.key, t.data.name)
   }
-  const knownTopics = known.success
-    ? (known.data.records as unknown as Envelope<KnowledgeData>[]).map((k) => names.get(k.data.topicKey) ?? k.data.topicKey)
-    : []
+  const knownKeys = new Set<string>()
+  if (profile.success) for (const k of profile.data.records as unknown as Envelope<KnowledgeData>[]) knownKeys.add(k.data.topicKey)
+  if (checked.success) {
+    for (const k of checked.data.records as unknown as Envelope<ConceptKnowledgeData>[]) if (!k.data.stale && k.data.topicKey) knownKeys.add(k.data.topicKey)
+  }
+  const knownTopics = [...knownKeys].filter(Boolean).map((key) => names.get(key) ?? key)
 
   const fixtures = fixtureWorkspace(env, ws.name)
   const client = createPipelineClient(env, fixtures)

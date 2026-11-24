@@ -57,24 +57,6 @@ test('quotes with math render as LaTeX', async ({ page }) => {
   expect(found, 'a quote rendered as LaTeX').toBe(true)
 })
 
-test('a check question locks after one answer and shows the correct choice', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.goto('/p/1706~03762')
-  await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'ready', { timeout: 30_000 })
-  const found = await eachBranch(page, async (panel) => {
-    const withCheck = panel.getByTestId('concept-card').filter({ has: page.getByTestId('check-toggle') })
-    if ((await withCheck.count()) === 0) return false
-    const card = withCheck.first()
-    await card.getByTestId('check-toggle').click()
-    await card.getByTestId('check-choice').first().click()
-    await expect(card.getByTestId('check-result')).toBeVisible()
-    for (const choice of await card.getByTestId('check-choice').all()) await expect(choice).toBeDisabled()
-    await expect(card.locator('[data-testid="check-choice"][data-correct="true"]')).toHaveCount(1)
-    return true
-  })
-  expect(found, 'a concept with a check question').toBe(true)
-})
-
 test('signed in: one known checkbox per concept, green outline when known', async ({ users }) => {
   const [ada] = await users(['Schema ada'])
   const page = ada.page

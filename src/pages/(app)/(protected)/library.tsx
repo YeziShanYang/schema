@@ -9,7 +9,7 @@ import { useQuery } from 'deepspace'
 import { Button } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { Chip, Meter, PageHeader } from '../../../components/blueprint'
-import { useKnowledge, useRoadmaps } from '../../../hooks/useReader'
+import { checkedPerPaper, useConceptKnowledge, useRoadmaps } from '../../../hooks/useReader'
 import { arxivSlug } from '../../../lib/arxiv'
 import type { PaperData } from '../../../types'
 
@@ -17,7 +17,8 @@ type Filter = 'all' | 'reading' | 'finished'
 
 export default function LibraryPage() {
   const roadmaps = useRoadmaps()
-  const knowledge = useKnowledge()
+  const knowledge = useConceptKnowledge()
+  const checked = useMemo(() => checkedPerPaper(knowledge.rows), [knowledge.rows])
   const papers = useQuery<PaperData>('papers', { limit: 2000 })
   const paperById = useMemo(() => new Map(papers.records.map((p) => [p.recordId, p])), [papers.records])
   const [filter, setFilter] = useState<Filter>('all')
@@ -47,9 +48,8 @@ export default function LibraryPage() {
           <ul className="surface divide-y divide-border">
             {rows.map((r) => {
               const paper = paperById.get(r.data.paperId)
-              const keys = paper?.data.topicKeys ?? []
-              const known = keys.filter((k) => knowledge.statusOf(k) === 'known').length
-              const total = keys.length || paper?.data.conceptCount || 0
+              const total = paper?.data.conceptCount || 0
+              const known = Math.min(checked.get(r.data.paperId) ?? 0, total)
               return (
                 <li key={r.recordId} className="grid gap-2 px-4 py-3 md:grid-cols-[minmax(0,1fr)_180px_auto] md:items-center" data-testid="library-row" data-status={r.data.status}>
                   <div className="min-w-0">
@@ -61,7 +61,7 @@ export default function LibraryPage() {
                     </div>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    <div className="mb-1 flex justify-between tabular-nums"><span>Topics known</span><b className="font-semibold text-foreground">{known} / {total}</b></div>
+                    <div className="mb-1 flex justify-between tabular-nums"><span>Concepts known</span><b className="font-semibold text-foreground">{known} / {total}</b></div>
                     <Meter value={total ? known / total : 0} />
                   </div>
                   <div>

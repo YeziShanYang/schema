@@ -18,7 +18,7 @@ import { FloatingGraph } from '../../../../../components/graph/FloatingGraph'
 import { CandidateNode, CenterCard, PaperNode } from '../../../../../components/graph/nodes'
 import { useWorkspaceGraph } from '../../../../../hooks/useWorkspaceGraph'
 import { useAllowance } from '../../../../../hooks/useAllowance'
-import { useKnowledge, useRoadmaps } from '../../../../../hooks/useReader'
+import { useConceptKnowledge, useRoadmaps } from '../../../../../hooks/useReader'
 import { actions } from '../../../../../lib/actions-client'
 import { arxivSlug } from '../../../../../lib/arxiv'
 import { recommendedSequence } from '../../../../../lib/sequence'
@@ -30,7 +30,7 @@ export default function WorkspacePage() {
   const g = useWorkspaceGraph(id)
   const ws = g.workspace
   const roadmaps = useRoadmaps()
-  const knowledge = useKnowledge()
+  const knowledge = useConceptKnowledge()
   const { allowance } = useAllowance()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -74,8 +74,8 @@ export default function WorkspacePage() {
     if (!continuePaper?.paper) return null
     return recommendedSequence(
       continuePaper.paper.data.branches ?? [],
-      contConcepts.records.map((c) => ({ ...c.data, dependsOn: c.data.dependsOn ?? [] })),
-      knowledge.statusOf,
+      contConcepts.records.map((c) => ({ ...c.data, dependsOn: c.data.dependsOn ?? [], id: c.recordId })),
+      (c) => knowledge.statusOf(c.id),
     ).nextUp
   }, [continuePaper, contConcepts.records, knowledge.statusOf])
 

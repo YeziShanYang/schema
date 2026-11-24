@@ -45,7 +45,7 @@ describe('branch progress', () => {
     { branchKey: 'a', topicKey: 't2' },
     { branchKey: 'b', topicKey: 't3' },
   ]
-  const status = (k: string) => (k === 't1' ? 'known' : k === 't3' ? 'learning' : null) as 'known' | 'learning' | null
+  const status = ({ topicKey: k }: { topicKey: string }) => (k === 't1' ? 'known' : k === 't3' ? 'learning' : null) as 'known' | 'learning' | null
 
   it('counts known and learning per branch', () => {
     expect(branchProgress(branches, concepts, status)).toEqual([

@@ -75,6 +75,6 @@ test('fresh account: Add workspace, starter papers, add paper, next up, finish, 
   await expect(page.locator('[data-testid="library-row"]').filter({ hasText: 'arXiv 1706.03762' })).toHaveAttribute('data-status', 'reading')
 
   await page.goto('/knowledge')
-  await expect(page.getByTestId('knowledge-known').getByTestId('knowledge-item').first()).toBeVisible({ timeout: 20_000 })
-  console.log(`[finish] known topics after finishing: ${await page.getByTestId('knowledge-known').getByTestId('knowledge-item').count()}`)
+  await expect(page.getByTestId('checked-concepts').getByTestId('checked-concept').first()).toBeVisible({ timeout: 20_000 })
+  console.log(`[finish] checked concepts after finishing: ${await page.getByTestId('checked-concepts').getByTestId('checked-concept').count()}`)
 })

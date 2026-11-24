@@ -1,12 +1,12 @@
 /**
- * One-time prompt for a signed-in reader with an empty knowledge profile:
- * points to the starter topics so new papers can skip what they know.
- * Dismissal is kept in localStorage (frontend only).
+ * One-time prompt for a signed-in reader who has checked nothing and has an
+ * empty profile: points to the starter topics, which papers then point out
+ * on the concepts that use them. Dismissal is kept in localStorage (frontend only).
  */
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useKnowledge } from '../hooks/useReader'
+import { useConceptKnowledge, useProfile } from '../hooks/useReader'
 import { CloseIcon } from './icons'
 
 const KEY = 'schema:first-run-dismissed'
@@ -20,15 +20,16 @@ function dismissed(): boolean {
 }
 
 export function FirstRunPrompt({ className }: { className?: string }) {
-  const knowledge = useKnowledge()
+  const profile = useProfile()
+  const concepts = useConceptKnowledge()
   const [hidden, setHidden] = useState(dismissed)
-  if (hidden || knowledge.status !== 'ready' || knowledge.rows.length > 0) return null
+  if (hidden || profile.status !== 'ready' || concepts.status !== 'ready' || profile.rows.length > 0 || concepts.rows.length > 0) return null
   return (
     <div className={'flex items-start justify-between gap-3 rounded-lg border border-primary bg-accent-soft p-3.5 ' + (className ?? '')} data-testid="first-run" role="note">
       <div className="text-sm">
         <p className="font-semibold">Tell Schema what you already know</p>
         <p className="mt-0.5 text-muted-foreground">
-          Tick the topics you know on the <Link to="/knowledge#starter" className="text-primary hover:underline">knowledge page</Link>, and every paper will mark them as known.
+          Tick the topics you know on the <Link to="/knowledge#starter" className="text-primary hover:underline">knowledge page</Link>. Papers that use them will say so on the concept, and you check it off with one click.
         </p>
       </div>
       <button

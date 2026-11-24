@@ -32,6 +32,7 @@ import { ConceptCard } from './ConceptCard'
 import { OverviewWindow, type OverviewConcept } from './OverviewWindow'
 import { SequenceStrip } from './SequenceStrip'
 import { ConceptName, MathText } from '../MathText'
+import { hintText } from '../../lib/hints'
 import { BookIcon } from '../icons'
 
 const STAGES = ['queued', 'text', 'concepts', 'overview', 'explain', 'ready'] as const
@@ -214,10 +215,22 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
     setOverviewSettled(true)
   }, [paper, ov.overview, overviewKnown, autoOpen, markAutoOpened, openOverview])
 
-  const { statusOf } = knowledge
+  const { statusOf, hintFor } = knowledge
+  const titleOf = useCallback((paperId: string) => roadmaps.byPaper.get(paperId)?.data.title ?? '', [roadmaps.byPaper])
+  const hintOf = useCallback(
+    (c: { id?: string; name: string; topicKey: string }) =>
+      paper ? hintFor({ conceptId: c.id ?? '', paperId: paper.recordId, name: c.name, topicKey: c.topicKey }) : null,
+    [hintFor, paper],
+  )
   const overviewConcepts = useMemo(
-    () => new Map<string, OverviewConcept>(p.sequence.concepts.map((c) => [c.key, { key: c.key, name: c.name, known: statusOf(c.topicKey) === 'known' }])),
-    [p.sequence, statusOf],
+    () =>
+      new Map<string, OverviewConcept>(
+        p.sequence.concepts.map((c) => {
+          const hint = hintOf(c)
+          return [c.key, { key: c.key, name: c.name, known: statusOf(c.id ?? '') === 'known', hint: hint ? hintText(hint, hint.kind === 'checked' ? titleOf(hint.paperId) : undefined) : undefined }]
+        }),
+      ),
+    [p.sequence, statusOf, hintOf, titleOf],
   )
 
   const branch = useMemo(() => p.branches.find((b) => b.key === openKey) ?? null, [p.branches, openKey])
@@ -540,7 +553,9 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
               .filter((sc) => sc.branchKey === branch.key)
               .map((sc) => p.conceptByKey.get(sc.key)!)
               .filter(Boolean)
-              .map((c) => (
+              .map((c) => {
+              const hint = hintOf({ id: c.recordId, name: c.data.name, topicKey: c.data.topicKey })
+              return (
               <ConceptCard
                 key={c.recordId}
                 stepIndex={seq.stepInBranch.get(c.data.key)}
@@ -551,14 +566,17 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
                 prerequisites={(c.data.dependsOn ?? []).map((k) => ({ key: k, name: p.conceptByKey.get(k)?.data.name ?? k }))}
                 onOpenConcept={openConceptByKey}
                 onSeeInOverview={ov.overview ? () => openOverview(c.data.key, branchButtons.current.get(c.data.branchKey) ?? null) : undefined}
-                status={knowledge.statusOf(c.data.topicKey)}
+                status={knowledge.statusOf(c.recordId)}
                 knowledge={knowledge}
+                hint={hint}
+                hintTitle={hint?.kind === 'checked' ? titleOf(hint.paperId) : undefined}
                 signedIn={!!isSignedIn}
                 explainLeft={allowance?.explain.remaining}
                 linksState={linksState}
                 onSignIn={() => setShowAuth(true)}
               />
-            ))}
+              )
+            })}
           </ul>
         )}
       </BranchPanel>
@@ -596,7 +614,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
         </Modal.Header>
         <div className="flex items-center gap-2" data-testid="finish-panel">
           <Checkbox id="mark-rest" checked={markRest} onCheckedChange={setMarkRest} />
-          <Label htmlFor="mark-rest">Also mark the remaining topics in this paper as known</Label>
+          <Label htmlFor="mark-rest">Also check the remaining concepts in this paper</Label>
         </div>
         <Modal.Footer>
           <Button variant="ghost" onClick={() => setFinishOpen(false)}>Cancel</Button>

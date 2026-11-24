@@ -44,6 +44,39 @@ export const knowledgeSchema: CollectionSchema = {
   permissions: ownOnly,
 }
 
+/**
+ * Per-concept checkmarks: one row per (reader, concept). Checking a concept
+ * never checks anything in another paper. The concept's name and topic are
+ * copied in for hints and for the knowledge page, and so a re-analysis can
+ * move the row to the new concept with the same name (see
+ * src/lib/knowledge-remap.ts). The `knowledge` collection above now holds the
+ * reader's self-declared profile topics.
+ */
+export const conceptKnowledgeSchema: CollectionSchema = {
+  name: 'concept_knowledge',
+  columns: [
+    {
+      name: 'userId',
+      storage: 'text',
+      interpretation: 'plain',
+      required: true,
+      userBound: true,
+      immutable: true,
+    },
+    { name: 'conceptId', storage: 'text', interpretation: 'plain', required: true },
+    { name: 'paperId', storage: 'text', interpretation: 'plain' },
+    { name: 'arxivId', storage: 'text', interpretation: 'plain' },
+    { name: 'conceptName', storage: 'text', interpretation: 'plain' },
+    { name: 'topicKey', storage: 'text', interpretation: 'plain' },
+    { name: 'status', storage: 'text', interpretation: { kind: 'select', options: ['known'] } },
+    { name: 'source', storage: 'text', interpretation: { kind: 'select', options: ['self', 'finished'] } },
+    { name: 'stale', storage: 'number', interpretation: { kind: 'boolean' } },
+  ],
+  ownerField: 'userId',
+  uniqueOn: ['userId', 'conceptId'],
+  permissions: ownOnly,
+}
+
 export const roadmapsSchema: CollectionSchema = {
   name: 'roadmaps',
   columns: [
