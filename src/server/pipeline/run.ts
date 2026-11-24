@@ -55,6 +55,8 @@ export interface AnalyzeState {
   text: string
   writes: PendingWrite[]
   failures: number
+  /** True once any integration call has succeeded (and was billed); then a failure keeps the daily slot. */
+  spent?: boolean
 }
 
 const WRITES_PER_TICK = 20
@@ -86,7 +88,7 @@ export async function runAnalyzeTick(job: Job, jobCtx: JobContext, env: Env): Pr
 
   if (jobCtx.signal.aborted) {
     await updatePaper(ctx, paper.recordId, { status: 'failed', stage: 'failed', error: 'Analysis was canceled.' })
-    await refundAnalyze(ctx.records, paper.recordId)
+    if (!state.spent) await refundAnalyze(ctx.records, paper.recordId)
     return { canceled: true }
   }
 
@@ -98,7 +100,16 @@ export async function runAnalyzeTick(job: Job, jobCtx: JobContext, env: Env): Pr
     if (next.writes.length > 0) {
       await flushWrites(ctx, next)
     } else {
-      const client = createPipelineClient(env, fixturesAllowed(env, payload.arxivId), ctx)
+      const base = createPipelineClient(env, fixturesAllowed(env, payload.arxivId), ctx)
+      // Every successful integration call is billed, so from then on a failure keeps the slot.
+      const client: PipelineClient = {
+        ...base,
+        call: async (endpoint, body, hint) => {
+          const out = await base.call(endpoint, body, hint)
+          next.spent = true
+          return out
+        },
+      }
       const done = await runStep(next, { env, ctx, client, paper, jobCtx })
       if (done) return { ok: true, arxivId: payload.arxivId }
     }
@@ -109,15 +120,16 @@ export async function runAnalyzeTick(job: Job, jobCtx: JobContext, env: Env): Pr
     const message = errMsg(e)
     console.error(`[analyze] ${payload.arxivId} step=${state.step} failed: ${message}`)
     state.failures += 1
+    state.spent = state.spent || next.spent
     if (!(e instanceof PermanentError) && state.failures < 2) {
       await updatePaper(ctx, paper.recordId, { progressMessage: `Retrying after an error: ${message}` })
       jobCtx.continue(state, { afterMs: 3000 })
       return
     }
     await updatePaper(ctx, paper.recordId, { status: 'failed', stage: 'failed', error: message, progressMessage: '' })
-    // A failed analysis does not use up the requester's daily slot.
+    // The requester's daily slot is given back only if nothing was paid for yet.
     try {
-      await refundAnalyze(ctx.records, paper.recordId)
+      if (!state.spent) await refundAnalyze(ctx.records, paper.recordId)
     } catch (refundError) {
       console.error(`[analyze] refund failed for ${payload.arxivId}: ${errMsg(refundError)}`)
     }
@@ -375,12 +387,17 @@ async function stepConcepts(state: AnalyzeState, { ctx, client, paper }: StepCtx
  * without one and ensureOverview generates it when a reader opens the paper.
  */
 async function stepOverview(state: AnalyzeState, { ctx, client, paper }: StepCtx) {
-  const concepts = (await ctx.records.query('concepts', { where: { paperId: paper.recordId }, limit: 200 })) as Envelope<OverviewConcept>[]
+  const concepts = (await ctx.records.query('concepts', { where: { paperId: paper.recordId }, limit: 200 })) as Envelope<
+    OverviewConcept & { quoteVerified?: boolean }
+  >[]
   try {
-    const { overview, roles } = await generateOverview(client, paper.data, state.text, concepts.map((c) => c.data))
+    const input = concepts.map((c) => ({ ...c.data, quote: c.data.quoteVerified ? c.data.quote : '' }))
+    const { overview, roles, quoteDisplays } = await generateOverview(client, paper.data, state.text, input)
     for (const c of concepts) {
-      const role = roles[c.data.key]
-      if (role) state.writes.push({ op: 'update', collection: 'concepts', recordId: c.recordId, data: { plainRole: role } })
+      const data: Record<string, unknown> = {}
+      if (roles[c.data.key]) data.plainRole = roles[c.data.key]
+      if (quoteDisplays[c.data.key]) data.quoteDisplay = quoteDisplays[c.data.key]
+      if (Object.keys(data).length) state.writes.push({ op: 'update', collection: 'concepts', recordId: c.recordId, data })
     }
     await updatePaper(ctx, paper.recordId, { overview })
   } catch (e) {

@@ -1,7 +1,9 @@
 /**
  * Exports a trimmed, static snapshot of one analyzed paper for the landing
- * page (src/data/demo-snapshot.json): metadata, branches with their concepts,
- * one explainer link per topic, and any cached AI explanations. Reads the
+ * page (src/data/demo-snapshot.json): metadata and the overview, branches
+ * with their concepts (with the order and dependencies the recommended
+ * sequence needs), one explainer link per topic, and any cached AI
+ * explanations. Reads the
  * deployed app's public collections through the owner's agent tools.
  *
  *   node scripts/export-demo-snapshot.mjs [arxivId] [app]
@@ -33,6 +35,7 @@ const snapshot = {
     authors: (paper.data.authors ?? []).slice(0, 8),
     year: (paper.data.publishedAt ?? '').slice(0, 4),
     mainContribution: paper.data.mainContribution,
+    overview: paper.data.overview ?? null,
   },
   branches: (paper.data.branches ?? []).map((b) => ({
     key: b.key,
@@ -50,6 +53,9 @@ const snapshot = {
         section: c.data.section,
         topicKey: c.data.topicKey,
         explanation: c.data.explanation || '',
+        order: c.data.order,
+        dependsOn: c.data.dependsOn ?? [],
+        plainRole: c.data.plainRole || '',
       })),
   })),
   topics,

@@ -43,6 +43,8 @@ export interface AnalyzeResult {
 
 export interface PaperPeek {
   arxivId: string
+  /** The paper's record id once anyone has started it, else ''. */
+  paperId: string
   title: string
   authors: string[]
   year: string

@@ -141,8 +141,10 @@ function message(text: string) {
 /** Respond like the real integration would, keyed by endpoint and a stage hint. */
 export function fixtureIntegration(endpoint: string, body: Record<string, unknown>, hint?: string): unknown {
   if (endpoint === 'cloudconvert/convert-file') {
-    // Fixture ids ending in 9999 behave like a scanned PDF with no text, so the analysis fails.
-    return { downloadUrl: String(body.url ?? '').endsWith('9999') ? 'fixture://scanned.txt' : 'fixture://paper.txt' }
+    // Fixture ids ending in 77 fail the conversion itself, before anything is billed.
+    if (String(body.url ?? '').endsWith('77')) throw new Error('Fixture conversion failure')
+    // Fixture ids ending in 99 behave like a scanned PDF with no text, so the analysis fails.
+    return { downloadUrl: String(body.url ?? '').endsWith('99') ? 'fixture://scanned.txt' : 'fixture://paper.txt' }
   }
   if (endpoint === 'exa/search' && Array.isArray(body.includeDomains) && body.includeDomains.includes('arxiv.org')) {
     return {
@@ -171,7 +173,9 @@ export function fixtureIntegration(endpoint: string, body: Record<string, unknow
     }
     if (hint === 'overview') return message(JSON.stringify(overview))
     if (hint === 'explain-concept') {
-      return message('Fixture explanation.\n\n### Worked example\nScores [1, 2] become softmax [0.27, 0.73].')
+      return message(
+        'Fixture explanation. Softmax maps scores to \\(\\sigma(z)_i = e^{z_i} / \\sum_j e^{z_j}\\), and a $5 price stays text.\n\n### Worked example\nScores [1, 2] become softmax [0.27, 0.73]:\n\\[\\frac{e^{2}}{e^{1} + e^{2}} \\approx 0.73\\]',
+      )
     }
     if (hint === 'resources') {
       // Pick the first candidate for every topic named in the prompt.

@@ -7,7 +7,7 @@
 
 import type { ActionTools } from 'deepspace/worker'
 import type { Env } from '../../worker'
-import type { Envelope, KnowledgeData, Suggestion, TopicData, WorkspaceData } from '../types'
+import type { Envelope, KnowledgeData, Suggestion, TopicData, WorkspaceData, WorkspacePaperData } from '../types'
 import { parseArxivId } from '../lib/arxiv'
 import { asString } from '../lib/json'
 import { lookupArxiv } from './pipeline/arxiv-meta'
@@ -72,7 +72,12 @@ export async function recommendForWorkspace(
 
   const fixtures = fixtureWorkspace(env, ws.name)
   const client = createPipelineClient(env, fixtures)
-  const existing = new Set((ws.papers ?? []).map((p) => p.arxivId))
+  const rowsRes = await tools.query('workspace_papers', { where: { userId, workspaceId: workspace.recordId }, limit: 500 })
+  const inWorkspace = [
+    ...(ws.papers ?? []),
+    ...(rowsRes.success ? (rowsRes.data.records as unknown as Envelope<WorkspacePaperData>[]).map((r) => r.data) : []),
+  ]
+  const existing = new Set(inWorkspace.map((p) => p.arxivId))
 
   let results: unknown
   try {
@@ -105,7 +110,7 @@ export async function recommendForWorkspace(
         name: ws.name,
         description: ws.description,
         knownTopics: knownTopics.slice(0, 40),
-        existing: (ws.papers ?? []).map((p) => p.title || p.arxivId),
+        existing: inWorkspace.map((p) => p.title || p.arxivId),
         candidates,
       }),
       maxTokens: 4000,

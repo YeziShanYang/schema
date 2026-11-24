@@ -107,8 +107,12 @@ export interface ConceptData {
   /** Cached "Explain with AI" text (Markdown), shared by every reader. */
   explanation: string
   explanationAt: number
+  /** Set while explainConcept is generating, so parallel calls don't generate twice; stale after 2 minutes. */
+  explanationPendingAt?: number
   /** Under 20 plain words on why this concept matters for this paper. */
   plainRole?: string
+  /** `quote` with its formulas as LaTeX, shown instead of it; set only when its words match `quote` (see lib/quote-display). */
+  quoteDisplay?: string
 }
 
 export interface SectionData {
@@ -170,10 +174,22 @@ export interface WorkspaceData {
   description: string
   /** The paper opened most recently from this workspace. */
   currentPaperId: string
+  /** Legacy list from before workspace_papers; moved into rows on first load and then emptied. */
   papers: WorkspacePaper[]
   suggestions: Suggestion[]
   suggestionsAt: number
   lastOpenedAt: number
+}
+
+/** One paper in one workspace, a row per paper so concurrent adds never overwrite each other. */
+export interface WorkspacePaperData {
+  userId: string
+  workspaceId: string
+  paperId: string
+  arxivId: string
+  title: string
+  status: 'active' | 'finished'
+  addedAt: number
 }
 
 export type UsageKind = 'analyze' | 'recommend' | 'explain' | 'branch' | 'overview'

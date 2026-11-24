@@ -67,11 +67,11 @@ test('fresh account: Add workspace, starter papers, add paper, next up, finish, 
   await expect(page.getByTestId('sequence-done')).toContainText('All concepts known')
 
   await page.goto('/library')
-  await page.getByRole('button', { name: 'Finished' }).click()
+  await page.getByRole('button', { name: 'Finished', exact: true }).click()
   const lib = page.locator('[data-testid="library-row"]').filter({ hasText: 'arXiv 1706.03762' })
   await expect(lib).toHaveAttribute('data-status', 'finished')
   await lib.getByTestId('library-read-again').click()
-  await page.getByRole('button', { name: 'In progress' }).click()
+  await page.getByRole('button', { name: 'In progress', exact: true }).click()
   await expect(page.locator('[data-testid="library-row"]').filter({ hasText: 'arXiv 1706.03762' })).toHaveAttribute('data-status', 'reading')
 
   await page.goto('/knowledge')

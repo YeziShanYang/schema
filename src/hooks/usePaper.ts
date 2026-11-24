@@ -10,6 +10,7 @@ import { useQuery } from 'deepspace'
 import type { RecordData } from 'deepspace'
 import type { ConceptData, PaperData, SectionData, TopicData } from '../types'
 import { branchProgress, paperProgress } from '../lib/branches'
+import { parseArxivId } from '../lib/arxiv'
 import { recommendedSequence } from '../lib/sequence'
 import { useKnowledge, useRoadmaps, useTopics, type KnowledgeApi } from './useReader'
 import { useWorkspaces } from './useWorkspaces'
@@ -23,7 +24,9 @@ export function branchLinkState(topics: (TopicData | undefined)[], now = Date.no
   return 'ready'
 }
 
-export function usePaper(arxivId: string, knowledge: KnowledgeApi) {
+export function usePaper(rawId: string, knowledge: KnowledgeApi) {
+  // Papers are stored under the id without a version, so "1706.03762v1" finds "1706.03762".
+  const arxivId = parseArxivId(rawId)?.id ?? rawId
   const papersQ = useQuery<PaperData>('papers', { where: { arxivId }, limit: 1 })
   const paper = papersQ.records[0] ?? null
   const paperId = paper?.recordId ?? '__none__'
@@ -101,7 +104,7 @@ export function useFinishPaper() {
       await roadmaps.touch({ paperId: paper.recordId, arxivId: paper.data.arxivId, title: paper.data.title })
       await roadmaps.setStatus(paper.recordId, 'finished')
       for (const ws of workspaces.rows) {
-        if (ws.data.papers?.some((p) => p.paperId === paper.recordId)) await workspaces.markFinished(ws.recordId, paper.recordId)
+        if (workspaces.papersOf(ws.recordId).some((p) => p.paperId === paper.recordId)) await workspaces.markFinished(ws.recordId, paper.recordId)
       }
       if (markRemainingKnown) {
         const seen = new Set<string>()

@@ -42,9 +42,9 @@ export function useDemoKnowledge(): KnowledgeApi {
     })
   }, [])
 
-  const statusOf = useCallback((topicKey: string) => map.get(topicKey)?.status ?? null, [map])
+  const statusOf = useCallback((topicKey: string) => (map.get(topicKey)?.status === 'known' ? 'known' : null), [map])
 
-  return { ready: true, status: 'ready', rows, byTopic, statusOf, set, clear }
+  return { ready: true, status: 'ready', rows, byTopic, statusOf, isPending: () => false, set, clear }
 }
 
 /**

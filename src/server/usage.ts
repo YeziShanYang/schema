@@ -1,7 +1,14 @@
 /**
  * Per-user daily caps for metered actions, backed by the server-only
  * `usage_events` collection. An `analyze` event also records who requested a
- * paper (ref = paper record id); it is marked refunded if the analysis fails.
+ * paper (ref = paper record id).
+ *
+ * A metered action reserves its slot before any paid work: it inserts a
+ * counted event, then recounts the window, and keeps the slot only if fewer
+ * than `cap` counted events came before its own. Otherwise it deletes its
+ * reservation and fails. Parallel requests therefore cannot all pass a check
+ * made before any of them was recorded. Work that turns out to cost nothing
+ * releases its reservation.
  */
 
 import type { ActionTools, CronContext } from 'deepspace/worker'
@@ -16,27 +23,76 @@ export const USAGE_CAPS: Record<UsageKind, number> = {
   overview: 10,
 }
 
+const PAGE = 100
+
 const counted = (e: Envelope<UsageEventData>) => e.data.state !== 'refunded'
 
-export async function usageState(tools: ActionTools, userId: string, kind: UsageKind): Promise<CapState> {
-  const cap = USAGE_CAPS[kind]
-  const r = await tools.query('usage_events', {
-    where: { userId, kind },
-    orderBy: 'createdAt',
-    orderDir: 'desc',
-    limit: cap * 4 + 10,
-  })
-  if (!r.success) throw new Error(r.error)
-  const rows = (r.data.records as unknown as Envelope<UsageEventData>[]).filter(counted)
-  return capState(
-    rows.map((x) => x.createdAt),
-    Date.now(),
-    cap,
-  )
+/** Order events the way they were inserted: by creation time, then record id. */
+function byInsertion(a: Envelope<UsageEventData>, b: Envelope<UsageEventData>): number {
+  return toMs(a.createdAt) - toMs(b.createdAt) || (a.recordId < b.recordId ? -1 : a.recordId > b.recordId ? 1 : 0)
 }
 
-export async function recordUsage(tools: ActionTools, userId: string, kind: UsageKind, ref: string): Promise<void> {
-  await tools.create('usage_events', { userId, kind, ref, state: 'counted' })
+/**
+ * This user's counted events of one kind inside the rolling window, oldest
+ * first. Pages newest-first until it passes the window, so refunded rows or
+ * a long history never hide a counted one.
+ */
+export async function eventsInWindow(tools: ActionTools, userId: string, kind: UsageKind, now = Date.now()): Promise<Envelope<UsageEventData>[]> {
+  const out: Envelope<UsageEventData>[] = []
+  for (let offset = 0; offset < 50 * PAGE; offset += PAGE) {
+    // The record room pages with `offset`; ActionTools' type does not list it.
+    const opts = { where: { userId, kind }, orderBy: 'createdAt', orderDir: 'desc', limit: PAGE, offset } as Parameters<ActionTools['query']>[1]
+    const r = await tools.query('usage_events', opts)
+    if (!r.success) throw new Error(r.error)
+    const rows = r.data.records as unknown as Envelope<UsageEventData>[]
+    let passedWindow = false
+    for (const e of rows) {
+      if (now - toMs(e.createdAt) >= CAP_WINDOW_MS) {
+        passedWindow = true
+        continue
+      }
+      if (counted(e)) out.push(e)
+    }
+    if (passedWindow || rows.length < PAGE) break
+  }
+  return out.sort(byInsertion)
+}
+
+export async function usageState(tools: ActionTools, userId: string, kind: UsageKind): Promise<CapState> {
+  const rows = await eventsInWindow(tools, userId, kind)
+  return capState(rows.map((x) => x.createdAt), Date.now(), USAGE_CAPS[kind])
+}
+
+export type Reservation =
+  | { ok: true; id: string; state: CapState }
+  | { ok: false; message: string; state: CapState }
+
+/** Reserve one slot of `kind` for this user before doing paid work. */
+export async function reserveUsage(tools: ActionTools, userId: string, kind: UsageKind, ref: string): Promise<Reservation> {
+  const created = await tools.create('usage_events', { userId, kind, ref, state: 'counted' })
+  if (!created.success) throw new Error(created.error)
+  const id = created.data.recordId
+  const rows = await eventsInWindow(tools, userId, kind)
+  const mine = rows.findIndex((e) => e.recordId === id)
+  const before = mine === -1 ? rows.length : mine
+  const cap = USAGE_CAPS[kind]
+  const others = rows.filter((e) => e.recordId !== id)
+  if (before >= cap) {
+    await tools.remove('usage_events', id)
+    const state = capState(others.map((x) => x.createdAt), Date.now(), cap)
+    return { ok: false, message: capMessage(kind, state), state }
+  }
+  return { ok: true, id, state: capState(rows.slice(0, before + 1).map((x) => x.createdAt), Date.now(), cap) }
+}
+
+/** Give back a reservation whose work turned out to cost nothing. */
+export async function releaseUsage(tools: ActionTools, id: string): Promise<void> {
+  await tools.remove('usage_events', id)
+}
+
+/** Point a reservation at what it paid for (the paper id once the paper row exists). */
+export async function setUsageRef(tools: ActionTools, id: string, ref: string): Promise<void> {
+  await tools.update('usage_events', id, { ref })
 }
 
 /** Whether this user already has a counted event for `ref` inside the cap window. */

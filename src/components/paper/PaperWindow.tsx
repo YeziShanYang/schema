@@ -25,8 +25,21 @@ import { FloatingGraph } from '../graph/FloatingGraph'
 import { BranchNode, CenterCard } from '../graph/nodes'
 import { BranchPanel } from '../graph/BranchPanel'
 import { ConceptCard } from './ConceptCard'
+import { MathText } from '../MathText'
 
-const STAGES = ['queued', 'text', 'concepts', 'explain', 'ready'] as const
+const STAGES = ['queued', 'text', 'concepts', 'overview', 'explain', 'ready'] as const
+/** Matches retryPaper: a run with no update for this long can be restarted. */
+const STUCK_AFTER_MS = 20 * 60 * 1000
+
+/** The current time, refreshed every minute, for "stuck" checks. */
+function useMinuteClock(): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(t)
+  }, [])
+  return now
+}
 
 function readPref(key: string): string {
   try {
@@ -52,6 +65,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const finishPaper = useFinishPaper()
   const { allowance } = useAllowance()
   const ws = workspaceId ? workspaces.byId.get(workspaceId) : undefined
+  const now = useMinuteClock()
 
   const viewKey = `schema:view:${arxivId}`
   const [view, setView] = useState<'graph' | 'walkthrough'>(() => (readPref(viewKey) === 'walkthrough' ? 'walkthrough' : 'graph'))
@@ -66,21 +80,31 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const [linkErrors, setLinkErrors] = useState<Record<string, string>>({})
   const branchButtons = useRef(new Map<string, HTMLButtonElement | null>())
   const lastOpened = useRef<string | null>(null)
+  // What opened the panel when it was not a branch node (a walkthrough chip), so focus returns there.
+  const lastTrigger = useRef<HTMLElement | null>(null)
 
   const paper = p.paper
   const roadmap = paper ? roadmaps.byPaper.get(paper.recordId) : undefined
   const finished = roadmap?.data.status === 'finished'
 
   // Remember this paper (library) and, inside a workspace, that it was opened last.
+  // Each is marked once, when its own data is ready (workspaces can load after roadmaps).
   const touched = useRef('')
+  const openedIn = useRef('')
   const { touch, ready: roadmapsReady } = roadmaps
   const { markOpened, ready: wsReady } = workspaces
   useEffect(() => {
     if (!paper || !isSignedIn || !roadmapsReady || touched.current === paper.recordId) return
     touched.current = paper.recordId
     void touch({ paperId: paper.recordId, arxivId: paper.data.arxivId, title: paper.data.title })
-    if (workspaceId && wsReady) void markOpened(workspaceId, paper.recordId)
-  }, [paper, isSignedIn, roadmapsReady, touch, workspaceId, wsReady, markOpened])
+  }, [paper, isSignedIn, roadmapsReady, touch])
+  useEffect(() => {
+    if (!paper || !isSignedIn || !workspaceId || !wsReady) return
+    const key = `${workspaceId}:${paper.recordId}`
+    if (openedIn.current === key) return
+    openedIn.current = key
+    void markOpened(workspaceId, paper.recordId)
+  }, [paper, isSignedIn, workspaceId, wsReady, markOpened])
 
   const loadLinks = useCallback(
     async (branchKey: string) => {
@@ -108,8 +132,9 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
 
   // Opening a branch loads its links if any of its topics have none yet.
   const openBranch = useCallback(
-    (key: string, concept?: string) => {
+    (key: string, concept?: string, trigger?: HTMLElement | null) => {
       lastOpened.current = key
+      lastTrigger.current = trigger ?? null
       setOpenKey(key)
       if (concept) setFocusConcept(concept)
       if (isSignedIn && p.linksForBranch(key) === 'needs-load' && !loadingBranches.has(key)) void loadLinks(key)
@@ -131,16 +156,26 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   }, [focusConcept, openKey])
 
   const openConceptByKey = useCallback(
-    (key: string) => {
+    (key: string, trigger?: HTMLElement | null) => {
       const c = p.conceptByKey.get(key)
-      if (c) openBranch(c.data.branchKey, key)
+      if (c) openBranch(c.data.branchKey, key, trigger)
     },
     [p.conceptByKey, openBranch],
   )
 
   const branch = useMemo(() => p.branches.find((b) => b.key === openKey) ?? null, [p.branches, openKey])
 
-  if (!parseArxivId(arxivId)) return <div className="p-6">Not a valid arXiv id.</div>
+  if (!parseArxivId(arxivId)) {
+    return (
+      <div className="grid max-w-xl gap-3 p-6" data-testid="paper-invalid">
+        <h1 className="text-xl font-semibold">That is not an arXiv paper id</h1>
+        <p className="text-sm text-muted-foreground">
+          Paper links look like <span className="font-mono">/p/1706~03762</span>. Paste an arXiv link on the home page to open a paper.
+        </p>
+        <Link to={isSignedIn ? '/home' : '/'} className="text-sm text-primary hover:underline">← {isSignedIn ? 'Home' : 'Schema'}</Link>
+      </div>
+    )
+  }
   if (p.loading) return <div className="p-6 text-muted-foreground">Loading…</div>
 
   const backTo = ws ? { to: `/w/${ws.recordId}`, label: ws.data.name } : knowledge.isDemo ? { to: '/', label: 'Schema' } : { to: '/home', label: 'Home' }
@@ -150,13 +185,28 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
       <div className="grid max-w-2xl gap-4 p-6" data-testid="paper-missing">
         <Link to={backTo.to} className="text-sm text-primary hover:underline">← {backTo.label}</Link>
         <h1 className="text-xl font-semibold">arXiv {arxivId} has not been analyzed yet</h1>
-        <AnalyzeForm placeholder={arxivId} workspaceId={workspaceId} />
+        <AnalyzeForm initialValue={arxivId} workspaceId={workspaceId} />
       </div>
     )
   }
 
   const d = paper.data
   const inProgress = d.status === 'queued' || d.status === 'processing'
+  const stuck = inProgress && now - (Date.parse(paper.updatedAt) || now) > STUCK_AFTER_MS
+  const retry = async () => {
+    const r = await actions.retryPaper(paper.recordId)
+    setRetryError(r.success ? '' : r.error)
+  }
+  const retryControls = isSignedIn ? (
+    <>
+      <p className="mt-1 text-xs text-muted-foreground">Anyone signed in can retry. A retry uses one of your new papers for today.</p>
+      <Button className="mt-2" size="sm" onClick={retry}>Retry</Button>
+    </>
+  ) : (
+    <p className="mt-1 text-xs text-muted-foreground">
+      <button type="button" className="text-primary hover:underline" onClick={() => setShowAuth(true)}>Sign in</button> to retry it.
+    </p>
+  )
   const year = d.publishedAt ? d.publishedAt.slice(0, 4) : ''
   const firstAuthor = d.authors?.[0] ? `${d.authors[0].split(' ').slice(-1)[0]}${d.authors.length > 1 ? ' et al.' : ''}` : ''
   const seq = p.sequence
@@ -168,7 +218,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const reopen = async () => {
     await roadmaps.setStatus(paper.recordId, 'reading')
     for (const w of workspaces.rows) {
-      if (w.data.papers?.some((x) => x.paperId === paper.recordId)) await workspaces.setPaperStatus(w.recordId, paper.recordId, 'active')
+      if (workspaces.papersOf(w.recordId).some((x) => x.paperId === paper.recordId)) await workspaces.setPaperStatus(w.recordId, paper.recordId, 'active')
     }
   }
 
@@ -199,19 +249,18 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
               <li key={s} className={cn('label', s === d.stage && 'text-foreground')}>{s}</li>
             ))}
           </ol>
+          {stuck && (
+            <div className="mt-3 border-t border-border pt-2.5" data-testid="paper-stuck">
+              <p className="text-[13px]">No progress for over 20 minutes.</p>
+              {retryControls}
+              {retryError && <p className="mt-1 text-xs text-destructive">{retryError}</p>}
+            </div>
+          )}
         </div>
       ) : d.status === 'failed' ? (
         <div data-testid="paper-failed">
           <p className="text-[13px]">Analysis failed: {d.error || 'unknown error'}</p>
-          <p className="mt-1 text-xs text-muted-foreground">A failed analysis does not use up a daily paper.</p>
-          {isSignedIn && (
-            <Button className="mt-2" size="sm" onClick={async () => {
-              const r = await actions.retryPaper(paper.recordId)
-              setRetryError(r.success ? '' : r.error)
-            }}>
-              Retry
-            </Button>
-          )}
+          {retryControls}
           {retryError && <p className="mt-1 text-xs text-destructive">{retryError}</p>}
         </div>
       ) : (
@@ -314,13 +363,13 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
             {p.sections.map((s) => (
               <li key={s.recordId} className="surface p-4">
                 <h3 className="font-semibold">{s.data.heading}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">{s.data.summary}</p>
+                <p className="mt-1 text-sm text-muted-foreground"><MathText text={s.data.summary} /></p>
                 <p className="mt-2 flex flex-wrap gap-1.5">
                   {(s.data.conceptKeys ?? []).map((k) => {
                     const c = p.conceptByKey.get(k)
                     if (!c) return null
                     return (
-                      <button key={k} type="button" data-testid="walkthrough-chip" onClick={() => openConceptByKey(k)}
+                      <button key={k} type="button" data-testid="walkthrough-chip" onClick={(e) => openConceptByKey(k, e.currentTarget)}
                         className="press cursor-pointer rounded-[3px] border border-border bg-surface-2 px-2 py-0.5 text-xs hover:bg-accent-soft">
                         {c.data.name}
                       </button>
@@ -374,7 +423,13 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
       <BranchPanel
         open={!!branch}
         onClose={() => setOpenKey(null)}
-        returnFocus={() => (lastOpened.current ? branchButtons.current.get(lastOpened.current) ?? null : null)}
+        returnFocus={() =>
+          lastTrigger.current?.isConnected
+            ? lastTrigger.current
+            : lastOpened.current
+              ? branchButtons.current.get(lastOpened.current) ?? null
+              : null
+        }
         title={branch?.name ?? ''}
         eyebrow={branch ? `${branch.known} of ${branch.total} known` : ''}
         description={branch?.description}

@@ -10,7 +10,9 @@ import { Button } from '../ui'
 import type { ConceptData, KnowledgeStatus, PaperData, TopicData } from '../../types'
 import type { KnowledgeApi } from '../../hooks/useReader'
 import { actions } from '../../lib/actions-client'
-import { KnownToggle, LearningToggle } from '../StatusControl'
+import { linkTitle } from '../../lib/links'
+import { MathText } from '../MathText'
+import { KnownToggle } from '../StatusControl'
 import { Chip } from '../blueprint'
 import { ExternalIcon, SparkIcon } from '../icons'
 import { cleanTitle, Markdown } from '../Markdown'
@@ -47,10 +49,13 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
 
   async function setStatus(next: KnowledgeStatus | null) {
     if (next === null) await knowledge.clear(c.topicKey)
-    else await knowledge.set(c.topicKey, next, next === 'known' ? 'self' : 'paper', from)
+    else await knowledge.set(c.topicKey, next, 'self', from)
   }
 
+  // One answer per question: the choices lock and the correct one is shown.
+  // Only a correct first answer marks the topic known.
   async function answer(i: number) {
+    if (choice !== null) return
     setChoice(i)
     if (c.check && i === c.check.answerIndex) await knowledge.set(c.topicKey, 'known', 'check', from)
   }
@@ -72,11 +77,11 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
       data-status={status ?? 'unknown'}
       data-next-up={nextUp ? 'true' : undefined}
       className={
-        'grid scroll-mt-4 grid-cols-[28px_minmax(0,1fr)] gap-2.5 rounded-lg border bg-card p-3.5 ' +
-        (nextUp ? 'border-primary shadow-[0_0_0_1px_var(--color-primary)]' : 'border-border')
+        'status-surface grid scroll-mt-4 grid-cols-[28px_minmax(0,1fr)] gap-2.5 rounded-lg border bg-card p-3.5 ' +
+        (status === 'known' ? 'known-outline' : nextUp ? 'border-primary shadow-[0_0_0_1px_var(--color-primary)]' : 'border-border')
       }
     >
-      <KnownToggle status={status} name={c.name} disabled={!knowledge.ready} onChange={setStatus} className="mt-px" />
+      <KnownToggle status={status} name={c.name} disabled={!knowledge.ready || knowledge.isPending(c.topicKey)} onChange={setStatus} className="mt-px" />
       <div className="min-w-0">
         <div className="flex items-baseline justify-between gap-2.5">
           <span className={status === 'known' ? 'font-semibold leading-snug text-muted-foreground' : 'font-semibold leading-snug'}>
@@ -90,7 +95,6 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
         </div>
 
         <div className="mt-1.5">
-          <LearningToggle status={status} name={c.name} disabled={!knowledge.ready} onChange={setStatus} />
         </div>
 
         {prerequisites.length > 0 && (
@@ -104,12 +108,13 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
           </p>
         )}
 
-        <p className="mb-2 mt-1.5 text-[13px] leading-[1.45] text-muted-foreground">{c.whyNeeded}</p>
+        <p className="mb-2 mt-1.5 text-[13px] leading-[1.45] text-muted-foreground"><MathText text={c.whyNeeded} /></p>
         {topic?.description && <p className="mb-2 text-xs text-faint">Topic: {topic.name}. {topic.description}</p>}
 
         {c.quote && c.quoteVerified && (
           <blockquote className="mb-2.5 rounded-r border-l-2 border-border bg-surface-2 px-2.5 py-2 text-[12.5px] text-muted-foreground">
-            “{c.quote}”
+            {/* quote stays verbatim for verification; quoteDisplay is the same sentence with its math as LaTeX. */}
+            “{c.quoteDisplay ? <MathText text={c.quoteDisplay} /> : c.quote}”
             <cite className="label mt-1 block not-italic text-faint">{c.section}</cite>
           </blockquote>
         )}
@@ -120,7 +125,7 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
               {topic.resources.map((r) => (
                 <li key={r.url} className="text-[12.5px]">
                   <a href={r.url} target="_blank" rel="noreferrer" className="inline-flex max-w-full items-center gap-1 rounded border border-border bg-surface-2 px-2 py-1 text-foreground transition-[background-color] duration-150 hover:bg-accent-soft">
-                    <span className="truncate">{cleanTitle(r.title)}</span>
+                    <span className="truncate">{cleanTitle(linkTitle(r.title, r.url))}</span>
                     <ExternalIcon size={13} className="shrink-0" />
                   </a>
                   {r.why && <p className="mt-0.5 pl-0.5 text-xs text-muted-foreground">{r.why}</p>}
@@ -148,9 +153,9 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
               {explainLeft !== undefined && <span className="font-normal text-faint tabular-nums">· {explainLeft} left today</span>}
             </Button>
           ) : (
-            <span className="inline-flex items-center gap-1 px-1.5 text-[12.5px] text-faint" data-testid="explain-signin">
+            <button type="button" onClick={onSignIn} className="press inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-[12.5px] font-medium text-primary hover:bg-accent-soft" data-testid="explain-signin">
               <SparkIcon size={13} /> Sign in to generate an AI explanation
-            </span>
+            </button>
           )}
 
           {c.check && (
@@ -170,32 +175,38 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
 
         {c.check && showCheck && (
           <div className="mt-2.5 border-t border-border pt-3" data-testid="concept-check">
-            <p className="text-sm font-medium">{c.check.question}</p>
+            <p className="text-sm font-medium"><MathText text={c.check.question} /></p>
             <div className="mt-2 flex flex-col gap-1.5">
               {c.check.choices.map((ch, i) => (
                 <button
                   key={i}
                   type="button"
                   onClick={() => answer(i)}
+                  disabled={choice !== null}
                   data-testid="check-choice"
+                  data-correct={choice !== null && i === c.check!.answerIndex ? 'true' : undefined}
                   aria-pressed={choice === i}
                   className={
-                    'press cursor-pointer rounded border px-2.5 py-1.5 text-left text-[13px] ' +
-                    (choice === i
-                      ? correct
+                    'press rounded border px-2.5 py-1.5 text-left text-[13px] ' +
+                    (choice === null
+                      ? 'cursor-pointer border-border bg-card hover:bg-accent'
+                      : i === c.check!.answerIndex
                         ? 'border-known bg-[color-mix(in_oklab,var(--color-known)_10%,white)]'
-                        : 'border-destructive bg-[color-mix(in_oklab,var(--color-destructive)_8%,white)]'
-                      : 'border-border bg-card hover:bg-accent')
+                        : choice === i
+                          ? 'border-destructive bg-[color-mix(in_oklab,var(--color-destructive)_8%,white)]'
+                          : 'border-border bg-card text-muted-foreground')
                   }
                 >
-                  {ch}
+                  <MathText text={ch} />
+                  {choice !== null && i === c.check!.answerIndex && <span className="ml-1.5 text-known" aria-label="correct answer">✓</span>}
                 </button>
               ))}
             </div>
             {answered && (
               <p className="mt-2 text-[13px]" data-testid="check-result">
                 <b className={correct ? 'text-known' : 'text-destructive'}>{correct ? 'Correct. ' : 'Not quite. '}</b>
-                {c.check.explanation}
+                {!correct && <>The answer is "{c.check.choices[c.check.answerIndex]}". </>}
+                <MathText text={c.check.explanation} />
                 {correct && ' Marked as known.'}
               </p>
             )}

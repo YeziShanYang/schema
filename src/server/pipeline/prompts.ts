@@ -14,13 +14,13 @@ You get the paper's main text, extracted from a PDF (it may contain extraction n
 Task: list every concept the paper relies on for its main argument, from general foundations up to the paper-specific ideas, and which concepts depend on which. Do not assume any background: include the foundations the paper takes for granted, so a beginner gets a complete path.
 
 Rules:
-- Include only concepts the paper actually relies on. Tie each one to a quote of 8 to 30 words copied exactly, character for character, from a prose sentence in the paper text where the concept is used. Do not quote equations, tables, captions or citations. Do not paraphrase, shorten, or fix typos in the quote.
+- Include only concepts the paper actually relies on. Tie each one to a quote of 8 to 30 words copied exactly, character for character, from a prose sentence in the paper text where the concept is used. Do not quote equations, tables, captions or citations. Do not paraphrase, shorten, or fix typos in the quote. When several sentences would do, choose the one with the fewest symbols and formulas: plain prose quotes read better than symbol-dense ones.
 - Leave out anything used only in related work, a minor side experiment, or an appendix.
 - Aim for 8 to 18 concepts.
 - depends_on lists ids of other concepts in your list that the reader should learn first. No cycles.
 - topic maps the concept to the shared vocabulary. Reuse an existing topic only when it is the same idea, not a broader or related one: "Multi-head attention" is not "Attention mechanism", and "Positional encoding" is not "Word embeddings". Then use {"key": "<existing key>"}. Otherwise propose a new topic: {"key": "<lowercase-hyphenated-slug>", "name": "<name someone would search a tutorial for>", "level": "foundation" | "core" | "specialized", "description": "<one sentence that does not mention this paper>", "search_query": "<web search query that finds a beginner-friendly explainer>"}. Use "foundation" for general math, statistics, CS or ML prerequisites, "core" for methods widely used in the field, and "specialized" for ideas specific to this line of research. Give each concept in this paper a distinct topic: never map two concepts to the same key.
 - name is the concept as this paper uses it.
-- why_needed is one sentence on what in the paper a reader could not follow without it.
+- why_needed is one sentence on what in the paper a reader could not follow without it. Write any math in why_needed as LaTeX between \\( and \\) (inline) or \\[ and \\] (display), and keep the prose plain. The quote is the exception: copy it exactly.
 - section is the section number and title where the concept is used.
 - depth is "skim" (recognize the term), "working" (follow the equations or arguments that use it), or "deep" (central to the contribution).
 - Group the concepts into 3 to 6 thematic branches, such as "Probability foundations", "Model architecture" or "Training objective". Each branch has a key (lowercase-hyphenated), a name and a one-line description. Order branches from most foundational to most specific. Give every concept a branch_key from your branches, and give every branch at least one concept.
@@ -75,6 +75,8 @@ You get the paper's main text and the list of concepts it relies on (id, name, w
 Write two things:
 1. sections: a walkthrough of the paper's main sections in order, 4 to 10 entries. For each: heading (the paper's section number and title), summary (3 to 5 plain sentences on what the section does and why it matters to the argument), and concept_ids (ids from the concept list that the section uses).
 2. checks: one multiple-choice question per concept that tests understanding of the concept as this paper uses it. Exactly 4 choices, one correct, with answer_index (0 to 3) and a one-sentence explanation. Vary which position holds the correct answer.
+
+Write math in summaries, questions, choices and explanations as LaTeX between \\( and \\) (inline) or \\[ and \\] (display), escaped for JSON, and keep the prose plain.
 
 Output only valid JSON (escape any double quotes inside strings, no trailing commas), no prose and no code fences:
 {"sections": [{"heading": string, "summary": string, "concept_ids": [string]}], "checks": [{"concept_id": string, "question": string, "choices": [string, string, string, string], "answer_index": number, "explanation": string}]}`
@@ -132,6 +134,8 @@ Write Markdown, 150 to 350 words, with these parts:
 3. A small worked example with concrete numbers, a tiny derivation, or a few lines of Python.
 4. One common misconception to avoid.
 
+Write math as LaTeX between \\( and \\) (inline) or \\[ and \\] (display); keep the prose plain.
+
 No preamble, no headings larger than ###, no closing summary.`
 
 export function explainConceptUser(args: {
@@ -154,26 +158,29 @@ Return only one JSON object, with every string valid JSON (escape double quotes 
   "story": [
     {
       "text": "One plain sentence under 30 words, one step of the paper's argument, in the order the paper makes it.",
-      "technical": "One precise sentence of the form: Here the paper uses <concept> to <do what>.",
+      "technical": "One precise sentence of the form: Here the paper uses <concept> to <do what>. Math as LaTeX in \\\\( \\\\) or \\\\[ \\\\].",
       "concept_keys": ["keys from the concept list that this step relies on"]
     }
   ],
-  "roles": [{ "key": "<concept key>", "plain_role": "Under 20 plain words: why this concept matters for this paper." }]
+  "roles": [{ "key": "<concept key>", "plain_role": "Under 20 plain words: why this concept matters for this paper.", "quote_display": "Only when the concept's quote contains math: the same quote, word for word, with each formula rewritten as LaTeX in \\\\( \\\\). Omit otherwise." }]
 }
 
 Rules:
 - 4 to 8 story items. Start with the problem the paper addresses and end with what it achieves.
 - Use only concept keys from the list. Each story item names the 1 to 4 concepts it really relies on. Most concepts should appear in some item, but only where they fit naturally.
 - Give one role for every concept in the list.
-- The plain sentences are for a curious newcomer: short words, no formulas, no unexplained terms.`
+- The plain sentences are for a curious newcomer: short words, no formulas, no unexplained terms.
+- quote_display keeps every word of the quote and only rewrites the mangled math (for example "∥A∥2g" becomes \\(\\|A\\|_g^2\\)). Never reword, shorten or fix the prose.`
 
 export function overviewUser(args: {
   title: string
   abstract: string
   mainContribution: string
   text: string
-  concepts: { key: string; name: string; whyNeeded: string; section: string }[]
+  concepts: { key: string; name: string; whyNeeded: string; section: string; quote?: string }[]
 }): string {
-  const list = args.concepts.map((c) => `- ${c.key}: ${c.name} (used in ${c.section || 'the paper'}). ${c.whyNeeded}`).join('\n')
+  const list = args.concepts
+    .map((c) => `- ${c.key}: ${c.name} (used in ${c.section || 'the paper'}). ${c.whyNeeded}${c.quote ? `\n  Quote: "${c.quote}"` : ''}`)
+    .join('\n')
   return `Paper: ${args.title}\n\nAbstract:\n${args.abstract}\n\nMain contribution: ${args.mainContribution || '(not given)'}\n\nConcepts:\n${list}\n\nStart of the paper's text:\n<paper>\n${args.text}\n</paper>`
 }

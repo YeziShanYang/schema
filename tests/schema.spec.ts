@@ -5,7 +5,8 @@
  * run (ALLOW_DEBUG_ROUTES=true) papers whose id starts with "0000." and
  * workspaces named "[fixture] …" get canned CloudConvert / Claude / Exa /
  * arXiv responses (src/server/pipeline/fixtures.ts). Fixture ids ending in
- * 9999 behave like a scanned PDF and fail. The server actions, the analyze
+ * 99 behave like a scanned PDF and fail after conversion; ids ending in 77
+ * fail the conversion itself. The server actions, the analyze
  * job, the record rooms, RBAC and the UI all run for real.
  *
  * The specs are re-runnable against persisted local state: a fixture paper
@@ -66,8 +67,9 @@ async function resetStatus(page: Page, key: string) {
   const c = card(page, key)
   const s = await c.getAttribute('data-status')
   if (s === 'known') await c.getByTestId('status-known').click()
-  else if (s === 'learning') await c.getByTestId('status-learning').click()
   await expect(c).toHaveAttribute('data-status', 'unknown')
+  // The control is disabled while the write is in flight.
+  await expect(c.getByTestId('status-known')).toBeEnabled({ timeout: 15_000 })
 }
 
 test('analyze a paper end to end: graph, panel, lazy links, sequence, walkthrough chips', async ({ users }) => {
@@ -141,7 +143,7 @@ test('recommended sequence: next up follows prerequisites and opens the concept'
   await expect(page.locator('[data-testid="branch"][data-branch-key="attention"] [data-testid="branch-current"]')).toHaveText('Continue')
 })
 
-test('three-state status control, saved per reader; the paper is shared', async ({ users }) => {
+test('known or not known, saved per reader with a green outline; the paper is shared', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada, bob] = await users(['Schema ada', 'Schema bob'])
   await openReadyFixturePaper(ada.page)
@@ -151,11 +153,12 @@ test('three-state status control, saved per reader; the paper is shared', async 
   const progress = branchKnown(ada.page, 'foundations')
   await expect(progress).toHaveAttribute('data-known', '0')
 
-  await c1.getByTestId('status-learning').click()
-  await expect(c1).toHaveAttribute('data-status', 'learning')
-  await expect(progress).toHaveAttribute('data-known', '0')
+  await expect(c1.getByTestId('status-learning')).toHaveCount(0)
+  await expect(c1.getByTestId('status-known')).toHaveAttribute('aria-checked', 'false')
   await c1.getByTestId('status-known').click()
   await expect(c1).toHaveAttribute('data-status', 'known')
+  await expect(c1.getByTestId('status-known')).toHaveAttribute('aria-checked', 'true')
+  await expect(c1).toHaveClass(/known-outline/)
   await expect(progress).toHaveAttribute('data-known', '1')
 
   await ada.page.reload()
@@ -173,6 +176,26 @@ test('three-state status control, saved per reader; the paper is shared', async 
   await bob.page.goto('/knowledge')
   await expect(bob.page.getByTestId('knowledge-page')).toBeVisible()
   await expect(bob.page.locator('[data-testid="knowledge-item"][data-topic-key="softmax-function"]')).toHaveCount(0)
+})
+
+test('quick repeated status clicks leave one knowledge row and no write error', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await openReadyFixturePaper(page)
+  await openBranch(page, 'foundations')
+  await resetStatus(page, 'c1')
+  // Three clicks inside one round trip: before, the second one created a duplicate row.
+  await card(page, 'c1').getByTestId('status-known').evaluate((el: HTMLElement) => {
+    el.click()
+    el.click()
+    el.click()
+  })
+  await expect(card(page, 'c1')).toHaveAttribute('data-status', 'known', { timeout: 15_000 })
+  await expect(card(page, 'c1').getByTestId('status-known')).toBeEnabled({ timeout: 15_000 })
+  await expect(page.getByText(/duplicate|unique/i)).toHaveCount(0)
+  await page.goto('/knowledge')
+  await expect(page.locator('[data-testid="knowledge-item"][data-topic-key="softmax-function"]')).toHaveCount(1, { timeout: 15_000 })
 })
 
 test('a correct check answer marks the topic known; Explain with AI is cached on the concept', async ({ users }) => {
@@ -196,6 +219,33 @@ test('a correct check answer marks the topic known; Explain with AI is cached on
     await c2.getByTestId('explain-toggle').click() // a cached one starts collapsed
   }
   await expect(c2.getByTestId('concept-explanation')).toContainText('Worked example', { timeout: 15_000 })
+})
+
+test('AI explanations render their math with KaTeX and leave prices as text', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await openReadyFixturePaper(page)
+  // Explanations cached by older runs have no math, so look for the first one that does.
+  let found = false
+  for (const branch of ['foundations', 'geometry', 'other', 'attention']) {
+    if (found) break
+    await openBranch(page, branch)
+    for (const c of await page.getByTestId('branch-concepts').getByTestId('concept-card').all()) {
+      if (await c.getByTestId('explain-button').count()) await c.getByTestId('explain-button').click()
+      else if (await c.getByTestId('explain-toggle').count()) await c.getByTestId('explain-toggle').click()
+      else continue
+      const explanation = c.getByTestId('concept-explanation')
+      await expect(explanation).toBeVisible({ timeout: 15_000 })
+      if (!/sigma|σ/.test((await explanation.textContent()) ?? '')) continue
+      await expect(explanation.locator('.katex').first()).toBeVisible({ timeout: 15_000 })
+      await expect(explanation.locator('.katex-display')).toHaveCount(1)
+      await expect(explanation).toContainText('a $5 price stays text')
+      found = true
+      break
+    }
+  }
+  expect(found).toBe(true)
 })
 
 test('Add flow, workspace path: starter papers appear as candidates, added papers become nodes', async ({ users }) => {
@@ -300,32 +350,82 @@ test('finishing a paper can mark its remaining topics known; Read again reopens 
   await page.keyboard.press('Escape')
 
   await page.goto('/library')
-  await page.getByRole('button', { name: 'Finished' }).click()
+  await page.getByRole('button', { name: 'Finished', exact: true }).click()
   const row = page.locator('[data-testid="library-row"][data-status="finished"]').filter({ hasText: `arXiv ${FIXTURE_ID}` })
   await expect(row).toBeVisible()
   await row.getByTestId('library-read-again').click()
-  await page.getByRole('button', { name: 'In progress' }).click()
+  await page.getByRole('button', { name: 'In progress', exact: true }).click()
   await expect(page.locator('[data-testid="library-row"][data-status="reading"]').filter({ hasText: `arXiv ${FIXTURE_ID}` })).toBeVisible()
 })
 
-test('a failed analysis does not use up a daily slot', async ({ users }) => {
-  test.setTimeout(150_000)
-  const [ada] = await users(['Schema ada'])
-  const page = ada.page
-  await calm(page)
+/**
+ * A fixture id nobody has analyzed yet (checked with peekPaper), ending in
+ * `suffix`; '' gives a normal paper (not ending in 77 or 99).
+ */
+async function newFixtureId(page: Page, suffix: '' | '77' | '99'): Promise<string> {
+  for (let tries = 0; tries < 30; tries++) {
+    const n = String(Math.floor(Math.random() * 1000)).padStart(3, '0')
+    const tail = suffix || String(10 + Math.floor(Math.random() * 90))
+    if (!suffix && (tail === '77' || tail === '99')) continue
+    const id = `0000.${n}${tail}`
+    const peek = await page.evaluate(async (input) => {
+      const t = await fetch('/api/auth/token', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } }).then((r) => r.json())
+      const res = await fetch('/api/actions/peekPaper', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t.token}` },
+        body: JSON.stringify({ input }),
+      })
+      return res.json()
+    }, id)
+    if (peek.success && peek.data.status === 'new') return id
+  }
+  throw new Error('No unused fixture id found')
+}
+
+async function allowanceLeft(page: Page): Promise<number> {
   await page.goto('/home')
   const allowance = page.getByTestId('sidebar-allowance')
   await expect(allowance).toHaveAttribute('data-remaining', /\d+/, { timeout: 15_000 })
-  const before = Number(await allowance.getAttribute('data-remaining'))
-  test.skip(before === 0, 'Ada is at the daily cap in this local state')
+  return Number(await allowance.getAttribute('data-remaining'))
+}
 
-  const failing = `0000.${Math.floor(1 + Math.random() * 8)}9999`
-  await page.getByTestId('analyze-input').fill(failing)
+async function analyzeUntilFailed(page: Page, id: string, message: string) {
+  await page.getByTestId('analyze-input').fill(id)
   await page.getByTestId('analyze-submit').click()
   await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'failed', { timeout: READY_TIMEOUT })
-  await expect(page.getByTestId('paper-failed')).toContainText('almost no extractable text')
-  await page.goto('/home')
-  await expect(page.getByTestId('sidebar-allowance')).toHaveAttribute('data-remaining', String(before), { timeout: 15_000 })
+  await expect(page.getByTestId('paper-failed')).toContainText(message)
+}
+
+test('a failure before anything is billed gives the slot back; after conversion it keeps it; anyone can retry', async ({ users }) => {
+  test.setTimeout(200_000)
+  // The other specs leave Bob and Dana at their daily caps, so Cara and Ada share the roles:
+  // whoever has more room requests, the other retries.
+  const [first, second] = await users(['Schema cara', 'Schema ada'])
+  await calm(first.page)
+  await calm(second.page)
+  const left = [await allowanceLeft(first.page), await allowanceLeft(second.page)]
+  const [requester, retrier] = left[0] >= left[1] ? [first, second] : [second, first]
+  const before = Math.max(left[0], left[1])
+  test.skip(before < 2, 'Cara and Ada are near the daily cap in this local state')
+
+  // The conversion itself fails: nothing was billed, so the slot comes back.
+  await analyzeUntilFailed(requester.page, await newFixtureId(requester.page, '77'), 'Fixture conversion failure')
+  expect(await allowanceLeft(requester.page)).toBe(before)
+
+  // A scanned PDF fails after the paid conversion: the slot stays used.
+  const scanned = await newFixtureId(requester.page, '99')
+  await analyzeUntilFailed(requester.page, scanned, 'almost no extractable text')
+  expect(await allowanceLeft(requester.page)).toBe(before - 1)
+
+  // Another reader can retry it; the retry uses the retrier's slot.
+  const retrierBefore = await allowanceLeft(retrier.page)
+  test.skip(retrierBefore === 0, 'The retrier is at the daily cap in this local state')
+  await retrier.page.goto(`/p/${scanned.replace('.', '~')}`)
+  await expect(retrier.page.getByTestId('paper-failed')).toContainText('Anyone signed in can retry')
+  await retrier.page.getByTestId('paper-failed').getByRole('button', { name: 'Retry' }).click()
+  await expect(retrier.page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', /queued|processing/, { timeout: 15_000 })
+  await expect(retrier.page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'failed', { timeout: READY_TIMEOUT })
+  expect(await allowanceLeft(retrier.page)).toBe(retrierBefore - 1)
 })
 
 test('the daily cap refuses a sixth new paper', async ({ users }) => {
@@ -334,8 +434,8 @@ test('the daily cap refuses a sixth new paper', async ({ users }) => {
   const page = bob.page
   let refused = ''
   for (let i = 0; i < 6 && !refused; i++) {
-    const id = `0000.${String(Math.floor(10000 + Math.random() * 89990))}`
     await page.goto('/home')
+    const id = await newFixtureId(page, '')
     await page.getByTestId('analyze-input').fill(id)
     await page.getByTestId('analyze-submit').click()
     const outcome = await Promise.race([

@@ -13,18 +13,21 @@ import { arxivSlug } from '../lib/arxiv'
 export function AnalyzeForm({
   workspaceId,
   placeholder,
+  initialValue = '',
   stay,
   onAdded,
 }: {
   workspaceId?: string
   placeholder?: string
+  /** Prefills the input, e.g. with the id of a paper that is not analyzed yet. */
+  initialValue?: string
   /** Stay on the current page after adding (workspace view) instead of opening the paper. */
   stay?: boolean
   onAdded?: (arxivId: string) => void
 }) {
   const { isSignedIn } = useAuth()
   const navigate = useNavigate()
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState(initialValue)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [showAuth, setShowAuth] = useState(false)
@@ -32,7 +35,8 @@ export function AnalyzeForm({
   async function submit(e: FormEvent) {
     e.preventDefault()
     if (!isSignedIn) return setShowAuth(true)
-    if (!input.trim() || busy) return
+    if (busy) return
+    if (!input.trim()) return setError('Paste an arXiv link or id first.')
     setBusy(true)
     setError('')
     const r = await actions.analyzePaper(input, workspaceId)

@@ -42,11 +42,12 @@ export default function KnowledgePage() {
   }, [topicsStatus, byKey])
 
   const rows = knowledge.rows
+  // Two states: rows stored as "learning" by earlier versions count as not known.
   const known = rows.filter((r) => r.data.status === 'known')
-  const learning = rows.filter((r) => r.data.status === 'learning')
-  const starters = STARTER_TOPICS.filter((t) => !knowledge.byTopic.has(t.key) && byKey.has(t.key))
+  const isKnown = (key: string) => knowledge.byTopic.get(key)?.data.status === 'known'
+  const starters = STARTER_TOPICS.filter((t) => !isKnown(t.key) && byKey.has(t.key))
   const matches = q.trim()
-    ? topics.filter((t) => !knowledge.byTopic.has(t.data.key) && t.data.name.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 20)
+    ? topics.filter((t) => !isKnown(t.data.key) && t.data.name.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 20)
     : []
 
   const setStatus = (topicKey: string) => (next: KnowledgeStatus | null) =>
@@ -70,23 +71,29 @@ export default function KnowledgePage() {
       <section data-testid={testId}>
         <div className="label pb-2">{title} · <span className="tabular-nums">{items.length}</span></div>
         {items.length === 0 ? (
-          <p className="surface p-4 text-sm text-muted-foreground">{title === 'Known' ? 'Nothing marked known yet.' : 'Nothing in progress.'}</p>
+          <p className="surface p-4 text-sm text-muted-foreground">Nothing marked known yet.</p>
         ) : (
           <div className="surface divide-y divide-border">
             {groups.map((g) => (
               <div key={g.level} className="px-4 py-3">
                 <div className="label pb-1.5 text-faint">{g.level}</div>
-                <ul className="flex flex-col">
+                <ul className="flex flex-col gap-2">
                   {g.items.map((r) => {
                     const t = byKey.get(r.data.topicKey)?.data
+                    const on = knowledge.statusOf(r.data.topicKey) === 'known'
                     return (
-                      <li key={r.recordId} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 py-2" data-testid="knowledge-item" data-topic-key={r.data.topicKey}>
+                      <li
+                        key={r.recordId}
+                        className={'status-surface grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-md border px-3 py-2 ' + (on ? 'known-outline' : 'border-border')}
+                        data-testid="knowledge-item"
+                        data-topic-key={r.data.topicKey}
+                      >
                         <div className="min-w-0">
                           <p className="font-medium leading-snug">{t?.name ?? r.data.topicKey}</p>
                           {t?.description && <p className="mt-0.5 text-[13px] text-muted-foreground">{t.description}</p>}
                           <p className="mt-0.5">{source(r)}</p>
                         </div>
-                        <StatusControl status={r.data.status} name={t?.name ?? r.data.topicKey} disabled={!knowledge.ready} onChange={setStatus(r.data.topicKey)} />
+                        <StatusControl status={knowledge.statusOf(r.data.topicKey)} name={t?.name ?? r.data.topicKey} disabled={!knowledge.ready || knowledge.isPending(r.data.topicKey)} onChange={setStatus(r.data.topicKey)} />
                       </li>
                     )
                   })}
@@ -106,7 +113,6 @@ export default function KnowledgePage() {
         <p className="-mt-1 text-sm text-muted-foreground">
           Topics are shared across papers. A topic you mark here shows as known in every paper that relies on it.
         </p>
-        {section('Learning', learning, 'knowledge-learning')}
         {section('Known', known, 'knowledge-known')}
 
         <section className="surface p-4">
@@ -119,7 +125,7 @@ export default function KnowledgePage() {
                   <span className="min-w-0">
                     <span className="font-medium">{t.data.name}</span> <Chip className="ml-1">{t.data.level}</Chip>
                   </span>
-                  <StatusControl status={null} name={t.data.name} disabled={!knowledge.ready} onChange={setStatus(t.data.key)} />
+                  <StatusControl status={knowledge.statusOf(t.data.key)} name={t.data.name} disabled={!knowledge.ready || knowledge.isPending(t.data.key)} onChange={setStatus(t.data.key)} />
                 </li>
               ))}
             </ul>

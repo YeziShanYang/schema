@@ -13,6 +13,22 @@ import { CloseIcon } from '../icons'
 
 const EXIT_MS = 150
 
+/** Panels can overlap for a moment (one closing as the next opens), so page scroll is locked by count. */
+let scrollLocks = 0
+function lockScroll(): () => void {
+  if (scrollLocks++ === 0) document.documentElement.style.overflow = 'hidden'
+  return () => {
+    if (--scrollLocks === 0) document.documentElement.style.overflow = ''
+  }
+}
+
+/** Focus inside another dialog stacked above this panel, such as sign-in: leave its keys alone. */
+function focusInOtherDialog(panel: HTMLElement): boolean {
+  const active = document.activeElement
+  if (!active || active === document.body || panel.contains(active)) return false
+  return !!active.closest('[role="dialog"], [aria-modal="true"], [data-testid="auth-overlay"]')
+}
+
 export function BranchPanel({
   open,
   onClose,
@@ -68,6 +84,7 @@ export function BranchPanel({
 
   const onKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      if (panelRef.current && focusInOtherDialog(panelRef.current)) return
       if (e.key === 'Escape') {
         e.stopPropagation()
         onClose()
@@ -107,11 +124,7 @@ export function BranchPanel({
   // Lock page scroll behind the panel.
   useEffect(() => {
     if (!mounted) return
-    const prev = document.documentElement.style.overflow
-    document.documentElement.style.overflow = 'hidden'
-    return () => {
-      document.documentElement.style.overflow = prev
-    }
+    return lockScroll()
   }, [mounted])
 
   if (!mounted || typeof document === 'undefined') return null

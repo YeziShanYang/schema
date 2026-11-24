@@ -10,7 +10,6 @@ import type { Env } from '../../worker'
 import type { ConceptData, Envelope, PaperData, TopicData, WorkspaceData } from '../types'
 import { isFixtureId, parseArxivId } from '../lib/arxiv'
 import { STARTER_TOPICS } from '../lib/topics'
-import { withPaper } from '../lib/workspace'
 import { categoryName, suggestWorkspaceName } from '../lib/categories'
 import { lookupArxiv } from '../server/pipeline/arxiv-meta'
 import { createPipelineClient, fixturesAllowed, fixtureWorkspace } from '../server/pipeline/client'
@@ -18,7 +17,7 @@ import { generateOverview, storedPaperText, type OverviewConcept } from '../serv
 import { recommendForWorkspace } from '../server/recommend'
 import { generateExplanation } from '../server/explain-concept'
 import { loadBranch } from '../server/branch-resources'
-import { actionRecords, capMessage, paperRequesters, recordUsage, refundAnalyze, usageState, usedRecently } from '../server/usage'
+import { releaseUsage, reserveUsage, setUsageRef, USAGE_CAPS, usageState, usedRecently } from '../server/usage'
 
 /** Every continue counts as a JobRoom attempt; this leaves room for all ticks plus crash recovery. */
 const ANALYZE_MAX_ATTEMPTS = 60
@@ -45,16 +44,26 @@ async function ownedWorkspace(tools: ActionTools, userId: string, workspaceId: s
   return ws && ws.data.userId === userId ? ws : null
 }
 
-/** Add a paper to a workspace (any number of papers; existing entries keep their status). */
+/**
+ * Add a paper to a workspace: one row per paper, so parallel adds never drop
+ * each other. A paper already in the workspace keeps its row and status.
+ */
 async function addToWorkspace(
   tools: ActionTools,
   ws: Envelope<WorkspaceData>,
   paper: { paperId: string; arxivId: string; title: string },
 ) {
-  await tools.update('workspaces', ws.recordId, {
-    currentPaperId: paper.paperId,
-    papers: withPaper(ws.data.papers, paper, Date.now()),
+  const r = await tools.create('workspace_papers', {
+    userId: ws.data.userId,
+    workspaceId: ws.recordId,
+    paperId: paper.paperId,
+    arxivId: paper.arxivId,
+    title: paper.title,
+    status: 'active',
+    addedAt: Date.now(),
   })
+  if (!r.success && !/duplicate|unique/i.test(r.error)) throw new Error(r.error)
+  await tools.update('workspaces', ws.recordId, { currentPaperId: paper.paperId })
 }
 
 function toMsTime(v: unknown): number {
@@ -92,6 +101,7 @@ const peekPaper: ActionHandler<Env> = async ({ params, tools, env }) => {
     success: true,
     data: {
       arxivId: ref.id,
+      paperId: existing?.recordId ?? '',
       title,
       authors: (meta?.authors ?? existing?.data.authors ?? []).slice(0, 8),
       year: (meta?.publishedAt ?? existing?.data.publishedAt ?? '').slice(0, 4),
@@ -160,13 +170,18 @@ const analyzePaper: ActionHandler<Env> = async ({ userId, params, tools, env }) 
     }
   }
 
-  const cap = await usageState(tools, userId, 'analyze')
-  if (!cap.allowed) return fail(capMessage('analyze', cap))
+  // Reserve the daily slot before anything else, so parallel requests cannot all pass the cap.
+  const slot = await reserveUsage(tools, userId, 'analyze', `pending:${ref.id}`)
+  if (!slot.ok) return fail(slot.message)
+  const giveBack = async <T,>(result: T): Promise<T> => {
+    await releaseUsage(tools, slot.id)
+    return result
+  }
 
   const lookup = await lookupArxiv(ref.id, { fixtures: debug })
-  if (!lookup.ok) return fail(lookup.message)
+  if (!lookup.ok) return giveBack(fail(lookup.message))
   const m = lookup.meta
-  if (newName && !(await ensureWorkspace())) return fail('Could not create the workspace.')
+  if (newName && !(await ensureWorkspace())) return giveBack(fail('Could not create the workspace.'))
 
   const created = await tools.create('papers', {
     arxivId: ref.id,
@@ -190,6 +205,7 @@ const analyzePaper: ActionHandler<Env> = async ({ userId, params, tools, env }) 
   if (!created.success) {
     // Someone else started the same paper a moment ago (uniqueOn arxivId).
     const raced = await findPaper(tools, ref.id)
+    await releaseUsage(tools, slot.id)
     if (raced) {
       if (workspace) await addToWorkspace(tools, workspace, { paperId: raced.recordId, arxivId: ref.id, title: raced.data.title })
       return { success: true, data: { paperId: raced.recordId, arxivId: ref.id, existing: true, status: raced.data.status, workspaceId: workspace?.recordId } }
@@ -199,11 +215,11 @@ const analyzePaper: ActionHandler<Env> = async ({ userId, params, tools, env }) 
 
   const paperId = created.data.recordId
   // The usage event is the server-only record of who requested the paper.
-  await recordUsage(tools, userId, 'analyze', paperId)
+  await setUsageRef(tools, slot.id, paperId)
   try {
     await enqueueAnalyze(env, paperId, ref.id, userId)
   } catch (e) {
-    await refundAnalyze(actionRecords(tools), paperId)
+    await releaseUsage(tools, slot.id)
     await tools.update('papers', paperId, {
       status: 'failed',
       stage: 'failed',
@@ -212,7 +228,7 @@ const analyzePaper: ActionHandler<Env> = async ({ userId, params, tools, env }) 
     return fail('Could not start the analysis. Try again.')
   }
   if (workspace) await addToWorkspace(tools, workspace, { paperId, arxivId: ref.id, title: m.title })
-  console.info(`[analyzePaper] queued ${ref.id} for ${userId} (${cap.used + 1} in the last 24h)`)
+  console.info(`[analyzePaper] queued ${ref.id} for ${userId} (${slot.state.used} in the last 24h)`)
   return { success: true, data: { paperId, arxivId: ref.id, existing: false, status: 'queued', workspaceId: workspace?.recordId } satisfies AnalyzeResult }
 }
 
@@ -222,26 +238,20 @@ const retryPaper: ActionHandler<Env> = async ({ userId, params, tools, env }) =>
   const got = await tools.get('papers', paperId)
   if (!got.success) return fail('Paper not found.')
   const paper = (got.data as unknown as { record: Envelope<PaperData> }).record
-  const requesters = await paperRequesters(tools, paperId)
-  if (!requesters.has(userId) && userId !== env.OWNER_USER_ID) {
-    return fail('Only the person who started this paper can retry it.')
-  }
   const stuck =
     (paper.data.status === 'processing' || paper.data.status === 'queued') &&
     Date.now() - toMsTime(paper.updatedAt) > STUCK_AFTER_MS
   if (paper.data.status !== 'failed' && !stuck) return fail('This paper is not in a failed state.')
 
-  // A retry uses a daily slot again; a stuck run's slot is given back first.
-  await refundAnalyze(actionRecords(tools), paperId)
-  const cap = await usageState(tools, userId, 'analyze')
-  if (!cap.allowed) return fail(capMessage('analyze', cap))
-  await recordUsage(tools, userId, 'analyze', paperId)
+  // Any signed-in reader may retry; the retry uses one of the retrier's daily papers.
+  const slot = await reserveUsage(tools, userId, 'analyze', paperId)
+  if (!slot.ok) return fail(slot.message)
 
   await tools.update('papers', paperId, { status: 'queued', stage: 'queued', error: '', progress: 0, progressMessage: 'Waiting to start' })
   try {
     await enqueueAnalyze(env, paperId, paper.data.arxivId, userId)
   } catch {
-    await refundAnalyze(actionRecords(tools), paperId)
+    await releaseUsage(tools, slot.id)
     await tools.update('papers', paperId, { status: 'failed', stage: 'failed', error: 'Could not restart the analysis.' })
     return fail('Could not restart the analysis. Try again.')
   }
@@ -272,17 +282,17 @@ const recommendPapers: ActionHandler<Env> = async ({ userId, params, tools, env 
   if (!ws) return fail('Workspace not found.')
   // Fixture runs in local tests cost nothing, so they neither count nor stop at the cap.
   const free = fixtureWorkspace(env, ws.data.name)
-  const usage = await usageState(tools, userId, 'recommend')
-  if (!free && !usage.allowed) return fail(capMessage('recommend', usage))
+  const slot = free ? null : await reserveUsage(tools, userId, 'recommend', ws.recordId)
+  if (slot && !slot.ok) return fail(slot.message)
 
   const mode = params.mode === 'starter' ? 'starter' : 'next'
   const outcome = await recommendForWorkspace(env, tools, userId, ws, mode)
   // A search that ran was paid for, so it counts toward the cap even if nothing usable came back.
-  if (outcome.charged) await recordUsage(tools, userId, 'recommend', ws.recordId)
+  if (slot?.ok && !outcome.charged) await releaseUsage(tools, slot.id)
   if (!outcome.ok) return fail(outcome.error)
 
   await tools.update('workspaces', ws.recordId, { suggestions: outcome.suggestions, suggestionsAt: Date.now() })
-  return { success: true, data: { suggestions: outcome.suggestions, remaining: usage.remaining - 1 } }
+  return { success: true, data: { suggestions: outcome.suggestions, remaining: slot?.ok ? slot.state.remaining : USAGE_CAPS.recommend } }
 }
 
 const explainConcept: ActionHandler<Env> = async ({ userId, params, tools, env }) => {
@@ -298,18 +308,24 @@ const explainConcept: ActionHandler<Env> = async ({ userId, params, tools, env }
   const paperRes = await tools.get('papers', concept.data.paperId)
   if (!paperRes.success) return fail('Paper not found.')
   const paper = (paperRes.data as unknown as { record: Envelope<PaperData> }).record
-  const free = fixturesAllowed(env, paper.data.arxivId)
-  const usage = await usageState(tools, userId, 'explain')
-  if (!free && !usage.allowed) return fail(capMessage('explain', usage))
+  // Someone else is generating this explanation right now; it will arrive on the concept.
+  const pendingAt = concept.data.explanationPendingAt ?? 0
+  if (pendingAt && Date.now() - pendingAt < EXPLAIN_PENDING_MS) return { success: true, data: { pending: true } }
 
+  const free = fixturesAllowed(env, paper.data.arxivId)
+  const slot = free ? null : await reserveUsage(tools, userId, 'explain', conceptId)
+  if (slot && !slot.ok) return fail(slot.message)
+
+  await tools.update('concepts', conceptId, { explanationPendingAt: Date.now() })
   let explanation: string
   try {
     explanation = await generateExplanation(env, concept, paper)
   } catch (e) {
+    // The model call was made, so the slot stays used.
+    await tools.update('concepts', conceptId, { explanationPendingAt: 0 })
     return fail(`Could not generate an explanation: ${e instanceof Error ? e.message : String(e)}`)
   }
-  await tools.update('concepts', conceptId, { explanation, explanationAt: Date.now() })
-  if (!free) await recordUsage(tools, userId, 'explain', conceptId)
+  await tools.update('concepts', conceptId, { explanation, explanationAt: Date.now(), explanationPendingAt: 0 })
   return { success: true, data: { explanation, cached: false } }
 }
 
@@ -326,26 +342,24 @@ const loadBranchResources: ActionHandler<Env> = async ({ userId, params, tools, 
   const ref = `${paperId}:${branchKey}`
   const free = fixturesAllowed(env, paper.data.arxivId)
   const alreadyCounted = await usedRecently(tools, userId, 'branch', ref)
-  const usage = await usageState(tools, userId, 'branch')
-  if (!free && !alreadyCounted && !usage.allowed) return fail(capMessage('branch', usage))
+  const slot = free || alreadyCounted ? null : await reserveUsage(tools, userId, 'branch', ref)
+  if (slot && !slot.ok) return fail(slot.message)
 
   const outcome = await loadBranch(env, tools, paper, branchKey)
+  // Paid calls that ran count even when the load then failed; a load that cost nothing gives the slot back.
+  const charged = outcome.ok ? outcome.charged : outcome.charged === true
+  if (slot?.ok && !charged) await releaseUsage(tools, slot.id)
   if (!outcome.ok) return fail(outcome.error)
-  if (outcome.charged && !alreadyCounted && !free) await recordUsage(tools, userId, 'branch', ref)
+  const left = (await usageState(tools, userId, 'branch')).remaining
   return {
     success: true,
-    data: {
-      loaded: outcome.loaded,
-      failed: outcome.failed,
-      remaining: outcome.remaining,
-      busy: outcome.busy,
-      allowanceLeft: outcome.charged && !alreadyCounted ? usage.remaining - 1 : usage.remaining,
-    },
+    data: { loaded: outcome.loaded, failed: outcome.failed, remaining: outcome.remaining, busy: outcome.busy, allowanceLeft: left },
   }
 }
 
 /** A run that started this recently is still in progress; an older mark is treated as abandoned. */
 const OVERVIEW_PENDING_MS = 2 * 60_000
+const EXPLAIN_PENDING_MS = 2 * 60_000
 
 /**
  * The paper overview for a paper analyzed before the overview stage existed:
@@ -365,8 +379,8 @@ const ensureOverview: ActionHandler<Env> = async ({ userId, params, tools, env }
   }
 
   const free = fixturesAllowed(env, paper.data.arxivId)
-  const usage = await usageState(tools, userId, 'overview')
-  if (!free && !usage.allowed) return fail(capMessage('overview', usage))
+  const slot = free ? null : await reserveUsage(tools, userId, 'overview', paperId)
+  if (slot && !slot.ok) return fail(slot.message)
 
   await tools.update('papers', paperId, { overviewLoadingAt: Date.now() })
   const conceptsRes = await tools.query('concepts', { where: { paperId }, limit: 200 })
@@ -376,18 +390,26 @@ const ensureOverview: ActionHandler<Env> = async ({ userId, params, tools, env }
   let result
   try {
     const text = await storedPaperText(env, paper, free)
-    const ordered: OverviewConcept[] = concepts.map((c) => ({ key: c.data.key, name: c.data.name, whyNeeded: c.data.whyNeeded, section: c.data.section, order: c.data.order }))
+    const ordered: OverviewConcept[] = concepts.map((c) => ({
+      key: c.data.key,
+      name: c.data.name,
+      whyNeeded: c.data.whyNeeded,
+      section: c.data.section,
+      order: c.data.order,
+      quote: c.data.quoteVerified ? c.data.quote : '',
+    }))
     result = await generateOverview(createPipelineClient(env, free), paper.data, text, ordered)
   } catch (e) {
     await tools.update('papers', paperId, { overviewLoadingAt: 0 })
     return fail(`Could not write the overview: ${e instanceof Error ? e.message : String(e)}`)
   }
   for (const c of concepts) {
-    const role = result.roles[c.data.key]
-    if (role) await tools.update('concepts', c.recordId, { plainRole: role })
+    const data: Record<string, unknown> = {}
+    if (result.roles[c.data.key]) data.plainRole = result.roles[c.data.key]
+    if (result.quoteDisplays[c.data.key]) data.quoteDisplay = result.quoteDisplays[c.data.key]
+    if (Object.keys(data).length) await tools.update('concepts', c.recordId, data)
   }
   await tools.update('papers', paperId, { overview: result.overview, overviewLoadingAt: 0 })
-  if (!free) await recordUsage(tools, userId, 'overview', paperId)
   return { success: true, data: { overview: result.overview, cached: false } }
 }
 

@@ -25,7 +25,6 @@ export interface WorkspacePaperNode {
   progressMessage: string
   analysisProgress: number
   known: number
-  learning: number
   total: number
   isLastOpened: boolean
   paper: RecordData<PaperData> | null
@@ -42,15 +41,13 @@ export function useWorkspaceGraph(workspaceId: string) {
 
   const papers = useMemo<WorkspacePaperNode[]>(() => {
     if (!ws) return []
-    return (ws.data.papers ?? []).map((wp) => {
+    return workspaces.papersOf(ws.recordId).map((wp) => {
       const paper = byId.get(wp.paperId) ?? null
       const keys = paper?.data.topicKeys ?? []
       let known = 0
-      let learning = 0
       for (const k of keys) {
         const s = knowledge.statusOf(k)
         if (s === 'known') known++
-        else if (s === 'learning') learning++
       }
       return {
         paperId: wp.paperId,
@@ -62,15 +59,17 @@ export function useWorkspaceGraph(workspaceId: string) {
         progressMessage: paper?.data.progressMessage ?? '',
         analysisProgress: paper?.data.progress ?? 0,
         known,
-        learning,
         total: paper?.data.topicKeys ? keys.length : paper?.data.conceptCount ?? 0,
         isLastOpened: ws.data.currentPaperId === wp.paperId,
         paper,
       }
     })
-  }, [ws, byId, knowledge.statusOf])
+  }, [ws, workspaces, byId, knowledge.statusOf])
 
-  const candidates: Suggestion[] = useMemo(() => (ws ? candidateSuggestions(ws.data.suggestions, ws.data.papers) : []), [ws])
+  const candidates: Suggestion[] = useMemo(
+    () => (ws ? candidateSuggestions(ws.data.suggestions, workspaces.papersOf(ws.recordId)) : []),
+    [ws, workspaces],
+  )
 
   return {
     loading: workspaces.status === 'loading',

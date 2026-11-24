@@ -52,7 +52,7 @@ export default function WorkspacePage() {
     if (!wantsStarter || starterRan.current || !ws) return
     starterRan.current = true
     navigate(location.pathname, { replace: true, state: null })
-    if ((ws.data.papers?.length ?? 0) > 0 || (ws.data.suggestions?.length ?? 0) > 0) return
+    if (g.papers.length > 0 || (ws.data.suggestions?.length ?? 0) > 0) return
     void (async () => {
       setBusy(true)
       setError('')
@@ -60,7 +60,7 @@ export default function WorkspacePage() {
       setBusy(false)
       if (!r.success) setError(r.error)
     })()
-  }, [location, ws, id, navigate])
+  }, [location, ws, id, navigate, g.papers.length])
 
   // Continue: the most recently opened paper in this workspace that isn't finished.
   const continuePaper = useMemo(() => {
@@ -149,6 +149,7 @@ export default function WorkspacePage() {
           reason={s.reason}
           meta={`${s.authors?.[0]?.split(' ').slice(-1)[0] ?? ''}${(s.authors?.length ?? 0) > 1 ? ' et al.' : ''} · arXiv ${s.arxivId}`}
           busy={adding === s.arxivId}
+          disabled={!!adding && adding !== s.arxivId}
           onAdd={() => add(s.arxivId)}
         />
       ),

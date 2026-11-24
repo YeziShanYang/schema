@@ -3,11 +3,14 @@
  * link to the workspace and workspace actions.
  */
 
-import { useParams } from 'react-router-dom'
+import { Navigate, useParams } from 'react-router-dom'
 import { PaperWindow } from '../../../../../../components/paper/PaperWindow'
-import { arxivFromSlug } from '../../../../../../lib/arxiv'
+import { arxivFromSlug, arxivSlug, parseArxivId } from '../../../../../../lib/arxiv'
 
 export default function WorkspacePaperPage() {
   const { id = '', arxivId: slug = '' } = useParams()
-  return <PaperWindow arxivId={arxivFromSlug(slug)} workspaceId={id} />
+  const ref = parseArxivId(arxivFromSlug(slug))
+  // A versioned or otherwise non-canonical id opens the paper under its canonical slug.
+  if (ref && arxivSlug(ref.id) !== slug) return <Navigate replace to={`/w/${id}/p/${arxivSlug(ref.id)}`} />
+  return <PaperWindow arxivId={ref?.id ?? arxivFromSlug(slug)} workspaceId={id} />
 }

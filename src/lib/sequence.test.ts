@@ -78,6 +78,13 @@ describe('recommendedSequence', () => {
     expect(s2.fresh).toBe(false)
   })
 
+  it('counts only known as satisfying a prerequisite', () => {
+    const chain = [c('x', 'math', 0, 0), c('y', 'attn', 1, 1, ['x'])]
+    // "learning" rows from earlier versions do not unblock y; x stays next up.
+    expect(recommendedSequence(branches, chain, statuses({ 't-x': 'learning' })).nextUp?.key).toBe('x')
+    expect(recommendedSequence(branches, chain, statuses({ 't-x': 'known' })).nextUp?.key).toBe('y')
+  })
+
   it('jumps past a blocked concept to the first ready one', () => {
     const s = recommendedSequence(branches, [c('x', 'math', 0, 0), c('y', 'attn', 1, 1, ['x']), c('z', 'arch', 1, 2)], statuses({ 't-x': 'known' }))
     expect(s.nextUp?.key).toBe('y')

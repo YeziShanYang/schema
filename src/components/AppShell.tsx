@@ -45,7 +45,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   const knownCount = knowledge.rows.filter((r) => r.data.status === 'known').length
-  const learningCount = knowledge.rows.length - knownCount
   const a = allowance?.analyze
 
   const itemClass = ({ isActive }: { isActive: boolean }) =>
@@ -67,7 +66,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
               <NavLink to={`/w/${w.recordId}`} className={itemClass} onClick={onNavigate}>
                 <span className="truncate">{w.data.name}</span>
                 <small className="shrink-0 text-xs text-faint tabular-nums">
-                  {w.data.papers?.length ? plural(w.data.papers.length, 'paper', 'papers') : 'new'}
+                  {workspaces.papersOf(w.recordId).length ? plural(workspaces.papersOf(w.recordId).length, 'paper', 'papers') : 'new'}
                 </small>
               </NavLink>
             </li>
@@ -110,7 +109,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           <span>Knowledge</span>
           <span className="tabular-nums">
             <b className="font-semibold text-foreground">{knownCount}</b> known
-            {learningCount > 0 && <> · {learningCount} learning</>}
           </span>
         </NavLink>
         <div className="flex items-center justify-between" data-testid="sidebar-allowance" data-remaining={a?.remaining ?? ""} title="New papers you can start in a rolling 24 hours. Papers someone already analyzed are free.">

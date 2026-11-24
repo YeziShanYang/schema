@@ -10,6 +10,7 @@ import { appFiles } from 'deepspace/worker'
 import type { Env } from '../../worker'
 import type { Envelope, PaperData, PaperOverview, StoryItem } from '../types'
 import { asString, asStringArray } from '../lib/json'
+import { acceptQuoteDisplay } from '../lib/quote-display'
 import { callModelJson } from './pipeline/llm'
 import type { PipelineClient } from './pipeline/client'
 import { OVERVIEW_SYSTEM, overviewUser } from './pipeline/prompts'
@@ -26,12 +27,16 @@ export interface OverviewConcept {
   whyNeeded: string
   section: string
   order: number
+  /** The verbatim quote, when it passed verification; its LaTeX version comes back as quote_display. */
+  quote?: string
 }
 
 export interface ParsedOverview {
   overview: PaperOverview
   /** Concept key to its plain role. */
   roles: Record<string, string>
+  /** Concept key to its quote with the math as LaTeX, only where the words still match the quote. */
+  quoteDisplays: Record<string, string>
 }
 
 /**
@@ -59,15 +64,20 @@ export function parseOverview(json: Record<string, unknown>, concepts: OverviewC
   const alsoNeeded = [...concepts].sort((a, b) => a.order - b.order).map((c) => c.key).filter((k) => !used.has(k))
 
   const roles: Record<string, string> = {}
+  const quoteDisplays: Record<string, string> = {}
+  const quoteOf = new Map(concepts.map((c) => [c.key, c.quote ?? '']))
   const list = Array.isArray(json.roles) ? json.roles : []
   for (const raw of list) {
     if (!raw || typeof raw !== 'object') continue
     const o = raw as Record<string, unknown>
     const key = asString(o.key, 20)
+    if (!known.has(key)) continue
     const role = asString(o.plain_role, MAX_ROLE_CHARS)
-    if (known.has(key) && role && !roles[key]) roles[key] = role
+    if (role && !roles[key]) roles[key] = role
+    const display = asString(o.quote_display, 1200)
+    if (display && !quoteDisplays[key] && acceptQuoteDisplay(quoteOf.get(key) ?? '', display)) quoteDisplays[key] = display
   }
-  return { overview: { plain, story, alsoNeeded, generatedAt: now }, roles }
+  return { overview: { plain, story, alsoNeeded, generatedAt: now }, roles, quoteDisplays }
 }
 
 export async function generateOverview(
@@ -84,7 +94,7 @@ export async function generateOverview(
       abstract: paper.abstract,
       mainContribution: paper.mainContribution,
       text: text.slice(0, OVERVIEW_TEXT_CHARS),
-      concepts: ordered.map((c) => ({ key: c.key, name: c.name, whyNeeded: c.whyNeeded, section: c.section })),
+      concepts: ordered.map((c) => ({ key: c.key, name: c.name, whyNeeded: c.whyNeeded, section: c.section, quote: c.quote })),
     }),
     maxTokens: 8000, // thinking counts against this
     hint: 'overview',

@@ -36,7 +36,7 @@ export default function HomePage() {
               <Link to={`/w/${lastWorkspace.recordId}`} className="mt-1 block text-lg font-semibold text-foreground hover:text-primary">
                 {lastWorkspace.data.name}
                 <span className="ml-2 text-sm font-normal text-muted-foreground">
-                  {lastWorkspace.data.papers?.length ?? 0} papers
+                  {workspaces.papersOf(lastWorkspace.recordId).length} papers
                 </span>
               </Link>
             ) : (

@@ -30,6 +30,7 @@ import {
 } from 'deepspace/worker'
 import type { ExpoAuthBridgeOptions, JwtVerifierConfig, VerifyResult } from 'deepspace/worker'
 import { integrations } from '../integrations.js'
+import { arxivSlug } from '../lib/arxiv.js'
 import type { AppContext, Env } from '../../worker.js'
 
 function jwtConfig(env: Env): JwtVerifierConfig {
@@ -423,6 +424,13 @@ export function registerStaticRoutes(app: Hono<AppContext>): void {
 
   app.get('*', async (c) => {
     const url = new URL(c.req.url)
+    // A paper link with a dotted id (/p/1706.03762) looks like a file to the
+    // asset handler; send it to the slug form the app uses (/p/1706~03762).
+    const dotted = url.pathname.match(/^((?:\/w\/[^/]+)?\/p\/)([^/]*\.[^/]*)$/)
+    if (dotted) {
+      url.pathname = dotted[1] + arxivSlug(decodeURIComponent(dotted[2]))
+      return c.redirect(url.toString(), 301)
+    }
     const response = await c.env.ASSETS.fetch(c.req.raw)
     if (response.status !== 404) return response
 

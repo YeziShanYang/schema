@@ -13,6 +13,7 @@ import { FloatingGraph } from '../components/graph/FloatingGraph'
 import { BranchPanel } from '../components/graph/BranchPanel'
 import { CenterCard } from '../components/graph/nodes'
 import { recommendedSequence } from '../lib/sequence'
+import { linkTitle } from '../lib/links'
 import { cleanTitle } from '../components/Markdown'
 import { APP_DISPLAY_NAME, DEMO_ARXIV_ID } from '../constants'
 import { demoSnapshot } from '../data/demo'
@@ -28,6 +29,9 @@ const STEPS = [
   ['Finish', 'Mark the paper finished, optionally marking its remaining topics known, and move to the next one.'],
 ] as const
 
+const WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten']
+const countWord = (n: number) => WORDS[n] ?? String(n)
+
 export default function Landing() {
   const snap = demoSnapshot
   const [open, setOpen] = useState('')
@@ -38,16 +42,19 @@ export default function Landing() {
     lastOpened.current = key
     setOpen(key)
   }
-  // The same sequence the app computes, for a reader who knows nothing yet.
+  // The app's sequence for a reader who knows nothing yet, from the same
+  // inputs the app uses (tier, the model's order and dependsOn), so the
+  // example and the demo paper agree.
   const seq = useMemo(
     () =>
       recommendedSequence(
         snap.branches,
-        snap.branches.flatMap((b) => b.concepts.map((c, i) => ({ ...c, branchKey: b.key, order: i, dependsOn: [] as string[] }))),
+        snap.branches.flatMap((b) => b.concepts.map((c, i) => ({ ...c, branchKey: b.key, order: c.order ?? i, dependsOn: c.dependsOn ?? [] }))),
         () => null,
       ),
     [snap],
   )
+  const explained = snap.branches.reduce((n, b) => n + b.concepts.filter((c) => c.explanation).length, 0)
   const demoHref = `/p/${arxivSlug(DEMO_ARXIV_ID)}`
   const total = snap.branches.reduce((n, b) => n + b.concepts.length, 0)
 
@@ -172,7 +179,7 @@ export default function Landing() {
                           )}
                           {topic?.resource && (
                             <a href={topic.resource.url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-[12.5px] text-primary hover:underline">
-                              {cleanTitle(topic.resource.title)}
+                              {cleanTitle(linkTitle(topic.resource.title, topic.resource.url))}
                             </a>
                           )}
                         </li>
@@ -182,7 +189,13 @@ export default function Landing() {
               )}
             </BranchPanel>
             <p className="mt-3 text-[13px] text-muted-foreground">
-              <Link to={demoHref} className="text-primary hover:underline">Open this paper</Link> to try marking concepts, the recommended order, the check questions and the AI explanations. No sign-in needed.
+              <Link to={demoHref} className="text-primary hover:underline">Open this paper</Link> to try marking concepts, the recommended order and the check questions, no sign-in needed.{' '}
+              {explained > 0 && (
+                <>
+                  {countWord(explained)} {explained === 1 ? 'concept has' : 'concepts have'} a saved AI explanation.{' '}
+                  <Link to="/home?signin=1" className="text-primary hover:underline" data-testid="landing-explain-signin">Sign in</Link> to generate the rest.
+                </>
+              )}
             </p>
           </section>
 

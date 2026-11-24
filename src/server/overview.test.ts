@@ -38,6 +38,25 @@ describe('parseOverview', () => {
     expect(overview.alsoNeeded).toEqual([])
   })
 
+  it('keeps a quote_display only when its words still match the verbatim quote', () => {
+    const quoted: OverviewConcept[] = [
+      { ...concepts[0], quote: 'The norm is ∥A∥2g = ⟨A, A⟩g for every tensor in the layer.' },
+      { ...concepts[1], quote: 'We set ⟨A, B⟩g = g ia g jb Aij Bab for the metric.' },
+    ]
+    const { quoteDisplays } = parseOverview(
+      {
+        plain: 'A summary.',
+        story: [{ text: 'One.' }, { text: 'Two.' }],
+        roles: [
+          { key: 'c1', plain_role: 'r', quote_display: 'The norm is \\(\\|A\\|_g^2 = \\langle A, A\\rangle_g\\) for every tensor in the layer.' },
+          { key: 'c2', plain_role: 'r', quote_display: 'We define an inner product \\(\\langle A, B\\rangle_g\\) for all matrices.' },
+        ],
+      },
+      quoted,
+    )
+    expect(Object.keys(quoteDisplays)).toEqual(['c1'])
+  })
+
   it('refuses an overview without a summary or with fewer than two story items', () => {
     expect(() => parseOverview({ plain: '', story: [{ text: 'a' }, { text: 'b' }] }, concepts)).toThrow()
     expect(() => parseOverview({ plain: 'Summary.', story: [{ text: 'only one' }] }, concepts)).toThrow()

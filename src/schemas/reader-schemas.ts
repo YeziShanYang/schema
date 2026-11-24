@@ -96,6 +96,37 @@ export const workspacesSchema: CollectionSchema = {
 }
 
 /**
+ * Papers in a workspace, one row per (reader, workspace, paper), so two quick
+ * adds each write their own row instead of rewriting one shared list.
+ */
+export const workspacePapersSchema: CollectionSchema = {
+  name: 'workspace_papers',
+  columns: [
+    {
+      name: 'userId',
+      storage: 'text',
+      interpretation: 'plain',
+      required: true,
+      userBound: true,
+      immutable: true,
+    },
+    { name: 'workspaceId', storage: 'text', interpretation: 'plain', required: true },
+    { name: 'paperId', storage: 'text', interpretation: 'plain', required: true },
+    { name: 'arxivId', storage: 'text', interpretation: 'plain' },
+    { name: 'title', storage: 'text', interpretation: 'plain' },
+    {
+      name: 'status',
+      storage: 'text',
+      interpretation: { kind: 'select', options: ['active', 'finished'] },
+    },
+    { name: 'addedAt', storage: 'number', interpretation: 'plain' },
+  ],
+  ownerField: 'userId',
+  uniqueOn: ['userId', 'workspaceId', 'paperId'],
+  permissions: ownOnly,
+}
+
+/**
  * Metered actions per user (paper analyses, recommendations, explanations),
  * used for the daily caps and, for analyses, as the record of who requested
  * a paper. Written only by server code; no client role can read or write it

@@ -5,6 +5,7 @@
  */
 
 import raw from './demo-snapshot.json'
+import type { PaperOverview } from '../types'
 
 export interface DemoConcept {
   key: string
@@ -16,6 +17,10 @@ export interface DemoConcept {
   section: string
   topicKey: string
   explanation: string
+  /** Present in snapshots exported after the overview existed. */
+  order?: number
+  dependsOn?: string[]
+  plainRole?: string
 }
 
 export interface DemoBranch {
@@ -28,7 +33,7 @@ export interface DemoBranch {
 export interface DemoSnapshot {
   note: string
   exportedAt: string
-  paper: { arxivId: string; title: string; authors: string[]; year: string; mainContribution: string }
+  paper: { arxivId: string; title: string; authors: string[]; year: string; mainContribution: string; overview?: PaperOverview | null }
   branches: DemoBranch[]
   topics: Record<string, { name: string; level: string; description: string; resource: { title: string; url: string; why: string } | null }>
 }

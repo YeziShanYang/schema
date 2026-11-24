@@ -1,11 +1,23 @@
 /**
- * A small Markdown renderer for model-written explanations: headings, bold,
- * italics, inline code, fenced code blocks, bullet and numbered lists, and
- * paragraphs. It builds React elements (no HTML strings), so model output
- * can never inject markup.
+ * Markdown for model-written explanations. <Markdown> renders with math
+ * (MarkdownMath: react-markdown, remark-math and rehype-katex, loaded lazily
+ * with KaTeX's stylesheet). While that loads, <PlainMarkdown> shows the same
+ * text: a small renderer for headings, bold, italics, inline code, fenced
+ * code, lists and paragraphs that builds React elements, so model output can
+ * never inject markup.
  */
 
-import type { ReactNode } from 'react'
+import { lazy, Suspense, type ReactNode } from 'react'
+
+const MarkdownMath = lazy(() => import('./MarkdownMath'))
+
+export function Markdown({ text, className }: { text: string; className?: string }) {
+  return (
+    <Suspense fallback={<PlainMarkdown text={text} className={className} />}>
+      <MarkdownMath text={text} className={className} />
+    </Suspense>
+  )
+}
 
 function inline(text: string, keyPrefix: string): ReactNode[] {
   const out: ReactNode[] = []
@@ -27,7 +39,7 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
   return out
 }
 
-export function Markdown({ text, className }: { text: string; className?: string }) {
+export function PlainMarkdown({ text, className }: { text: string; className?: string }) {
   const lines = text.replace(/\r\n?/g, '\n').split('\n')
   const blocks: ReactNode[] = []
   let i = 0

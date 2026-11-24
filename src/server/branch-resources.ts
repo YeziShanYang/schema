@@ -13,6 +13,7 @@ import type { ActionTools } from 'deepspace/worker'
 import type { Env } from '../../worker'
 import type { ConceptData, Envelope, PaperData, TopicData, TopicResource } from '../types'
 import { asString } from '../lib/json'
+import { linkTitle } from '../lib/links'
 import { createPipelineClient, fixturesAllowed } from './pipeline/client'
 import type { PipelineClient } from './pipeline/client'
 import { callModelJson } from './pipeline/llm'
@@ -41,7 +42,7 @@ export function extractCandidates(v: unknown): Candidate[] {
     const url = asString(o.url, 500)
     if (!/^https?:\/\//.test(url)) continue
     out.push({
-      title: asString(o.title, 200) || url,
+      title: linkTitle(asString(o.title, 200), url),
       url,
       snippet: asString(o.text ?? o.summary ?? o.highlights, 4000).replace(/\s+/g, ' ').slice(0, 280),
     })
@@ -56,11 +57,20 @@ interface TopicItem {
   candidates: Candidate[]
 }
 
-/** Search and pick for a set of topics. Returns picked resources per topic key. */
+/** The top search results as links without a "why" line, for when the pick call fails. */
+export function fallbackResources(candidates: Candidate[]): TopicResource[] {
+  return candidates.slice(0, 2).map((c) => ({ title: c.title, url: c.url, why: '' }))
+}
+
+/**
+ * Search and pick for a set of topics. Returns picked resources per topic key
+ * and whether any paid call succeeded. If a pick call fails after its
+ * searches ran, those topics keep their top search results instead.
+ */
 export async function findResources(
   client: PipelineClient,
   topics: { key: string; name: string; description: string; searchQuery: string }[],
-): Promise<Record<string, TopicResource[]>> {
+): Promise<{ picks: Record<string, TopicResource[]>; charged: boolean }> {
   // Searches run in parallel; results for a topic whose search failed are empty.
   const searched: TopicItem[] = await Promise.all(
     topics.map(async (t) => {
@@ -78,12 +88,19 @@ export async function findResources(
   const withResults = searched.filter((i) => i.candidates.length > 0)
   for (let i = 0; i < withResults.length; i += PICK_BATCH) {
     const batch = withResults.slice(i, i + PICK_BATCH)
-    const json = await callModelJson(client, {
-      system: RESOURCES_SYSTEM,
-      user: resourcesUser(batch),
-      maxTokens: 6000,
-      hint: 'resources',
-    })
+    let json: Record<string, unknown>
+    try {
+      json = await callModelJson(client, {
+        system: RESOURCES_SYSTEM,
+        user: resourcesUser(batch),
+        maxTokens: 6000,
+        hint: 'resources',
+      })
+    } catch (e) {
+      console.warn(`[links] pick call failed, keeping top search results: ${e instanceof Error ? e.message : String(e)}`)
+      for (const item of batch) picks[item.key] = fallbackResources(item.candidates)
+      continue
+    }
     const list = Array.isArray(json.topics) ? json.topics : []
     for (const t of list) {
       if (!t || typeof t !== 'object') continue
@@ -100,13 +117,15 @@ export async function findResources(
         picks[item.key].push({ title: cand.title, url: cand.url, why: asString((r as Record<string, unknown>).why, 300) })
       }
     }
+    // A topic the model skipped or answered with unknown URLs keeps its top search results.
+    for (const item of batch) if (!picks[item.key]?.length) picks[item.key] = fallbackResources(item.candidates)
   }
-  return picks
+  return { picks, charged: withResults.length > 0 }
 }
 
 export type BranchLoadOutcome =
   | { ok: true; loaded: number; failed: number; remaining: number; busy: number; charged: boolean }
-  | { ok: false; error: string }
+  | { ok: false; error: string; charged?: boolean }
 
 /**
  * Loads links for one branch of one paper. `charged` is true when paid calls
@@ -142,12 +161,13 @@ export async function loadBranch(
   }
 
   let picks: Record<string, TopicResource[]>
+  let charged = false
   try {
     const client = createPipelineClient(env, fixturesAllowed(env, paper.data.arxivId))
-    picks = await findResources(
+    ;({ picks, charged } = await findResources(
       client,
       batch.map((t) => ({ key: t.data.key, name: t.data.name, description: t.data.description, searchQuery: t.data.searchQuery })),
-    )
+    ))
   } catch (e) {
     // Put the topics back so the next request can try again.
     for (const t of batch) await tools.update('topics', t.recordId, { resourcesStatus: 'none', resourcesLoadingAt: 0 })
@@ -166,5 +186,5 @@ export async function loadBranch(
       resourcesLoadingAt: 0,
     })
   }
-  return { ok: true, loaded, failed, remaining: due.length - batch.length, busy, charged: true }
+  return { ok: true, loaded, failed, remaining: due.length - batch.length, busy, charged }
 }

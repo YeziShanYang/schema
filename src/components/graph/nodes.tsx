@@ -13,6 +13,8 @@ const nodeBase = 'press block w-full cursor-pointer select-none rounded border b
 // Kept as separate whole strings so the ring and the resting shadow never compete in one class list.
 const nodeResting = 'shadow-[var(--shadow-ring)] hover:shadow-[var(--shadow-ring-hi)]'
 const nodeRinged = 'shadow-[0_0_0_2px_var(--color-primary),var(--shadow-ring-hi)]'
+// A done branch gets the shared known outline (see .known-outline in styles.css).
+const nodeDone = 'known-outline'
 
 export const BranchNode = forwardRef<
   HTMLButtonElement,
@@ -41,7 +43,8 @@ export const BranchNode = forwardRef<
       data-branch-key={branchKey}
       data-step={step}
       data-current={current ? 'true' : undefined}
-      className={cn(nodeBase, 'graph-w-branch', open || current ? nodeRinged : nodeResting)}
+      data-done={done ? 'true' : undefined}
+      className={cn(nodeBase, 'status-surface graph-w-branch', open || current ? nodeRinged : done ? nodeDone : nodeResting)}
     >
       {(step || current) && (
         <span className="mb-1 flex items-center justify-between gap-2">
@@ -113,7 +116,7 @@ export function PaperNode({
   )
 }
 
-export function CandidateNode({ title, reason, meta, busy, onAdd }: { title: string; reason: string; meta: string; busy?: boolean; onAdd: () => void }) {
+export function CandidateNode({ title, reason, meta, busy, disabled, onAdd }: { title: string; reason: string; meta: string; busy?: boolean; disabled?: boolean; onAdd: () => void }) {
   return (
     <div
       className="graph-w-paper rounded border border-dashed border-[color-mix(in_oklab,var(--color-primary)_45%,var(--color-border))] bg-[color-mix(in_oklab,var(--color-card)_85%,transparent)] px-3.5 py-3"
@@ -123,7 +126,7 @@ export function CandidateNode({ title, reason, meta, busy, onAdd }: { title: str
       <span className="mt-1 line-clamp-2 block text-sm font-semibold leading-snug">{title}</span>
       <span className="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">{meta}</span>
       <span className="mt-1.5 line-clamp-2 block text-xs text-muted-foreground" title={reason}>{reason}</span>
-      <Button size="sm" variant="outline" className="mt-2" loading={busy} onClick={onAdd} data-testid="pick-suggestion">
+      <Button size="sm" variant="outline" className="mt-2" loading={busy} disabled={disabled} onClick={onAdd} data-testid="pick-suggestion">
         <PlusIcon size={13} /> Add
       </Button>
     </div>

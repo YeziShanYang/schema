@@ -11,7 +11,7 @@
  * - Concepts go branch by branch in that order, then by tier, then by the
  *   model's order.
  * - Next up is the first concept that is not known and whose prerequisites
- *   are all known or learning; failing that, the first concept not known.
+ *   are all known; failing that, the first concept not known.
  */
 
 import type { KnowledgeStatus } from '../types'
@@ -101,8 +101,7 @@ export function recommendedSequence<C extends SeqConcept>(
     (c.dependsOn ?? []).every((d) => {
       const dep = byKey.get(d)
       if (!dep) return true
-      const s = statusOf(dep.topicKey)
-      return s === 'known' || s === 'learning'
+      return statusOf(dep.topicKey) === 'known'
     })
 
   const nextUp = ordered.find((c) => !isKnown(c) && ready(c)) ?? ordered.find((c) => !isKnown(c)) ?? null
