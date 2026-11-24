@@ -6,16 +6,14 @@
  * in once their stage is reached.
  */
 
-/* Cross-fade into the paper window, which renders underneath. Opacity only,
-   with or without a reduced-motion preference. */
+/* Cross-fade into the paper window, which mounts underneath and plays its
+   own entrance. Opacity only, with or without a reduced-motion preference. */
 .analysis-progress {
   transition-property: opacity;
-  transition-duration: 300ms;
+  transition-duration: 150ms;
   transition-timing-function: ease-out;
 }
-.analysis-progress[data-phase="fade"] { opacity: 0; }
-.analysis-progress[data-phase="hold"],
-.analysis-progress[data-phase="fade"] { pointer-events: none; }
+.analysis-progress[data-phase="fade"] { opacity: 0; pointer-events: none; }
 
 /* ---------- The sheet: 144 by 186, drawn at 92 by 119 on narrow screens ---------- */
 .sheet-frame { width: 92px; height: 119px; }

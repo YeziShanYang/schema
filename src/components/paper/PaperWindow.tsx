@@ -54,6 +54,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const ws = workspaceId ? workspaces.byId.get(workspaceId) : undefined
   // The progress view stands in for the graph until the paper is ready, then cross-fades out over it.
   const analysis = useAnalysisPhase(p.paper?.recordId, p.paper?.data.status)
+  const covered = analysis === 'on' || analysis === 'hold'
 
   const viewKey = `schema:view:${arxivId}`
   const [view, setView] = useState<'graph' | 'walkthrough'>(() => (readPref(viewKey) === 'walkthrough' ? 'walkthrough' : 'graph'))
@@ -241,7 +242,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {p.concepts.length > 0 && analysis !== 'on' && (
+          {p.concepts.length > 0 && !covered && (
             <nav className="flex w-fit gap-1 rounded-[7px] border border-border bg-surface-2 p-[3px]" aria-label="Paper view">
               {(['graph', 'walkthrough'] as const).map((v) => (
                 <button
@@ -312,7 +313,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
           onSignIn={() => setShowAuth(true)}
         />
       )}
-      {analysis === 'on' ? null : view === 'walkthrough' && p.sections.length > 0 ? (
+      {covered ? null : view === 'walkthrough' && p.sections.length > 0 ? (
         <div className="grid max-w-4xl gap-3 px-5 py-5 md:px-7">
           {finishControls && <div>{finishControls}</div>}
           <ol className="grid gap-3" data-testid="walkthrough">

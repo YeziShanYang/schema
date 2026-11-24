@@ -16,8 +16,9 @@
  * - A failed run shows the error and Retry. A run with no update for 20
  *   minutes offers Retry too.
  *
- * When the paper turns ready, the finished checklist stays for HOLD_MS, then
- * the view fades out over the paper window, which renders underneath it.
+ * When the paper turns ready, the finished checklist stays for HOLD_MS. Then
+ * the paper window mounts underneath and plays its entrance while this view
+ * fades out over it in FADE_MS.
  * Under reduced motion the sheet is static and things appear by fade only.
  */
 
@@ -39,8 +40,8 @@ const STUCK_AFTER_MS = 20 * 60 * 1000
 const USUAL_MAX_MS = 2 * 60 * 1000
 /** How long the finished checklist stays before the view fades. */
 const HOLD_MS = 600
-/** The cross-fade into the paper window. Matches the transition in analysis-progress.css. */
-const FADE_MS = 300
+/** The cross-fade into the paper window, an exit at 150ms. Matches the transition in analysis-progress.css. */
+const FADE_MS = 150
 /** Spacing between branch nodes joining the graph. */
 const REVEAL_MS = 450
 
@@ -62,9 +63,10 @@ const STATE_WORDS: Record<StageState, string> = { done: 'done', active: 'in prog
 // ---------------------------------------------------------------------------
 
 /**
- * `on` while the paper is not ready, then `hold` (finished checklist, the
- * paper window renders underneath) and `fade` (the cross-fade), then `off`.
- * A paper that is ready when it first loads is `off` from the start.
+ * `on` while the paper is not ready, then `hold` (the finished checklist)
+ * and `fade` (the paper window mounts and enters underneath while this view
+ * fades), then `off`. A paper that is ready when it first loads is `off`
+ * from the start. The paper window shows its graph from `fade` on.
  */
 export type AnalysisPhase = 'off' | 'on' | 'hold' | 'fade'
 
@@ -204,15 +206,25 @@ export function AnalysisProgress({
     setRetryError(r.success ? '' : r.error)
   }
 
-  // While in the page flow, remember the view's box; when it starts leaving
-  // it keeps that box (absolutely positioned) over the paper window.
+  // While in the page flow, remember the view's box (after every render and
+  // resize); when it starts leaving it keeps that box, absolutely positioned,
+  // so the strip and the paper window can appear underneath without moving it.
   const rootRef = useRef<HTMLElement>(null)
   const box = useRef<{ top: number; left: number; width: number; height: number } | null>(null)
+  const measure = () => {
+    const el = rootRef.current
+    if (el) box.current = { top: el.offsetTop, left: el.offsetLeft, width: el.offsetWidth, height: el.offsetHeight }
+  }
   useLayoutEffect(() => {
+    if (!leaving) measure()
+  })
+  useEffect(() => {
     const el = rootRef.current
     if (!el || leaving) return
-    box.current = { top: el.offsetTop, left: el.offsetLeft, width: el.offsetWidth, height: el.offsetHeight }
-  })
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [leaving])
   const leaveStyle: CSSProperties | undefined =
     leaving && box.current ? { position: 'absolute', zIndex: 20, ...box.current } : undefined
 
@@ -227,15 +239,14 @@ export function AnalysisProgress({
   })()
   const noteIdx = activeIdx >= 0 ? activeIdx : 0
 
-  const eligible = branches.filter((b) => b.total > 0)
+  // A branch joins once its first concept record arrives. While a run is still
+  // before that point, concepts left from an earlier failed run are not shown.
+  const eligible = branches.filter((b) => b.total > 0 && (!running || activeIdx >= STAGE_KEYS.indexOf('overview')))
   const conceptsFound = eligible.reduce((n, b) => n + b.total, 0)
-  // Checked once a minute: past the usual time, the view says so.
+  // Checked every 30 seconds: past the usual time, the view says so.
   const startedAt = runStartedAt(d.timings)
   const slow = running && startedAt !== null && minute - startedAt > USUAL_MAX_MS
-  const shown = useReveal(
-    eligible.map((b) => b.key),
-    reduced,
-  )
+  const shown = useReveal(eligible.map((b) => b.key), reduced)
   const rank = new Map(order.map((k, i) => [k, i]))
   const nodes = eligible
     .filter((b) => shown.has(b.key))
@@ -346,7 +357,7 @@ export function AnalysisProgress({
       data-stage={d.stage}
       className="analysis-progress flex flex-1 flex-col bg-background"
       style={leaveStyle}
-      inert={leaving || undefined}
+      inert={phase === 'fade' || undefined}
     >
       <FloatingGraph
         label={`Branches found so far in ${d.title}`}

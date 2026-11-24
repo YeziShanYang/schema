@@ -48,15 +48,17 @@ function stage(page: Page, key: string) {
   return page.locator(`[data-testid="progress-stage"][data-stage-key="${key}"]`)
 }
 
+type Recorded = { counts: number[]; phases: string[]; graphUnderHold: boolean; graphDuringFade: boolean }
+
 /**
  * Records, from the page itself, every distinct count of branch nodes and
- * every phase of the view, and whether the paper window was already
- * rendered while the finished view held.
+ * every phase of the view, and whether the paper window was rendered
+ * while the finished view held (it should not be) and while it faded.
  */
 async function startRecorder(page: Page) {
   await page.evaluate(() => {
-    const w = window as unknown as { __progress: { counts: number[]; phases: string[]; graphUnderHold: boolean } }
-    w.__progress = { counts: [], phases: [], graphUnderHold: false }
+    const w = window as unknown as { __progress: Recorded }
+    w.__progress = { counts: [], phases: [], graphUnderHold: false, graphDuringFade: false }
     const look = () => {
       const rec = w.__progress
       const n = document.querySelectorAll('[data-testid="progress-branch"]').length
@@ -64,6 +66,7 @@ async function startRecorder(page: Page) {
       const phase = document.querySelector('[data-testid="analysis-progress"]')?.getAttribute('data-phase')
       if (phase && rec.phases[rec.phases.length - 1] !== phase) rec.phases.push(phase)
       if (phase === 'hold' && document.querySelector('[data-testid="paper-graph"]')) rec.graphUnderHold = true
+      if (phase === 'fade' && document.querySelector('[data-testid="paper-graph"]')) rec.graphDuringFade = true
     }
     look()
     new MutationObserver(look).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-phase'] })
@@ -71,7 +74,7 @@ async function startRecorder(page: Page) {
 }
 
 async function recorded(page: Page) {
-  return page.evaluate(() => (window as unknown as { __progress: { counts: number[]; phases: string[]; graphUnderHold: boolean } }).__progress)
+  return page.evaluate(() => (window as unknown as { __progress: Recorded }).__progress)
 }
 
 /** The animation an element's graph entrance runs: schema-enter moves, schema-fade only fades. */
@@ -81,12 +84,18 @@ function entranceOf(page: Page, testId: string) {
 
 test('progress view: stage checklist, branches one at a time, elapsed time, then the paper window', async ({ users }) => {
   test.setTimeout(150_000)
-  const [first, second] = await users(['Schema cara', 'Schema ada'])
-  await first.page.goto('/home')
-  await second.page.goto('/home')
-  const left = [await allowance(first.page), await allowance(second.page)]
-  const [requester, viewer] = left[0] >= left[1] ? [first, second] : [second, first]
-  test.skip(Math.max(...left) === 0, 'Cara and Ada are at the daily cap in this local state')
+  // Bob requests when he can: the daily-cap spec uses up his papers anyway, which
+  // leaves Cara and Ada room for the failure spec. Anyone watches with reduced motion.
+  const people = await users(['Schema bob', 'Schema cara', 'Schema ada'])
+  const left: number[] = []
+  for (const p of people) {
+    await p.page.goto('/home')
+    left.push(await allowance(p.page))
+  }
+  const pick = left[0] > 0 ? 0 : left.indexOf(Math.max(...left))
+  test.skip(left[pick] === 0, 'Bob, Cara and Ada are at the daily cap in this local state')
+  const requester = people[pick]
+  const viewer = people[pick === 0 ? 1 : 0]
 
   const page = requester.page
   const calm = viewer.page
@@ -145,16 +154,25 @@ test('progress view: stage checklist, branches one at a time, elapsed time, then
   // Nodes joined one at a time, never two in one render.
   expect(rec.counts).toEqual([1, 2, 3, 4])
   expect(rec.phases).toEqual(['on', 'hold', 'fade'])
-  expect(rec.graphUnderHold).toBe(true)
+  // The paper window mounts when the fade starts, so its entrance plays as the view fades out.
+  expect(rec.graphUnderHold).toBe(false)
+  expect(rec.graphDuringFade).toBe(true)
 })
 
 test('a failed analysis shows the stage it stopped in, the retry note, the error and Retry', async ({ users }) => {
   test.setTimeout(90_000)
-  const [cara] = await users(['Schema cara'])
-  const page = cara.page
+  // The conversion fails before anything is billed, so the slot it reserves comes back.
+  const people = await users(['Schema cara', 'Schema ada'])
+  let page = people[0].page
+  for (const p of people) {
+    await p.page.goto('/home')
+    if ((await allowance(p.page)) > 0) {
+      page = p.page
+      break
+    }
+  }
+  test.skip((await allowance(page)) === 0, 'Cara and Ada are at the daily cap in this local state')
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.goto('/home')
-  test.skip((await allowance(page)) === 0, 'Cara is at the daily cap in this local state')
 
   const id = await unusedId(page, '77')
   await page.getByTestId('analyze-input').fill(id)

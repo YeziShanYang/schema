@@ -4,7 +4,7 @@
  * 390 wide, in a normal browser and one launched with
  * --force-prefers-reduced-motion, then a failed one (ids ending in 77).
  */
-import { test, chromiumLaunchOptions } from 'deepspace/testing'
+import { test, chromiumLaunchOptions, type MultiplayerUser } from 'deepspace/testing'
 import { chromium, type Page } from '@playwright/test'
 
 const DIR = process.env.SHOTS_DIR ?? 'test-results/progress-shots'
@@ -39,32 +39,50 @@ async function unusedId(page: Page, suffix: string): Promise<string> {
 
 test('progress view screens', async ({ users, browser }, info) => {
   test.setTimeout(4 * 60_000)
-  const [ada] = await users(['Schema ada'])
-  const storageState = await ada.context.storageState()
+  // The slow paper uses a daily slot: take it from whoever has one, Bob first,
+  // since the e2e specs need Ada's and Cara's.
+  let requester: MultiplayerUser | null = null
+  for (const name of ['Schema bob', 'Schema dana', 'Schema cara', 'Schema ada']) {
+    const [u] = await users([name])
+    await u.page.goto('/home')
+    const a = await call(u.page, 'myAllowance', {})
+    if (a.success && a.data.analyze.remaining > 0) {
+      requester = u
+      break
+    }
+  }
+  if (!requester) throw new Error('Every test account is at the daily cap in this local state')
+  const storageState = await requester.context.storageState()
   const base = chromiumLaunchOptions()
-  const reducedBrowser = await chromium.launch({ ...base, args: [...(base.args ?? []), '--force-prefers-reduced-motion'] })
+  const reducedBrowser = await chromium.launch({ ...base, args: ['--force-prefers-reduced-motion'] })
   const baseURL = info.project.use.baseURL
   const views: { name: string; page: Page; w: number }[] = []
   for (const [mode, b] of [['motion', browser], ['reduced', reducedBrowser]] as const) {
     for (const { w, h } of WIDTHS) {
-      const ctx = await b.newContext({ viewport: { width: w, height: h }, storageState, baseURL })
+      // reducedMotion: null keeps the browser's own setting; Playwright's default would override the flag.
+      const ctx = await b.newContext({ viewport: { width: w, height: h }, storageState, baseURL, reducedMotion: null })
       views.push({ name: `${mode}-${w}`, page: await ctx.newPage(), w })
     }
   }
-  const snap = (label: string, only?: string) =>
-    Promise.all(
-      views
+  // A close-up of the sheet and checklist at 3x, for the details a 1x shot loses.
+  const zoomCtx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 3, storageState, baseURL })
+  const zoom = await zoomCtx.newPage()
+  const snap = (label: string, only?: string, zoomed = !only) =>
+    Promise.all([
+      ...views
         .filter((v) => !only || v.name === only)
         .map((v) => v.page.screenshot({ path: `${DIR}/${v.name}-${label}.png`, fullPage: v.w < 600 })),
-    )
+      zoomed ? zoom.getByTestId('paper-progress').screenshot({ path: `${DIR}/zoom-${label}.png`, timeout: 5000 }).catch(() => null) : null,
+    ])
   const lead = views[0].page
   const stageState = (key: string) => lead.locator(`[data-testid="progress-stage"][data-stage-key="${key}"]`)
 
-  await ada.page.goto('/home')
-  const id = await unusedId(ada.page, '55')
-  const started = await call(ada.page, 'analyzePaper', { input: id })
+  await requester.page.goto('/home')
+  const id = await unusedId(requester.page, '55')
+  const started = await call(requester.page, 'analyzePaper', { input: id })
   if (!started.success) throw new Error(started.error)
   for (const v of views) await v.page.goto(`/p/${id.replace('.', '~')}`)
+  await zoom.goto(`/p/${id.replace('.', '~')}`)
 
   await stageState('text').and(lead.locator('[data-state="active"]')).waitFor({ timeout: 20_000 })
   await lead.waitForTimeout(1300)
@@ -83,12 +101,13 @@ test('progress view screens', async ({ users, browser }, info) => {
   await snap('5-done', 'motion-1440')
   await lead.locator('[data-testid="analysis-progress"]').waitFor({ state: 'detached', timeout: 10_000 })
   await lead.waitForTimeout(1200)
-  await snap('6-ready')
+  await snap('6-ready', undefined, false)
 
-  const failing = await unusedId(ada.page, '77')
-  const r = await call(ada.page, 'analyzePaper', { input: failing })
+  const failing = await unusedId(requester.page, '77')
+  const r = await call(requester.page, 'analyzePaper', { input: failing })
   if (!r.success) throw new Error(r.error)
   for (const v of views) await v.page.goto(`/p/${failing.replace('.', '~')}`)
+  await zoom.goto(`/p/${failing.replace('.', '~')}`)
   await lead.getByTestId('paper-failed').waitFor({ timeout: 30_000 })
   await Promise.all(views.map((v) => v.page.getByTestId('paper-failed').waitFor({ timeout: 10_000 })))
   await lead.waitForTimeout(800)
