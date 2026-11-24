@@ -105,6 +105,8 @@ describe('sharesContentWord (topic reuse rule)', () => {
     expect(contentWords('Loss functions').size).toBe(0)
     expect(sharesContentWord('Loss function', 'Loss functions')).toBe(true)
     expect(sharesContentWord('Probability distribution', 'Probability distributions')).toBe(true)
+    expect(sharesContentWord('Layer normalization', 'Batch and layer normalization')).toBe(true)
+    expect(sharesContentWord('Loss function', 'Contrastive loss')).toBe(false)
   })
 })
 

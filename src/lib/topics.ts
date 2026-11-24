@@ -105,26 +105,30 @@ export function contentWords(name: string): Set<string> {
 
 /**
  * The topic-reuse rule: a concept may reuse an existing topic only when the
- * two names share a content word. A name made only of generic words ("Loss
- * functions") is compared by all its words instead: against a name with
- * content words it needs one of them ("Contrastive loss" doesn't match), and
- * against another generic-only name one must contain the other ("Loss
- * function" matches, "Random variables" and "Random matrices" don't).
+ * two names share a content word. A name made only of generic words is
+ * compared by all its words instead:
+ * - a generic-only concept name needs all its words in the topic's name
+ *   ("Layer normalization" fits "Batch and layer normalization", "Loss
+ *   function" doesn't fit "Contrastive loss"),
+ * - against a generic-only topic name, a concept needs one of its content
+ *   words there ("Contrastive loss" doesn't fit "Loss functions"),
+ * - two generic-only names fit when one's words contain the other's ("Loss
+ *   function" fits "Loss functions", "Random matrices" doesn't fit "Random variables").
  */
 export function sharesContentWord(conceptName: string, topicName: string): boolean {
   const allWords = (n: string) => new Set(wordsOf(n).filter((w) => !STOP_WORDS.has(w) && w.length > 1 && !/^\d+$/.test(w)))
   const a = contentWords(conceptName)
   const b = contentWords(topicName)
-  if (!a.size && !b.size) {
+  if (!a.size) {
     const x = allWords(conceptName)
     const y = allWords(topicName)
     if (!x.size || !y.size) return false
+    if (b.size) return [...x].every((w) => y.has(w))
     const [small, big] = x.size <= y.size ? [x, y] : [y, x]
     return [...small].every((w) => big.has(w))
   }
-  const x = a.size ? a : allWords(conceptName)
   const y = b.size ? b : allWords(topicName)
-  for (const w of x) if (y.has(w)) return true
+  for (const w of a) if (y.has(w)) return true
   return false
 }
 
