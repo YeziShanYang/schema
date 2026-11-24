@@ -14,7 +14,7 @@ test('fresh account: workspace, recommend, add paper, learn, finish, read again'
 
   await page.goto('/home')
   await expect(page.getByTestId('sidebar-allowance')).toHaveAttribute('data-remaining', /\d+/, { timeout: 20_000 })
-  console.log(`[finish] allowance: ${await page.getByTestId('sidebar-allowance').innerText()}`)
+  console.log(`[finish] new papers left today: ${await page.getByTestId('sidebar-allowance').getAttribute('data-remaining')}`)
 
   const name = `Machine Learning ${new Date().toISOString().slice(11, 16)}`
   await page.getByTestId('new-workspace').click()
@@ -38,6 +38,12 @@ test('fresh account: workspace, recommend, add paper, learn, finish, read again'
   await expect(page.getByTestId('branch-links')).toHaveAttribute('data-links', 'ready')
   const first = page.getByTestId('branch-concepts').getByTestId('concept-card').first()
   const key = await first.getAttribute('data-concept-key')
+  // Re-runnable: clear the topic first if an earlier run already marked it.
+  await expect(first).toHaveAttribute('data-status', /known|learning|unknown/)
+  if ((await first.getAttribute('data-status')) === 'known') {
+    await first.getByTestId('status-known').click()
+    await expect(first).toHaveAttribute('data-status', 'unknown')
+  }
   await first.getByTestId('status-known').click()
   await expect(first).toHaveAttribute('data-status', 'known')
   await expect(first.getByTestId('concept-resources')).toBeVisible()
@@ -60,6 +66,7 @@ test('fresh account: workspace, recommend, add paper, learn, finish, read again'
   await expect(page.locator('[data-testid="library-row"]').filter({ hasText: 'arXiv 1706.03762' })).toHaveAttribute('data-status', 'reading')
 
   await page.goto('/knowledge')
+  await expect(page.getByTestId('knowledge-known').getByTestId('knowledge-item').first()).toBeVisible({ timeout: 20_000 })
   const knownCount = await page.getByTestId('knowledge-known').getByTestId('knowledge-item').count()
   console.log(`[finish] known topics after finishing: ${knownCount}`)
   expect(knownCount).toBeGreaterThan(5)
