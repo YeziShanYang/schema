@@ -124,7 +124,7 @@ function ModalBody({ children, className = '' }: ModalBodyProps): JSX.Element {
   // align with Header / Footer. break-words keeps long unbroken strings
   // (filenames, URLs) from forcing horizontal overflow.
   return (
-    <div className={cn('flex-1 overflow-y-auto -mx-1 px-1 py-4 break-words', className)}>
+    <div className={cn('flex-1 overflow-y-auto overscroll-contain -mx-1 px-1 py-4 break-words', className)}>
       {children}
     </div>
   )

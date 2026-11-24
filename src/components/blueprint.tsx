@@ -34,8 +34,8 @@ export function Chip({ children, tone = 'plain', className }: { children: ReactN
   return (
     <span
       className={cn(
-        'inline-flex flex-none items-center rounded-[3px] px-[7px] py-0.5 font-mono text-[11px] uppercase tracking-[0.05em]',
-        tone === 'plain' && 'bg-surface-2 text-muted-foreground shadow-[inset_0_0_0_1px_var(--color-border)]',
+        'inline-flex flex-none items-center rounded-[3px] border border-transparent px-[7px] py-px font-mono text-[11px] uppercase tracking-[0.05em]',
+        tone === 'plain' && 'border-border bg-surface-2 text-muted-foreground',
         tone === 'accent' && 'bg-accent-soft text-primary',
         tone === 'known' && 'bg-[color-mix(in_oklab,var(--color-known)_12%,white)] text-known',
         tone === 'learning' && 'bg-[color-mix(in_oklab,var(--color-learning)_12%,white)] text-learning',

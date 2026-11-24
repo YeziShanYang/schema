@@ -78,7 +78,7 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
           <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
             <span className="label">Learn first</span>
             {prerequisites.map((p) => (
-              <button key={p.key} type="button" onClick={() => onOpenConcept?.(p.key)} className="press cursor-pointer rounded-[3px] bg-surface-2 px-1.5 py-0.5 text-xs text-foreground shadow-[inset_0_0_0_1px_var(--color-border)] hover:bg-accent-soft">
+              <button key={p.key} type="button" onClick={() => onOpenConcept?.(p.key)} className="press cursor-pointer rounded-[3px] bg-surface-2 px-1.5 py-0.5 text-xs text-foreground border border-border hover:bg-accent-soft">
                 {p.name}
               </button>
             ))}
@@ -100,7 +100,7 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
             <ul className="flex w-full flex-col gap-1.5" data-testid="concept-resources">
               {topic.resources.map((r) => (
                 <li key={r.url} className="text-[12.5px]">
-                  <a href={r.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded bg-surface-2 px-2 py-1 text-foreground shadow-[inset_0_0_0_1px_var(--color-border)] transition-[background-color] duration-150 hover:bg-accent-soft">
+                  <a href={r.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded bg-surface-2 px-2 py-1 text-foreground border border-border transition-[background-color] duration-150 hover:bg-accent-soft">
                     {r.title}
                     <ExternalIcon size={13} />
                   </a>
@@ -136,14 +136,14 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
         {explainError && <p role="alert" className="mt-1 text-xs text-destructive">{explainError}</p>}
 
         {c.explanation && showExplain && (
-          <div className="enter mt-2.5 rounded bg-accent-soft px-3 py-2.5 text-[13px] leading-normal" data-testid="concept-explanation">
+          <div className="reveal mt-2.5 rounded bg-accent-soft px-3 py-2.5 text-[13px] leading-normal" data-testid="concept-explanation">
             <span className="label mb-1 block text-primary">Explained for this paper</span>
             <div className="whitespace-pre-wrap">{c.explanation}</div>
           </div>
         )}
 
         {c.check && showCheck && (
-          <div className="mt-2.5 rounded bg-surface-2 p-3 shadow-[inset_0_0_0_1px_var(--color-border)]" data-testid="concept-check">
+          <div className="mt-2.5 border-t border-border pt-3" data-testid="concept-check">
             <p className="text-sm font-medium">{c.check.question}</p>
             <div className="mt-2 flex flex-col gap-1.5">
               {c.check.choices.map((ch, i) => (

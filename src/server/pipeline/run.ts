@@ -148,15 +148,27 @@ async function runStep(state: AnalyzeState, s: StepCtx): Promise<boolean> {
     case 'explain':
       await stepExplain(state, s)
       return false
-    case 'finish':
+    case 'finish': {
+      // Counts come from the concepts actually stored, so every page agrees,
+      // and a concept that failed to land is logged instead of hidden.
+      const stored = (await s.ctx.records.query('concepts', { where: { paperId: s.paper.recordId }, limit: 200 })) as Envelope<{
+        key: string
+        topicKey: string
+      }>[]
+      if (s.paper.data.conceptCount && stored.length !== s.paper.data.conceptCount) {
+        console.warn(`[analyze] ${s.paper.data.arxivId}: ${stored.length} of ${s.paper.data.conceptCount} concepts stored`)
+      }
       await updatePaper(s.ctx, s.paper.recordId, {
         status: 'ready',
         stage: 'ready',
         progress: 1,
         progressMessage: '',
         error: '',
+        conceptCount: stored.length,
+        topicKeys: [...new Set(stored.map((c) => c.data.topicKey).filter(Boolean))],
       })
       return true
+    }
   }
 }
 
@@ -467,6 +479,7 @@ async function flushWrites(ctx: CronContext, state: AnalyzeState) {
       const m = errMsg(e)
       const benign = (w.ignoreDuplicate && /duplicate/i.test(m)) || (w.op === 'delete' && /not found/i.test(m))
       if (!benign) throw e
+      if (w.op === 'create') console.info(`[analyze] skipped existing ${w.collection} row: ${m.slice(0, 160)}`)
     }
     state.writes.shift()
   }

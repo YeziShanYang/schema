@@ -37,7 +37,7 @@ function PaperRow({ p, onOpen, onToggle, onRemove }: { p: WorkspacePaperNode; on
       </div>
       <div className="text-xs text-muted-foreground" data-testid="workspace-paper-progress">
         <div className="mb-1 flex justify-between tabular-nums">
-          <span>Concepts known</span>
+          <span>Topics known</span>
           <b className="font-semibold text-foreground">{p.known} / {p.total}</b>
         </div>
         <Meter value={ratio} />

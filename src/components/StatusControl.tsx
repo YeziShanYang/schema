@@ -64,7 +64,7 @@ export function LearningToggle({ status, name, disabled, onChange, className }: 
         'press label inline-flex h-6 cursor-pointer items-center rounded-[3px] px-1.5 disabled:cursor-not-allowed disabled:opacity-50',
         learning
           ? 'bg-[color-mix(in_oklab,var(--color-learning)_14%,white)] text-learning'
-          : 'text-muted-foreground shadow-[inset_0_0_0_1px_var(--color-border)] hover:bg-accent hover:text-foreground',
+          : 'text-muted-foreground border border-border hover:bg-accent hover:text-foreground',
         className,
       )}
     >

@@ -1,0 +1,379 @@
+{
+  "note": "Real pipeline output for arXiv 1706.03762, exported by scripts/export-demo-snapshot.mjs.",
+  "exportedAt": "2026-11-24",
+  "paper": {
+    "arxivId": "1706.03762",
+    "title": "Attention Is All You Need",
+    "authors": [
+      "Ashish Vaswani",
+      "Noam Shazeer",
+      "Niki Parmar",
+      "Jakob Uszkoreit",
+      "Llion Jones",
+      "Aidan N. Gomez",
+      "Lukasz Kaiser",
+      "Illia Polosukhin"
+    ],
+    "year": "2017",
+    "mainContribution": "Introduces the Transformer, a sequence transduction architecture built solely on multi-head self-attention (no recurrence or convolution), with positional encodings, achieving state-of-the-art machine translation BLEU and generalizing to English constituency parsing."
+  },
+  "branches": [
+    {
+      "key": "sequence-modeling-background",
+      "name": "Sequence modeling background",
+      "description": "Prior neural approaches to sequence-to-sequence tasks that the paper positions itself against.",
+      "concepts": [
+        {
+          "key": "c2",
+          "name": "Encoder-decoder sequence-to-sequence models",
+          "depth": "working",
+          "tier": 1,
+          "whyNeeded": "The Transformer is an encoder-decoder model, and the decoder's auto-regressive generation is defined relative to this structure.",
+          "quote": "Here, the encoder maps an input sequence of symbol representations (x1 , ..., xn ) to a sequence of continuous representations z",
+          "section": "3 Model Architecture",
+          "topicKey": "language-models",
+          "explanation": "### What it is\n\nAn encoder-decoder model is a two-part sequence-to-sequence design. The **encoder** reads an input sequence, such as English words, and converts it into a list of vectors, one per input position. The **decoder** then produces an output sequence, such as French words, one element at a time. Each new output is chosen using the encoder's vectors and the outputs produced so far.\n\n### How this paper uses it\n\nThe passage says the encoder maps (x1, ..., xn) to continuous representations z = (z1, ..., zn). The decoder then generates (y1, ..., ym) one symbol per step. The paper calls this process auto-regressive: at each step, the model consumes its previously generated symbols as extra input when predicting the next one. The Transformer keeps this two-part structure but replaces recurrent networks with stacks of self-attention and feed-forward layers. The encoder has N = 6 identical layers, and Figure 1 shows the encoder on the left and the decoder on the right.\n\n### Worked example\n\nHere is a simplified greedy decoding loop. `decoder_step` stands in for the full decoder, which conditions on the encoder output `z` and on all previous outputs.\n\n```python\ndef greedy_decode(z, decoder_step, max_len=10):\n    ys = [\"<s>\"]\n    for _ in range(max_len):\n        nxt = decoder_step(z, ys)   # uses z AND the outputs so far\n        ys.append(nxt)\n        if nxt == \"</s>\":\n            break\n    return ys[1:]\n\n# Illustrative run for \"I love cats\" -> \"J'aime les chats\":\n# step 1: sees [\"<s>\"]             -> \"J'aime\"\n# step 2: sees [\"<s>\", \"J'aime\"]   -> \"les\"\n# step 3: sees [..., \"les\"]        -> \"chats\"\n# step 4: sees [..., \"chats\"]      -> \"</s>\"  (stop)\n```\n\n### Common misconception\n\nIt is tempting to think the encoder compresses the whole input into one fixed summary vector that the decoder reads once. In the Transformer, the encoder outputs n vectors, one per input position, and the decoder consults all of them at every generation step. The decoder also does not produce its outputs independently; each prediction depends on the outputs before it."
+        },
+        {
+          "key": "c3",
+          "name": "Auto-regressive generation",
+          "depth": "working",
+          "tier": 2,
+          "whyNeeded": "The decoder produces one symbol at a time conditioned on earlier outputs, and the masking design depends on this property.",
+          "quote": "At each step the model is auto-regressive [10], consuming the previously generated symbols as additional input when generating the next.",
+          "section": "3 Model Architecture",
+          "topicKey": "language-models",
+          "explanation": "### What it is\n\nAuto-regressive generation means producing an output sequence one token at a time, where each new token is predicted from the tokens already produced. The full probability of a sequence is factored into a chain of conditional probabilities:\n\np(y₁, …, yₘ) = ∏ₜ p(yₜ | y₁, …, yₜ₋₁)\n\nEach step gets to \"see\" its own earlier outputs as input.\n\n### How this paper uses it\n\nSection 3 describes the decoder as generating \"(y₁, …, yₘ) of symbols one element at a time,\" and states that \"at each step the model is auto-regressive, consuming the previously generated symbols as additional input when generating the next.\" The decoder's self-attention therefore must not look at future positions. During training, the decoder receives the target sequence shifted right, and a mask blocks attention to later positions. This keeps the training objective faithful to the factorization above, so position t is predicted only from y₁ through y₍ₜ₋₁₎. Without the mask, the model could copy the answer from the input it is supposed to predict.\n\n### A worked example\n\nSuppose the model generates \"the cat sat\" with these conditional probabilities:\n\n- p(the) = 0.5\n- p(cat | the) = 0.4\n- p(sat | the, cat) = 0.2\n\nThen the sequence probability is 0.5 × 0.4 × 0.2 = 0.04. Each factor depends only on earlier tokens, which is exactly what the decoder's masking enforces.\n\n### A common misconception\n\nIt is tempting to conclude that auto-regressive models must also train one token at a time. That is false. During training, the ground-truth outputs are known, so all positions are computed in parallel, with the mask ensuring each position sees only its prefix. The sequential bottleneck applies at inference, when the model must wait for its own previous outputs."
+        },
+        {
+          "key": "c12",
+          "name": "Maximum path length and sequential operations",
+          "depth": "working",
+          "tier": 3,
+          "whyNeeded": "The paper justifies self-attention by comparing sequential operations and path lengths across layer types, which requires these complexity measures.",
+          "quote": "The shorter these paths between any combination of positions in the input and output sequences, the easier it is to learn long-range dependencies",
+          "section": "4 Why Self-Attention",
+          "topicKey": "big-o-notation",
+          "explanation": "### What it is\n\nThese are two ways of counting how hard a network layer makes it to pass information across a sequence.\n\n- **Sequential operations** is the minimum number of steps that must run one after another. Steps that can run at the same time, such as all positions in one attention layer, count as a single step. This measures how much of the computation can be parallelized.\n- **Maximum path length** is the longest chain of connections a signal must travel to get from any input position to any output position. Shorter paths make it easier for the network to learn relationships between distant words.\n\n### How this paper uses it\n\nSection 4 uses both measures to justify self-attention. Table 1 compares layer types. A self-attention layer connects every pair of positions in O(1) sequential operations with O(1) maximum path length. A recurrent layer needs O(n) sequential operations, and its path length is also O(n), because information must pass through every intermediate position. The authors argue that the short paths are why self-attention helps with long-range dependencies.\n\n### Worked example\n\nTake a sentence of n = 8 tokens and ask how many hops information needs to go from token 1 to token 8.\n\n```python\nn = 8\nrnn_path = n - 1      # 7 sequential hops, each depending on the last\nattn_path = 1         # one attention layer links every pair directly\nprint(rnn_path, attn_path)  # 7 1\n```\n\nThe RNN's path grows linearly with n, while the attention path stays at 1 for any n.\n\n### Common misconception\n\nShorter path length and fewer sequential operations do not mean self-attention is cheaper overall. Its per-layer cost is O(n² · d), which grows quadratically with sequence length, while recurrence grows linearly in n. The paper's point is about how easily information flows and how much can be parallelized. Total computation is a separate measure, and the paper compares it on its own axis."
+        }
+      ]
+    },
+    {
+      "key": "attention-foundations",
+      "name": "Attention foundations",
+      "description": "The attention computation, its scaled dot-product and multi-head variants.",
+      "concepts": [
+        {
+          "key": "c6",
+          "name": "Softmax function",
+          "depth": "working",
+          "tier": 0,
+          "whyNeeded": "Attention weights and output probabilities are produced by softmax, and the scaling argument refers to its gradient saturation.",
+          "quote": "We suspect that for large values of dk , the dot products grow large in magnitude, pushing the softmax function into regions where it has extremely small gradients",
+          "section": "3.2.1 Scaled Dot-Product Attention",
+          "topicKey": "softmax-function",
+          "explanation": ""
+        },
+        {
+          "key": "c7",
+          "name": "Multi-head attention",
+          "depth": "deep",
+          "tier": 0,
+          "whyNeeded": "The model runs several attention heads in parallel over projected queries, keys and values, which is central to the architecture.",
+          "quote": "Multi-head attention allows the model to jointly attend to information from different representation subspaces at different positions.",
+          "section": "3.2.2 Multi-Head Attention",
+          "topicKey": "attention-mechanism",
+          "explanation": ""
+        },
+        {
+          "key": "c5",
+          "name": "Scaled dot-product attention",
+          "depth": "deep",
+          "tier": 1,
+          "whyNeeded": "The paper's attention function, with its softmax and 1/sqrt(dk) scaling, is the basic operation every layer is built from.",
+          "quote": "We compute the dot products of the query with all keys, divide each by dk , and apply a softmax function to obtain the weights on the values.",
+          "section": "3.2.1 Scaled Dot-Product Attention",
+          "topicKey": "dot-product",
+          "explanation": ""
+        },
+        {
+          "key": "c4",
+          "name": "Self-attention",
+          "depth": "deep",
+          "tier": 2,
+          "whyNeeded": "Self-attention is the core mechanism of the paper, relating positions within one sequence to build its representations.",
+          "quote": "Self-attention, sometimes called intra-attention is an attention mechanism relating different positions of a single sequence in order to compute a representation of the sequence.",
+          "section": "2 Background",
+          "topicKey": "attention-mechanism",
+          "explanation": ""
+        }
+      ]
+    },
+    {
+      "key": "transformer-architecture-components",
+      "name": "Transformer architecture components",
+      "description": "Encoder-decoder stacks, feed-forward sublayers, embeddings, and positional encodings that make up the model.",
+      "concepts": [
+        {
+          "key": "c8",
+          "name": "Residual connections and layer normalization",
+          "depth": "working",
+          "tier": 0,
+          "whyNeeded": "Each sub-layer is wrapped as LayerNorm(x + Sublayer(x)), so the reader must understand both residual additions and layer normalization to follow the layer structure.",
+          "quote": "We employ a residual connection [11] around each of the two sub-layers, followed by layer normalization [1].",
+          "section": "3.1 Encoder and Decoder Stacks",
+          "topicKey": "batch-and-layer-normalization",
+          "explanation": ""
+        },
+        {
+          "key": "c9",
+          "name": "Position-wise feed-forward network",
+          "depth": "working",
+          "tier": 0,
+          "whyNeeded": "Each layer contains a fully connected feed-forward sublayer applied identically at every position, which the architecture depends on.",
+          "quote": "This consists of two linear transformations with a ReLU activation in between.",
+          "section": "3.3 Position-wise Feed-Forward Networks",
+          "topicKey": "feed-forward-neural-networks",
+          "explanation": ""
+        },
+        {
+          "key": "c10",
+          "name": "Positional encoding",
+          "depth": "deep",
+          "tier": 3,
+          "whyNeeded": "Since the model has no recurrence or convolution, sinusoidal position information must be added to embeddings for the model to use word order.",
+          "quote": "we must inject some information about the relative or absolute position of the tokens in the sequence.",
+          "section": "3.5 Positional Encoding",
+          "topicKey": "word-embeddings",
+          "explanation": ""
+        },
+        {
+          "key": "c11",
+          "name": "Masked self-attention in the decoder",
+          "depth": "working",
+          "tier": 3,
+          "whyNeeded": "Masking illegal connections preserves the auto-regressive property, so the decoder cannot see future outputs during training.",
+          "quote": "We implement this inside of scaled dot-product attention by masking out (setting to −∞) all values in the input of the softmax which correspond to illegal connections.",
+          "section": "3.2.3 Applications of Attention in our Model",
+          "topicKey": "attention-mechanism",
+          "explanation": ""
+        }
+      ]
+    },
+    {
+      "key": "training-and-evaluation",
+      "name": "Training and evaluation",
+      "description": "Optimizer, regularization, and the BLEU-based experimental evaluation on translation and parsing.",
+      "concepts": [
+        {
+          "key": "c13",
+          "name": "Label smoothing and dropout regularization",
+          "depth": "working",
+          "tier": 0,
+          "whyNeeded": "Training uses dropout on sub-layer outputs and label smoothing, both needed to reproduce the reported results.",
+          "quote": "We apply dropout [33] to the output of each sub-layer, before it is added to the sub-layer input and normalized.",
+          "section": "5.4 Regularization",
+          "topicKey": "dropout",
+          "explanation": ""
+        },
+        {
+          "key": "c15",
+          "name": "Stochastic gradient descent",
+          "depth": "skim",
+          "tier": 0,
+          "whyNeeded": "Adam and the learning rate schedule are variants of gradient-based updates, so the reader needs the basic update idea.",
+          "quote": "We varied the learning rate over the course of training, according to the formula:",
+          "section": "5.3 Optimizer",
+          "topicKey": "stochastic-gradient-descent",
+          "explanation": ""
+        },
+        {
+          "key": "c16",
+          "name": "BLEU score",
+          "depth": "working",
+          "tier": 0,
+          "whyNeeded": "All headline results are reported as BLEU scores on WMT translation and parsing F1 comparisons, so the reader must know what BLEU measures.",
+          "quote": "On the WMT 2014 English-to-German translation task, the big transformer model outperforms the best previously reported models (including ensembles) by more than 2.0 BLEU",
+          "section": "Abstract and 6.1 Machine Translation",
+          "topicKey": "evaluation-metrics-accuracy-precision-recall",
+          "explanation": ""
+        },
+        {
+          "key": "c18",
+          "name": "Byte-pair and word-piece tokenization",
+          "depth": "skim",
+          "tier": 0,
+          "whyNeeded": "Sentences are split into subword units from byte-pair or word-piece vocabularies before the model processes them.",
+          "quote": "Sentences were encoded using byte-pair encoding [3], which has a shared sourcetarget vocabulary of about 37000 tokens.",
+          "section": "5.1 Training Data and Batching",
+          "topicKey": "tokenization",
+          "explanation": ""
+        },
+        {
+          "key": "c14",
+          "name": "Adam optimizer with warmup learning-rate schedule",
+          "depth": "working",
+          "tier": 1,
+          "whyNeeded": "The learning rate formula increases linearly during warmup and then decays with the inverse square root of the step, which governs training.",
+          "quote": "We used the Adam optimizer [20] with β1 = 0.9, β2 = 0.98 and ϵ = 10−9 .",
+          "section": "5.3 Optimizer",
+          "topicKey": "adam-optimizer",
+          "explanation": ""
+        },
+        {
+          "key": "c17",
+          "name": "Beam search decoding",
+          "depth": "skim",
+          "tier": 3,
+          "whyNeeded": "Reported translation results use beam search with a beam size and length penalty, which affects the output sequences being scored.",
+          "quote": "We used beam search with a beam size of 4 and length penalty α = 0.6 [38].",
+          "section": "6.1 Machine Translation",
+          "topicKey": "greedy-decoding-and-temperature",
+          "explanation": ""
+        }
+      ]
+    }
+  ],
+  "topics": {
+    "softmax-function": {
+      "name": "Softmax function",
+      "level": "foundation",
+      "description": "Turning a vector of scores into a probability distribution.",
+      "resource": {
+        "title": "A Simple Explanation of the Softmax Function - victorzhou.com",
+        "url": "https://victorzhou.com/blog/softmax/",
+        "why": "A simple explanation of what softmax does to arbitrary scores and how to implement it, which is exactly what a beginner needs."
+      }
+    },
+    "attention-mechanism": {
+      "name": "Attention mechanism",
+      "level": "core",
+      "description": "Weighting inputs by learned relevance (queries, keys, values).",
+      "resource": {
+        "title": "Attention in transformers, step-by-step | Deep ... | 3Blue1Brown",
+        "url": "https://www.3blue1brown.com/lessons/attention/",
+        "why": "Visual, step-by-step lesson on queries, keys, and values that gives beginners strong intuition for how attention weights inputs."
+      }
+    },
+    "batch-and-layer-normalization": {
+      "name": "Batch and layer normalization",
+      "level": "core",
+      "description": "Normalizing activations to stabilize training.",
+      "resource": {
+        "title": "Batch Norm and Layer Norm, From Zero · mindsloop",
+        "url": "https://mindsloop.org/articles/batch-norm-layer-norm/",
+        "why": "Builds batch norm and layer norm from first principles, explaining the subtract-mean and divide-by-spread idea and how each one differs in what it normalizes."
+      }
+    },
+    "feed-forward-neural-networks": {
+      "name": "Feed-forward neural networks",
+      "level": "foundation",
+      "description": "Layers of weighted sums and nonlinear activations.",
+      "resource": {
+        "title": "Feed-Forward Neural Networks Explained: A Complete Tutorial",
+        "url": "https://www.datacamp.com/tutorial/feed-forward-neural-networks-explained",
+        "why": "A complete beginner-level explainer covering layers, weighted sums, and nonlinear activations in a feed-forward network."
+      }
+    },
+    "dropout": {
+      "name": "Dropout",
+      "level": "core",
+      "description": "Randomly zeroing activations during training as regularization.",
+      "resource": {
+        "title": "A Gentle Introduction to Dropout for Regularizing Deep Neural Networks",
+        "url": "https://machinelearningmastery.com/dropout-for-regularizing-deep-neural-networks/",
+        "why": "A gentle introduction that explains what dropout does, why it reduces overfitting, and how it is applied during training in deep networks."
+      }
+    },
+    "stochastic-gradient-descent": {
+      "name": "Stochastic gradient descent",
+      "level": "foundation",
+      "description": "Gradient descent on mini-batches of data.",
+      "resource": {
+        "title": "Stochastic Gradient Descent in Python: A Complete Guide for ML Optimization",
+        "url": "https://www.datacamp.com/tutorial/stochastic-gradient-descent",
+        "why": "Uses an intuitive blindfolded hill-walking analogy and then builds up to implementing SGD in Python, which suits a beginner learning how mini-batch updates work."
+      }
+    },
+    "evaluation-metrics-accuracy-precision-recall": {
+      "name": "Evaluation metrics (accuracy, precision, recall)",
+      "level": "foundation",
+      "description": "Measuring classifier quality.",
+      "resource": {
+        "title": "Classification: Accuracy, recall, precision, and related metrics  |  Machine Learning  |  Google for Developers",
+        "url": "https://developers.google.com/machine-learning/crash-course/classification/accuracy-precision-recall",
+        "why": "Defines true and false positives and negatives and then builds accuracy, precision, and recall from them, which is the foundation a beginner needs."
+      }
+    },
+    "tokenization": {
+      "name": "Tokenization",
+      "level": "core",
+      "description": "Splitting text into subword units such as byte-pair encoding.",
+      "resource": {
+        "title": "Tokenization algorithms",
+        "url": "https://huggingface.co/docs/transformers/en/tokenizer_summary",
+        "why": "Explains byte pair encoding, WordPiece, and Unigram side by side, directly covering the subword splitting the topic describes."
+      }
+    },
+    "language-models": {
+      "name": "Language models",
+      "level": "core",
+      "description": "Models that predict the next token in a sequence.",
+      "resource": {
+        "title": "Introduction to Large Language Models  |  Machine Learning  |  Google for Developers",
+        "url": "https://developers.google.com/machine-learning/crash-course/llm",
+        "why": "A short, beginner-friendly introduction that explains what language models estimate and how they are used, with no prior ML background assumed."
+      }
+    },
+    "dot-product": {
+      "name": "Dot product",
+      "level": "foundation",
+      "description": "Inner product of vectors and its geometric meaning.",
+      "resource": {
+        "title": "The Dot Product | MathForHumans",
+        "url": "https://mathforhumans.com/subjects/linear-algebra/the-dot-product/",
+        "why": "It builds intuition for the dot product as a measure of alignment and shows how it relates to the angle between vectors, which covers the geometric meaning the beginner needs."
+      }
+    },
+    "adam-optimizer": {
+      "name": "Adam optimizer",
+      "level": "core",
+      "description": "Adaptive-moment gradient optimizer.",
+      "resource": {
+        "title": "Adam Optimizer Tutorial: Intuition and Implementation in Python",
+        "url": "https://www.datacamp.com/tutorial/adam-optimizer-tutorial",
+        "why": "Explains the intuition behind Adam with an accessible analogy before moving to implementation, making the adaptive per-parameter step sizes easy to grasp."
+      }
+    },
+    "word-embeddings": {
+      "name": "Word embeddings",
+      "level": "core",
+      "description": "Dense vector representations of tokens.",
+      "resource": {
+        "title": "https://www.tensorflow.org/text/tutorials/word_embeddings",
+        "url": "https://www.tensorflow.org/text/tutorials/word_embeddings",
+        "why": "Walks through training word embeddings from scratch in a simple Keras sentiment model and then visualizing them, so a beginner sees what a dense token vector is and how it gets learned."
+      }
+    },
+    "big-o-notation": {
+      "name": "Big-O notation",
+      "level": "foundation",
+      "description": "Asymptotic growth of running time and memory.",
+      "resource": {
+        "title": "A beginner's guide to Big O Notation - Rob Bell",
+        "url": "https://robbell.io/2009/06/a-beginners-guide-to-big-o-notation",
+        "why": "A plain-language beginner's guide that explains what Big-O measures and walks through common growth rates with simple examples."
+      }
+    },
+    "greedy-decoding-and-temperature": {
+      "name": "Greedy decoding and sampling temperature",
+      "level": "foundation",
+      "description": "How a language or image generator chooses the next token, either by picking the highest-probability token or by sampling with a temperature.",
+      "resource": {
+        "title": "Decoding strategies · LLM and VLM course",
+        "url": "https://mseyfi.github.io/llm-vlm/inference/decoding-strategies.html",
+        "why": "This course page builds greedy decoding and temperature sampling step by step, showing how the next token is chosen from the model's probabilities."
+      }
+    }
+  }
+}

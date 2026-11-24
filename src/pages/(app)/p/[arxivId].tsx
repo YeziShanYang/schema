@@ -217,7 +217,7 @@ export default function PaperPage() {
               </section>
             )}
 
-            <nav className="flex gap-1 rounded bg-surface-2 p-[3px] shadow-[inset_0_0_0_1px_var(--color-border)] self-start" aria-label="Paper view">
+            <nav className="flex gap-1 rounded-[7px] bg-surface-2 p-[3px] border border-border self-start" aria-label="Paper view">
               {(['branches', 'walkthrough'] as const).map((v) => (
                 <button
                   key={v}
@@ -225,7 +225,7 @@ export default function PaperPage() {
                   aria-pressed={view === v}
                   onClick={() => { setView(v); writePref(`${prefKey}:view`, v) }}
                   data-testid={v === 'walkthrough' ? 'view-walkthrough' : 'view-branches'}
-                  className={cn('press cursor-pointer rounded-[3px] px-3 py-1 text-sm font-medium', view === v ? 'bg-card text-foreground shadow-[var(--shadow-ring)]' : 'text-muted-foreground hover:text-foreground')}
+                  className={cn('press cursor-pointer rounded-[3px] border border-transparent px-3 py-1 text-sm font-medium', view === v ? 'border-transparent bg-card text-foreground shadow-[var(--shadow-ring)]' : 'text-muted-foreground hover:text-foreground')}
                 >
                   {v === 'branches' ? 'Branches' : 'Walkthrough'}
                 </button>
@@ -316,7 +316,7 @@ export default function PaperPage() {
                         if (!c) return null
                         return (
                           <button key={k} type="button" data-testid="walkthrough-chip" onClick={() => openConcept(k)}
-                            className="press cursor-pointer rounded-[3px] bg-surface-2 px-2 py-0.5 text-xs shadow-[inset_0_0_0_1px_var(--color-border)] hover:bg-accent-soft">
+                            className="press cursor-pointer rounded-[3px] bg-surface-2 px-2 py-0.5 text-xs border border-border hover:bg-accent-soft">
                             {c.data.name}
                           </button>
                         )

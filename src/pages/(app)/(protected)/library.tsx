@@ -27,14 +27,14 @@ export default function LibraryPage() {
     <div className="min-h-full" data-testid="library-page">
       <PageHeader label="Library" title="Your papers" />
       <div className="mx-auto grid max-w-4xl gap-4 px-5 py-6 md:px-7">
-        <div className="flex gap-1 self-start rounded bg-surface-2 p-[3px] shadow-[inset_0_0_0_1px_var(--color-border)]" role="group" aria-label="Filter papers">
+        <div className="flex gap-1 self-start rounded-[7px] bg-surface-2 p-[3px] border border-border" role="group" aria-label="Filter papers">
           {(['all', 'reading', 'finished'] as Filter[]).map((f) => (
             <button
               key={f}
               type="button"
               aria-pressed={filter === f}
               onClick={() => setFilter(f)}
-              className={cn('press cursor-pointer rounded-[3px] px-3 py-1 text-sm font-medium', filter === f ? 'bg-card text-foreground shadow-[var(--shadow-ring)]' : 'text-muted-foreground hover:text-foreground')}
+              className={cn('press cursor-pointer rounded-[3px] border border-transparent px-3 py-1 text-sm font-medium', filter === f ? 'border-transparent bg-card text-foreground shadow-[var(--shadow-ring)]' : 'text-muted-foreground hover:text-foreground')}
             >
               {f === 'all' ? 'All' : f === 'reading' ? 'In progress' : 'Finished'}
             </button>
@@ -61,7 +61,7 @@ export default function LibraryPage() {
                     </div>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    <div className="mb-1 flex justify-between tabular-nums"><span>Known</span><b className="font-semibold text-foreground">{known} / {total}</b></div>
+                    <div className="mb-1 flex justify-between tabular-nums"><span>Topics known</span><b className="font-semibold text-foreground">{known} / {total}</b></div>
                     <Meter value={total ? known / total : 0} />
                   </div>
                   <div>

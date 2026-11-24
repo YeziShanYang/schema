@@ -255,6 +255,20 @@ test('signed-out demo: status changes stay local, links and AI need sign-in', as
   await expect(card(page, 'c3').getByTestId('explain-signin')).toBeVisible()
 })
 
+test('landing shows the bundled example and its branches switch the concept list', async ({ page }) => {
+  await page.goto('/')
+  const example = page.getByTestId('landing-example')
+  await expect(example).toContainText('Example: real output for arXiv 1706.03762')
+  await expect(example).toContainText('Attention Is All You Need')
+  const branches = page.getByTestId('landing-branch')
+  expect(await branches.count()).toBeGreaterThanOrEqual(3)
+  const firstList = await page.getByTestId('landing-branch-concepts').innerText()
+  await branches.nth(1).click()
+  await expect(branches.nth(1)).toHaveAttribute('aria-pressed', 'true')
+  expect(await page.getByTestId('landing-branch-concepts').innerText()).not.toBe(firstList)
+  await expect(page.getByTestId('landing-demo')).toHaveAttribute('href', '/p/1706~03762')
+})
+
 test('bad input shows a clear error', async ({ users }) => {
   const [ada] = await users(['Schema ada'])
   await ada.page.goto('/home')

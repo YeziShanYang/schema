@@ -1,10 +1,10 @@
 # Schema
 
-Schema turns an arXiv paper into a learning roadmap. A reader creates a workspace for a subject (for example "CS 229"), gets three recommended papers or pastes their own, and the app lists every concept the chosen paper relies on. Concepts are grouped into 3 to 6 thematic branches and ordered by prerequisite. Each one comes with the passage where the paper uses it, explainers found on the web, a check question and an optional AI explanation. What the reader knows is stored in a knowledge profile that carries over to later papers.
+Schema turns an arXiv paper into a learning roadmap. A reader creates a workspace for a subject (for example "CS 229"), adds papers to it from three recommendations or by pasting a link, and the app lists every concept each paper relies on. Concepts are grouped into 3 to 6 thematic branches and ordered by prerequisite. Each one comes with the passage where the paper uses it, explainers found on the web, a check question and an optional AI explanation. What the reader knows is stored in a knowledge profile that carries over to later papers.
 
 Live at https://schema.app.space. Built on the [DeepSpace SDK](https://docs.deep.space) (Cloudflare Workers, Durable Objects).
 
-The frontend in this repository is a minimal functional layer over the data hooks in `src/hooks` and the modules in `src/lib`.
+The frontend uses the Blueprint theme (IBM Plex, dot-grid canvas). Its data access lives in the hooks in `src/hooks` and the modules in `src/lib`, so views can be redesigned without touching the backend.
 
 ## How a paper is analyzed
 
@@ -13,8 +13,9 @@ The frontend in this repository is a minimal functional layer over the data hook
 1. Seed the starter topics if they are missing.
 2. Convert the PDF with `cloudconvert/convert-file` (URL input), cut the text at the References heading, cap it at 90,000 characters and store it with `appFiles` so a retry does not convert again.
 3. One Claude Haiku 5.5 call lists the concepts the paper relies on, from foundations up, with a quote, dependencies, depth, a branch and a topic in the shared vocabulary. The server drops dangling dependencies, breaks cycles, computes tiers and checks every quote against the paper text.
-4. For each topic that has no resources yet, one `exa/search` call, then one Haiku call per batch of five topics picks one or two results. Resources are stored on the topic and reused by every later paper.
-5. One Haiku call writes the section walkthrough and a check question per concept.
+4. One Haiku call writes the section walkthrough and a check question per concept.
+
+Explainer links are not part of the job. When a reader opens a branch and asks for links, `loadBranchResources` runs one `exa/search` per topic in that branch that has no links yet, then one Haiku call per five topics picks one or two results. Links are stored on the topic, so every later paper that needs it gets them free. Topics are marked `loading` with a timestamp before any paid call so two readers do not pay twice; a mark older than five minutes is treated as stale.
 
 Record writes are queued in the checkpoint and flushed 20 per tick, so no tick approaches the Worker subrequest limit. A failing step is retried once after three seconds; a second failure marks the paper failed with a message, and the requester can retry it.
 
@@ -24,14 +25,14 @@ The concept list does not depend on the reader. Readers mark what they already k
 
 | Collection | Contents | Read | Write |
 | --- | --- | --- | --- |
-| `papers` | arXiv metadata, status and stage, branches, main contribution | everyone | server only |
-| `topics` | shared vocabulary: name, level, description, cached resources | everyone | server only |
+| `papers` | arXiv metadata, status and stage, branches, main contribution, distinct topic keys | everyone | server only |
+| `topics` | shared vocabulary: name, level, description, cached links and their loading state | everyone | server only |
 | `concepts` | per-paper concept: topic, branch, quote, dependencies, tier, check question, cached explanation | everyone | server only |
 | `sections` | per-paper walkthrough entries | everyone | server only |
 | `knowledge` | one row per topic the reader knows or is learning | owner | owner |
 | `roadmaps` | papers the reader opened, last opened, finished | owner | owner |
-| `workspaces` | name, description, current target, paper history, suggestions | owner | owner |
-| `usage_events` | metered actions for daily caps | admin | server only |
+| `workspaces` | name, description, papers (each active or finished), last opened paper, suggestions | owner | owner |
+| `usage_events` | metered actions for the daily caps; an `analyze` event is also the record of who requested a paper | admin | server only |
 
 Owner rows use a `userBound` `userId` column with `uniqueOn` so a client cannot write another reader's row or create duplicates.
 
@@ -39,8 +40,10 @@ Owner rows use a `userBound` `userId` column with `uniqueOn` so a client cannot 
 
 | Action | What it does | Limit |
 | --- | --- | --- |
-| `analyzePaper` | start or open an analysis; with `workspaceId`, also set it as that workspace's target | 5 new papers per user per rolling 24 hours (cached papers are free) |
-| `retryPaper` | restart a failed or stuck analysis | requester or owner only |
+| `analyzePaper` | start or open an analysis; with `workspaceId`, also add it to that workspace | 5 new papers per user per rolling 24 hours; cached papers are free and a failed analysis is refunded |
+| `retryPaper` | restart a failed or stuck analysis | requester or owner only; uses a daily slot |
+| `loadBranchResources` | load explainer links for one branch's topics that have none | 20 branch loads per user per 24 hours; cached topics are free |
+| `myAllowance` | the caller's remaining allowances | none |
 | `recommendPapers` | Exa search restricted to arxiv.org, one Haiku ranking call, every pick verified with the arXiv API | 10 runs per user per 24 hours |
 | `explainConcept` | one Haiku explanation with a worked example, cached on the concept | 30 uncached explanations per user per 24 hours |
 | `seedTopics` | create missing starter topics, 20 per call | none (idempotent) |
@@ -64,6 +67,17 @@ The Playwright suite needs two test accounts (`npx deepspace test accounts creat
 LIVE_PAPER=2611.29224 npx playwright test -c tests/live/playwright.live.config.ts
 ```
 
-## Cost per paper
+## Cost
 
-Measured on the deployed app: about 21 credits for a 10-page paper (17 concepts, 18 Exa searches) and about 16 credits for a 62-page paper (15 concepts), where 100 credits are one US dollar. Exa searches are most of it at roughly 0.9 credits each; CloudConvert is 2.3 credits per paper and the Haiku calls about 2 to 3 credits. Because resources are cached per topic, later papers that share topics cost less.
+100 credits are one US dollar. Analyzing a new paper costs CloudConvert (2.3 credits) plus the Haiku calls (about 2 to 3 credits). Explainer links are paid only when a reader loads a branch: about 0.9 credits per Exa search, one search per topic that has no links yet, plus a small Haiku call. Before links became lazy, a 10-page paper cost about 21 credits and a 62-page paper about 16, nearly all of it Exa searches for every topic. Links are cached per topic, so branches that share topics with earlier papers cost less or nothing.
+
+## Demo data
+
+The signed-out demo at `/p/1706~03762` and the example on the landing page use a real analysis of arXiv 1706.03762. `tests/live/demo-paper.check.ts` builds it on the deployed app (analyzes the paper, loads every branch's links and pre-generates a few explanations; anything cached is free), and `scripts/export-demo-snapshot.mjs` writes the trimmed snapshot the static landing page bundles:
+
+```bash
+npx playwright test -c tests/live/playwright.live.config.ts demo-paper
+node scripts/export-demo-snapshot.mjs 1706.03762
+```
+
+Both read the deployed app through the owner's CLI login (`npx deepspace agent invoke`).
