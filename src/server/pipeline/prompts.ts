@@ -89,7 +89,7 @@ export function explainSystem(source: 'html' | 'pdf'): string {
 
 You get the paper's main text and the list of concepts it relies on (id, name, why it matters). ${sourceNote(source)}
 
-Write sections: a walkthrough of the paper's main sections in order, 4 to 10 entries. For each: heading (the paper's section number and title), summary (3 to 5 sentences in plain words on what the section does and why it matters to the argument, stating only what the section itself says), and concept_ids (ids from the concept list that the section uses).
+Write sections: a walkthrough of the paper's main text in order, with one entry for each top-level section, from the first section through the conclusion (or, when the text stops before a conclusion, through the last section it contains). Fold a section's subsections into its entry instead of giving them entries of their own. Leave out the abstract, acknowledgments, declarations and anything after the main text. For each entry: heading (the section's heading as the paper writes it: its number and title when the paper numbers its sections, and its title alone when it does not; never add a number the paper does not use, such as "2.x"), summary (3 to 5 sentences in plain words on what the section and its subsections do and why they matter to the argument, stating only what the section itself says), and concept_ids (ids from the concept list that the section or its subsections use).
 
 Write every formula, variable and symbol in a summary as LaTeX between \\( and \\) (inline) or \\[ and \\] (display), never as plain text: write \\(\\sqrt{d_k}\\), not sqrt(d_k), and \\(d_{\\text{model}}\\), not d_model. Inside the JSON string each backslash is escaped ("\\\\(d_k\\\\)"). Keep the prose plain.
 

@@ -125,6 +125,14 @@ describe('walkthrough prompt', () => {
       expect(p).toContain('"summary": "3 to 5 sentences. Math as LaTeX in \\\\( \\\\) or \\\\[ \\\\]."')
     }
   })
+
+  it('asks for one entry per top-level section through the conclusion, with headings as the paper writes them', () => {
+    const p = explainSystem('html')
+    expect(p).toContain('one entry for each top-level section, from the first section through the conclusion')
+    expect(p).toContain("Fold a section's subsections into its entry")
+    expect(p).toContain('never add a number the paper does not use, such as "2.x"')
+    expect(p).not.toMatch(/4 to 10 entries/)
+  })
 })
 
 describe('indexPaperText', () => {
