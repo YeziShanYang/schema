@@ -83,3 +83,9 @@
   --color-known: #0F8A6B;
   --color-learning: #B26B00;
 }
+
+/* The landing's dashed links start on the paper and run out over the dark
+   canvas, so they take a mid blue that clears both: 3.7:1 on each. */
+:root.dark .hero-links {
+  --color-primary: oklch(0.55 0.19 264.5);
+}

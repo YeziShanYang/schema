@@ -2,14 +2,14 @@
  * App chrome for every page under (app)/.
  *
  * Signed in: a 232px sidebar (Add, the Home, Library and Knowledge pages
- * with the concepts-learned count on Knowledge, then workspaces, recent papers, the concepts-learned stat, daily allowance and
- * the account row with the theme toggle) beside the page; on narrow screens
- * the sidebar becomes a sheet behind a menu button. The sheet takes focus
- * while open, Esc closes it, and focus returns to the menu button. Signed
- * out: a slim top bar with the brand, the theme toggle and sign-in. A page
- * banner with its own Sign in
- * (the demo banner) hides the top bar's while it is on screen
- * (useHideTopSignIn), so only one shows.
+ * with the concepts-learned count on Knowledge, then workspaces, recent
+ * papers, the concepts-learned stat, daily allowance and the account row
+ * with the theme toggle) beside the page; on narrow screens the sidebar
+ * becomes a sheet behind a menu button. The sheet takes focus while open,
+ * Esc closes it, and focus returns to the menu button. Signed out: a slim
+ * top bar with the brand, the theme toggle and sign-in. A page banner with
+ * its own Sign in (the demo banner) hides the top bar's while it is on
+ * screen (useHideTopSignIn), so only one shows.
  *
  * Keep the data-testid hooks (app-navigation, nav-sign-in-button,
  * nav-user-name, nav-user-email); the shipped specs use them.
