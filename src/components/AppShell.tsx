@@ -92,12 +92,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             <li key={pg.to}>
               <NavLink to={pg.to} end className={itemClass} onClick={onNavigate} data-testid={`nav-${pg.label.toLowerCase()}`}>
                 {pg.label}
-                {pg.to === '/knowledge' && (
-                  <small className="shrink-0 text-xs text-faint tabular-nums" data-testid="nav-knowledge-count">
-                    {knownCount}
-                    <span className="sr-only"> concepts learned</span>
-                  </small>
-                )}
               </NavLink>
             </li>
           ))}

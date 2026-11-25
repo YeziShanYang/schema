@@ -949,7 +949,7 @@ test('the sidebar lists Home, Library and Knowledge under Add, and its footer co
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/home')
   const pages = page.getByRole('navigation', { name: 'Pages' })
-  await expect(pages.getByRole('link')).toHaveText(['Home', 'Library', /^Knowledge\s*\d+ concepts learned$/])
+  await expect(pages.getByRole('link')).toHaveText(['Home', 'Library', 'Knowledge'])
   await expect(pages.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page')
   // The group sits right under Add, above the workspaces.
   const add = (await page.getByTestId('add-open').boundingBox())!
@@ -970,8 +970,8 @@ test('the sidebar lists Home, Library and Knowledge under Add, and its footer co
   await expect(stat).toHaveText(/^Concepts learned\s*\d+$/)
   const learned = String(await page.locator('[data-testid="checked-concept"]:not([data-stale])').count())
   await expect(stat.locator('b')).toHaveText(learned)
-  // The Knowledge row shows the same count on its right.
-  await expect(page.getByTestId('nav-knowledge-count')).toHaveText(`${learned} concepts learned`)
+  // The count appears once, in the footer stat, not again on the Knowledge row.
+  await expect(page.getByTestId('nav-knowledge-count')).toHaveCount(0)
   await page.goto('/library')
   await stat.click()
   await expect(page).toHaveURL(/\/knowledge$/)
@@ -988,7 +988,7 @@ test('the sidebar lists Home, Library and Knowledge under Add, and its footer co
   await page.getByRole('button', { name: 'Open menu' }).click()
   const menu = page.getByRole('dialog', { name: 'Menu' })
   const sheetPages = menu.getByRole('navigation', { name: 'Pages' })
-  await expect(sheetPages.getByRole('link')).toHaveText(['Home', 'Library', /^Knowledge\s*\d+ concepts learned$/])
+  await expect(sheetPages.getByRole('link')).toHaveText(['Home', 'Library', 'Knowledge'])
   // The group heads the sheet: it is the first navigation, right under Add.
   await expect(menu.getByRole('navigation').first()).toHaveAccessibleName('Pages')
   await expect(sheetPages.getByRole('link', { name: 'Library' })).toHaveAttribute('aria-current', 'page')
