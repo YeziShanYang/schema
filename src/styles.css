@@ -596,6 +596,12 @@
   stroke-linecap: round;
   transition-property: stroke;
   transition-duration: 150ms;
+  /* Fades in with its node's .enter: same stagger, duration and easing. */
+  animation: schema-fade 300ms linear both;
+  animation-delay: calc(var(--i, 0) * 100ms);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .graph-links path { animation-timing-function: ease-out; }
 }
 .graph-links path.hot { stroke: var(--color-primary); }
 .graph-node[data-dragging="true"] { cursor: grabbing; }

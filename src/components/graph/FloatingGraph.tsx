@@ -296,12 +296,14 @@ export function FloatingGraph({
       className={cn('dot-grid relative touch-none overflow-hidden', className)}
     >
       <svg className="graph-links pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
-        {nodes.map((n) => (
+        {/* Each link enters with its node (the same --i), so a line never leads to a card that hasn't appeared. */}
+        {nodes.map((n, i) => (
           <path
             key={n.key}
             ref={(el) => {
               stateFor(n.key).path = el
             }}
+            style={{ ['--i' as string]: Math.min(i + 1, 8) }}
           />
         ))}
       </svg>

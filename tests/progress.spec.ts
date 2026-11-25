@@ -77,6 +77,20 @@ async function recorded(page: Page) {
   return page.evaluate(() => (window as unknown as { __progress: Recorded }).__progress)
 }
 
+/** Delay and duration of each link's entrance in the progress graph, in node order. */
+function linkTimings(page: Page) {
+  return page.getByTestId('progress-graph').evaluate((g) =>
+    [...g.querySelectorAll('.graph-links path')].map((el) => [getComputedStyle(el).animationDelay, getComputedStyle(el).animationDuration]),
+  )
+}
+
+/** Delay and duration of each node's entrance in the progress graph. */
+function nodeTimings(page: Page) {
+  return page.getByTestId('progress-graph').evaluate((g) =>
+    [...g.querySelectorAll('.graph-node > .enter')].map((el) => [getComputedStyle(el).animationDelay, getComputedStyle(el).animationDuration]),
+  )
+}
+
 /** The animation an element's graph entrance runs: schema-enter moves, schema-fade only fades. */
 function entranceOf(page: Page, testId: string) {
   return page.getByTestId(testId).first().evaluate((el) => getComputedStyle(el.closest('.enter')!).animationName)
@@ -139,6 +153,8 @@ test('progress view: stage checklist, branches one at a time, elapsed time, then
   expect(await entranceOf(page, 'progress-branch')).toBe('schema-enter')
   await expect(calm.getByTestId('progress-branch')).toHaveCount(4)
   expect(await entranceOf(calm, 'progress-branch')).toBe('schema-fade')
+  // Each dashed link fades in with its node, never ahead of it.
+  for (const p of [page, calm]) expect(await linkTimings(p)).toEqual(await nodeTimings(p))
 
   // Writing the walkthrough, then checking the overview, then ready: the view holds, fades, and the paper window is there.
   await expect(stage(page, 'explain')).toHaveAttribute('data-state', 'active', { timeout: 30_000 })
