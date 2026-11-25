@@ -706,6 +706,31 @@ test('each library filter has its own empty text', async ({ users }) => {
   await expect(page.getByTestId('library-empty')).toHaveText('No finished papers yet. Papers you mark finished are listed here.')
 })
 
+test('the library shows a placeholder, never 0 / 0, while its counts load', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await openReadyFixturePaper(page)
+  // Record every count the fixture paper's row shows from the first paint on.
+  await page.addInitScript((id) => {
+    const w = window as unknown as { __counts: string[] }
+    w.__counts = []
+    new MutationObserver(() => {
+      for (const row of document.querySelectorAll('[data-testid="library-row"]')) {
+        if (!row.textContent?.includes(`arXiv ${id}`)) continue
+        const t = row.querySelector('[data-testid="library-known"] b')?.textContent ?? ''
+        if (w.__counts[w.__counts.length - 1] !== t) w.__counts.push(t)
+      }
+    }).observe(document, { subtree: true, childList: true, characterData: true })
+  }, FIXTURE_ID)
+  await page.goto('/library')
+  const row = page.getByTestId('library-row').filter({ hasText: `arXiv ${FIXTURE_ID}` })
+  await expect(row.getByTestId('library-known')).toContainText(/\d+ \/ 9/, { timeout: 15_000 })
+  const counts = await page.evaluate(() => (window as unknown as { __counts: string[] }).__counts)
+  expect(counts.length).toBeGreaterThan(0)
+  expect(counts).not.toContain('0 / 0')
+})
+
 /** Calls a server action as the signed-in reader of `page`. */
 async function action(page: Page, name: string, params: Record<string, unknown>) {
   return page.evaluate(

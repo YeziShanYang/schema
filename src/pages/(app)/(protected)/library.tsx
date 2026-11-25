@@ -32,6 +32,8 @@ export default function LibraryPage() {
   const checked = useMemo(() => checkedPerPaper(knowledge.rows), [knowledge.rows])
   const papers = useQuery<PaperData>('papers', { limit: 2000 })
   const paperById = useMemo(() => new Map(papers.records.map((p) => [p.recordId, p])), [papers.records])
+  // Counts show once the papers (their concept counts) and the reader's checkmarks are in; until then "…", not "0 / 0".
+  const countsReady = papers.status === 'ready' && knowledge.status === 'ready'
   const [filter, setFilter] = useState<Filter>('all')
   const reopenPaper = useReopenPaper()
   const [finishing, setFinishing] = useState<RecordData<PaperData> | null>(null)
@@ -74,7 +76,10 @@ export default function LibraryPage() {
                     </div>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    <div className="mb-1 flex justify-between tabular-nums"><span>Concepts known</span><b className="font-semibold text-foreground">{known} / {total}</b></div>
+                    <div className="mb-1 flex justify-between tabular-nums" data-testid="library-known">
+                      <span>Concepts known</span>
+                      <b className="font-semibold text-foreground">{countsReady ? `${known} / ${total}` : '…'}</b>
+                    </div>
                     <Meter value={total ? known / total : 0} />
                   </div>
                   <div>
