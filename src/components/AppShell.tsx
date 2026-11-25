@@ -2,8 +2,7 @@
  * App chrome for every page under (app)/.
  *
  * Signed in: a 232px sidebar (Add, the Home, Library and Knowledge pages
- * with their icons and, on Knowledge, the concepts-learned count, then
- * workspaces, recent papers, the concepts-learned stat, daily allowance and
+ * with the concepts-learned count on Knowledge, then workspaces, recent papers, the concepts-learned stat, daily allowance and
  * the account row with the theme toggle) beside the page; on narrow screens
  * the sidebar becomes a sheet behind a menu button. The sheet takes focus
  * while open, Esc closes it, and focus returns to the menu button. Signed
@@ -24,7 +23,7 @@ import { Button, buttonVariants } from './ui'
 import { AddButton } from './AddDialog'
 import { SignInOverlay } from './SignInOverlay'
 import { ThemeToggle } from './ThemeToggle'
-import { CloseIcon, HomeIcon, KnownIcon, MarkIcon, MenuIcon, PapersIcon } from './icons'
+import { CloseIcon, MarkIcon, MenuIcon } from './icons'
 import { useConceptKnowledge, useRoadmaps } from '../hooks/useReader'
 import { useWorkspaces } from '../hooks/useWorkspaces'
 import { useAllowance, useRefreshAllowanceOnSettle } from '../hooks/useAllowance'
@@ -32,11 +31,11 @@ import { arxivSlug } from '../lib/arxiv'
 import { APP_DISPLAY_NAME } from '../constants'
 import { FOCUSABLE, isTopOverlay, pushOverlay, trapTab } from '../lib/overlays'
 
-/** The app's own pages, listed under Add in the sidebar, each with a 16px icon. */
+/** The app's own pages, listed under Add in the sidebar. */
 const PAGES = [
-  { to: '/home', label: 'Home', Icon: HomeIcon },
-  { to: '/library', label: 'Library', Icon: PapersIcon },
-  { to: '/knowledge', label: 'Knowledge', Icon: KnownIcon },
+  { to: '/home', label: 'Home' },
+  { to: '/library', label: 'Library' },
+  { to: '/knowledge', label: 'Knowledge' },
 ]
 
 const TopSignIn = createContext<(hidden: boolean) => void>(() => {})
@@ -92,10 +91,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           {PAGES.map((pg) => (
             <li key={pg.to}>
               <NavLink to={pg.to} end className={itemClass} onClick={onNavigate} data-testid={`nav-${pg.label.toLowerCase()}`}>
-                <span className="flex min-w-0 items-center gap-2">
-                  <pg.Icon size={16} className="shrink-0" />
-                  <span className="truncate">{pg.label}</span>
-                </span>
+                {pg.label}
                 {pg.to === '/knowledge' && (
                   <small className="shrink-0 text-xs text-faint tabular-nums" data-testid="nav-knowledge-count">
                     {knownCount}

@@ -951,12 +951,6 @@ test('the sidebar lists Home, Library and Knowledge under Add, and its footer co
   const pages = page.getByRole('navigation', { name: 'Pages' })
   await expect(pages.getByRole('link')).toHaveText(['Home', 'Library', /^Knowledge\s*\d+ concepts learned$/])
   await expect(pages.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page')
-  // Each row is a button-like link with a 16px icon drawn in the text color.
-  for (const link of await pages.getByRole('link').all()) {
-    const icon = link.locator('svg')
-    await expect(icon).toHaveCount(1)
-    expect(await icon.evaluate((el) => [el.getAttribute('width'), el.getAttribute('stroke'), el.getAttribute('aria-hidden')])).toEqual(['16', 'currentColor', 'true'])
-  }
   // The group sits right under Add, above the workspaces.
   const add = (await page.getByTestId('add-open').boundingBox())!
   const group = (await pages.boundingBox())!
@@ -995,7 +989,8 @@ test('the sidebar lists Home, Library and Knowledge under Add, and its footer co
   const menu = page.getByRole('dialog', { name: 'Menu' })
   const sheetPages = menu.getByRole('navigation', { name: 'Pages' })
   await expect(sheetPages.getByRole('link')).toHaveText(['Home', 'Library', /^Knowledge\s*\d+ concepts learned$/])
-  await expect(sheetPages.locator('svg')).toHaveCount(3)
+  // The group heads the sheet: it is the first navigation, right under Add.
+  await expect(menu.getByRole('navigation').first()).toHaveAccessibleName('Pages')
   await expect(sheetPages.getByRole('link', { name: 'Library' })).toHaveAttribute('aria-current', 'page')
   await sheetPages.getByRole('link', { name: 'Knowledge' }).click()
   await expect(page).toHaveURL(/\/knowledge$/)
