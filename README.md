@@ -31,6 +31,7 @@ Two files are good places to start reading: `src/server/pipeline/run.ts` runs th
   - `tests/screens/` captures screenshots of every screen and of the progress view for visual review.
 - In `scripts/`, `agent.mjs` calls the deployed app's agent tools through the CLI as the owner, and `export-demo-snapshot.mjs` writes `src/data/demo-snapshot.json`. `scripts/migrations/` holds one-time data migrations for papers analyzed under older rules.
 - `public/` is served as it is: the favicon, `robots.txt` and `_headers`.
+- `docs/` explains how output quality was measured ([quality-evaluation.md](docs/quality-evaluation.md)) and how the build was checked ([build-and-verification.md](docs/build-and-verification.md)).
 
 At the repository root, `worker.ts` assembles the Worker's routes and Durable Objects, `prerender.ts` prerenders the landing page at build time, and `wrangler.toml` and the Vite, Vitest and ESLint configs set up deploys, builds, unit tests and lint.
 
