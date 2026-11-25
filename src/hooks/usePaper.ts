@@ -107,10 +107,7 @@ export function useFinishPaper() {
     }) => {
       const { paper, concepts, markRemainingKnown } = args
       await roadmaps.touch({ paperId: paper.recordId, arxivId: paper.data.arxivId, title: paper.data.title })
-      await roadmaps.setStatus(paper.recordId, 'finished')
-      for (const ws of workspaces.rows) {
-        if (workspaces.papersOf(ws.recordId).some((p) => p.paperId === paper.recordId)) await workspaces.markFinished(ws.recordId, paper.recordId)
-      }
+      // The checks go first and the finished status last, so a paper never shows finished with its checks still unwritten.
       if (markRemainingKnown) {
         for (const c of concepts) {
           if (knowledge.statusOf(c.recordId) === 'known') continue
@@ -120,6 +117,10 @@ export function useFinishPaper() {
           )
         }
       }
+      for (const ws of workspaces.rows) {
+        if (workspaces.papersOf(ws.recordId).some((p) => p.paperId === paper.recordId)) await workspaces.markFinished(ws.recordId, paper.recordId)
+      }
+      await roadmaps.setStatus(paper.recordId, 'finished')
     },
     [knowledge, roadmaps, workspaces],
   )
