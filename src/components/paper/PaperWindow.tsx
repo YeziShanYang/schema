@@ -40,6 +40,7 @@ import { ConceptName, MathText } from '../MathText'
 import { hintText } from '../../lib/hints'
 import { BookIcon } from '../icons'
 import { SignInOverlay } from '../SignInOverlay'
+import { useHideTopSignIn } from '../AppShell'
 
 function readPref(key: string): string {
   try {
@@ -102,6 +103,10 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const [landed, setLanded] = useState<{ key: string; n: number } | null>(null)
   // A control inside the landed card to focus, when a jump returns to where it started.
   const landFocus = useRef('')
+
+  // The demo banner has its own Sign in, so the top bar's hides while the banner is on screen.
+  const demoBanner = useRef<HTMLDivElement>(null)
+  useHideTopSignIn(demoBanner, knowledge.isDemo && !!p.paper)
 
   const paper = p.paper
   const ov = useOverview(paper, { signedIn: !!isSignedIn, isDemo: knowledge.isDemo })
@@ -370,7 +375,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
       data-overview-open={overviewOpen || undefined}
     >
       {knowledge.isDemo && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent-soft px-5 py-2 text-sm md:px-7" data-testid="demo-banner" role="status">
+        <div ref={demoBanner} className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent-soft px-5 py-2 text-sm md:px-7" data-testid="demo-banner" role="status">
           <span>Demo: your progress isn't saved. Sign in to keep it.</span>
           <Button size="sm" onClick={(e) => openSignIn(e.currentTarget)}>Sign in</Button>
         </div>

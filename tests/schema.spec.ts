@@ -1293,6 +1293,27 @@ test('signed out, the sign-in window over a branch takes focus and Esc, then giv
   await expect(page.getByTestId('branch-panel')).toHaveCount(0)
 })
 
+test('signed out, the demo page shows one Sign in, and the sign-in window names Schema', async ({ page }) => {
+  await calm(page)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto(`/p/${FIXTURE_SLUG}`)
+  await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'ready', { timeout: 20_000 })
+  const banner = page.getByTestId('demo-banner')
+  await expect(banner.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()
+  await expect(page.getByTestId('nav-sign-in-button')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toHaveCount(1)
+  // With the banner scrolled away, the top bar's Sign in comes back.
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+  await expect(banner).not.toBeInViewport()
+  await expect(page.getByTestId('nav-sign-in-button')).toBeVisible()
+  await page.getByTestId('nav-sign-in-button').click()
+  const overlay = page.getByTestId('auth-overlay')
+  await expect(overlay).toContainText('Sign in to Schema')
+  await expect(overlay).not.toContainText('Sign in to DeepSpace')
+  // The wrapper (zero-size around the SDK's fixed overlay) names the dialog for screen readers.
+  await expect(page.getByRole('dialog', { name: 'Sign in to Schema' })).toHaveCount(1)
+})
+
 test('landing shows the bundled example graph and a branch panel', async ({ page }) => {
   await calm(page)
   await page.goto('/')

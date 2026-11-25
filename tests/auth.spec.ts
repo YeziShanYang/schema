@@ -13,6 +13,9 @@ test('a signed-out visit to /home shows the sign-in prompt, not the page', async
   await expect(page.getByTestId('auth-overlay')).toHaveCount(0)
   await page.getByTestId('signed-out-sign-in').click()
   await expect(page.getByTestId('auth-overlay')).toBeVisible()
+  // The window names Schema, not the platform.
+  await expect(page.getByTestId('auth-overlay')).toContainText('Sign in to Schema')
+  await expect(page.getByTestId('auth-overlay')).not.toContainText('Sign in to DeepSpace')
   await expect(page.getByTestId('auth-overlay')).toContainText('Continue with Google')
   await expect(page.getByTestId('auth-overlay')).toContainText('Continue with GitHub')
 })

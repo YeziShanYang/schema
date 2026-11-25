@@ -5,13 +5,15 @@
  * daily allowance, account) beside the page; on narrow screens the sidebar
  * becomes a sheet behind a menu button. The sheet takes focus while open,
  * Esc closes it, and focus returns to the menu button. Signed out: a slim
- * top bar with the brand and sign-in.
+ * top bar with the brand and sign-in. A page banner with its own Sign in
+ * (the demo banner) hides the top bar's while it is on screen
+ * (useHideTopSignIn), so only one shows.
  *
  * Keep the data-testid hooks (app-navigation, nav-sign-in-button,
  * nav-user-name, nav-user-email); the shipped specs use them.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { signOut, useAuthProfileReady } from 'deepspace'
 import { cn, plural } from '@/lib/utils'
@@ -25,6 +27,23 @@ import { useAllowance, useRefreshAllowanceOnSettle } from '../hooks/useAllowance
 import { arxivSlug } from '../lib/arxiv'
 import { APP_DISPLAY_NAME } from '../constants'
 import { FOCUSABLE, isTopOverlay, pushOverlay, trapTab } from '../lib/overlays'
+
+const TopSignIn = createContext<(hidden: boolean) => void>(() => {})
+
+/** Hides the signed-out top bar's Sign in while `ref`, a banner with its own, is on screen below the 48px bar. */
+export function useHideTopSignIn(ref: RefObject<HTMLElement | null>, active: boolean) {
+  const setHidden = useContext(TopSignIn)
+  useEffect(() => {
+    const el = ref.current
+    if (!active || !el) return
+    const io = new IntersectionObserver(([entry]) => setHidden(entry.isIntersecting), { rootMargin: '-48px 0px 0px 0px' })
+    io.observe(el)
+    return () => {
+      io.disconnect()
+      setHidden(false)
+    }
+  }, [ref, active, setHidden])
+}
 
 function Brand({ to = '/home' }: { to?: string }) {
   return (
@@ -147,6 +166,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn } = useAuthProfileReady({ requireUser: true })
   const [sheetOpen, setSheetOpen] = useState(false)
   const [showAuth, setShowAuth] = useState(false)
+  const [hideSignIn, setHideSignIn] = useState(false)
   const location = useLocation()
   // "New papers today" and every other allowance count follow a paper whose analysis fails (refunded) or finishes.
   useRefreshAllowanceOnSettle()
@@ -184,16 +204,20 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-h-screen flex-col bg-background">
         <header data-testid="app-navigation" className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4">
           <Brand to="/" />
-          <button
-            type="button"
-            data-testid="nav-sign-in-button"
-            onClick={() => setShowAuth(true)}
-            className="press h-[30px] cursor-pointer rounded bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-[color-mix(in_oklab,var(--color-primary)_88%,black)]"
-          >
-            Sign in
-          </button>
+          {!hideSignIn && (
+            <button
+              type="button"
+              data-testid="nav-sign-in-button"
+              onClick={() => setShowAuth(true)}
+              className="press h-[30px] cursor-pointer rounded bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-[color-mix(in_oklab,var(--color-primary)_88%,black)]"
+            >
+              Sign in
+            </button>
+          )}
         </header>
-        <main className="flex-1">{children}</main>
+        <main className="flex-1">
+          <TopSignIn.Provider value={setHideSignIn}>{children}</TopSignIn.Provider>
+        </main>
         {showAuth && <SignInOverlay onClose={() => setShowAuth(false)} />}
       </div>
     )
