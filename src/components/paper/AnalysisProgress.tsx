@@ -31,13 +31,14 @@ import type { PaperData, PaperStatus, TimedStage } from '../../types'
 import type { BranchProgress } from '../../lib/branches'
 import { lastStartedStage, runStartedAt, stageDurations } from '../../lib/timings'
 import { actions } from '../../lib/actions-client'
+import { ANALYSIS_TIME } from '../../constants'
 import { FloatingGraph } from '../graph/FloatingGraph'
 import { CheckIcon } from '../icons'
 import './analysis-progress.css'
 
 /** Matches retryPaper: a run with no update for this long can be restarted. */
 const STUCK_AFTER_MS = 20 * 60 * 1000
-/** "Usually 1 to 2 minutes"; past this the view says it is taking longer. */
+/** The end of the usual time (ANALYSIS_TIME); past this the view says it is taking longer. */
 const USUAL_MAX_MS = 2 * 60 * 1000
 /** How long the finished checklist stays before the view fades. */
 const HOLD_MS = 600
@@ -340,7 +341,7 @@ export function AnalysisProgress({
         </div>
       ) : (
         <p className="mt-3.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-t border-border pt-2.5 text-[12.5px] text-muted-foreground">
-          <span>{ready ? 'Done' : slow ? 'Taking longer than usual. Long papers can take a few minutes.' : 'Usually 1 to 2 minutes'}</span>
+          <span>{ready ? 'Done' : slow ? 'Taking longer than usual. Long papers can take a few minutes.' : `Usually ${ANALYSIS_TIME}`}</span>
           <TotalTime paper={d} running={running} prefix={ready ? 'Took' : 'Elapsed'} />
         </p>
       )}

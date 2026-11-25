@@ -14,6 +14,7 @@ import { useRoadmaps } from '../../../hooks/useReader'
 import { useWorkspaces } from '../../../hooks/useWorkspaces'
 import { arxivSlug } from '../../../lib/arxiv'
 import type { PaperData } from '../../../types'
+import { ANALYSIS_TIME } from '../../../constants'
 
 export default function HomePage() {
   const workspaces = useWorkspaces()
@@ -57,7 +58,7 @@ export default function HomePage() {
         <section className="surface enter p-4" style={{ ['--i' as string]: 1 }}>
           <div className="label">Open a paper without a workspace</div>
           <p className="mb-3 mt-1 text-sm text-muted-foreground">
-            Paste an arXiv link or id. A paper nobody has analyzed takes about two minutes; one already analyzed opens right away.
+            Paste an arXiv link or id. A paper nobody has analyzed takes {ANALYSIS_TIME}; one already analyzed opens right away.
           </p>
           <AnalyzeForm />
         </section>

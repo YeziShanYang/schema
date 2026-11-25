@@ -564,6 +564,14 @@ test('Add flow, paper path: look up, suggested workspace name, bad links leave n
   await expect(page.getByTestId('add-error')).toContainText('does not look like an arXiv link')
   await expect(page.getByTestId('add-paper-preview')).toHaveCount(0)
 
+  // A paper nobody analyzed gives the same time estimate as Home, the landing and the progress view
+  // (or, once the reader is at the daily cap in this local state, says the limit is reached).
+  await page.getByTestId('add-paper-input').fill(await newFixtureId(page, ''))
+  await page.getByTestId('add-paper-lookup').click()
+  const left = (await action(page, 'myAllowance', {})).data.analyze.remaining
+  await expect(page.getByTestId('add-paper-status')).toContainText(left > 0 ? 'analysis takes 1 to 2 minutes' : "You've reached today's limit")
+  await expect(page.getByTestId('home-page')).toContainText('A paper nobody has analyzed takes 1 to 2 minutes')
+
   await page.getByTestId('add-paper-input').fill(`https://arxiv.org/abs/${FIXTURE_ID}`)
   await page.getByTestId('add-paper-lookup').click()
   await expect(page.getByTestId('add-paper-status')).toContainText('Already analyzed')

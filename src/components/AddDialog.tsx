@@ -21,6 +21,7 @@ import { useAllowance } from '../hooks/useAllowance'
 import { actions, type PaperPeek } from '../lib/actions-client'
 import { arxivSlug } from '../lib/arxiv'
 import { formatSlotTime } from '../lib/cap'
+import { ANALYSIS_TIME } from '../constants'
 
 type Step = 'choose' | 'paper' | 'workspace'
 
@@ -160,7 +161,7 @@ export function AddDialog({ open, onClose, workspaceId }: { open: boolean; onClo
                       {a.nextSlotAt > 0 && ` You can start this one after ${formatSlotTime(a.nextSlotAt)}.`} Papers someone already analyzed are still free to add.
                     </span>
                   ) : (
-                    <span className="text-muted-foreground">New to Schema: analysis takes about a minute and uses one of today's papers.</span>
+                    <span className="text-muted-foreground">New to Schema: analysis takes {ANALYSIS_TIME} and uses one of today's papers.</span>
                   )}
                 </p>
               </div>

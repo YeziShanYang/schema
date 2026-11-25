@@ -16,7 +16,7 @@ import { ConceptName, MathText } from '../components/MathText'
 import { recommendedSequence } from '../lib/sequence'
 import { linkTitle } from '../lib/links'
 import { cleanTitle } from '../components/Markdown'
-import { APP_DISPLAY_NAME, DEMO_ARXIV_ID } from '../constants'
+import { ANALYSIS_TIME, APP_DISPLAY_NAME, DEMO_ARXIV_ID } from '../constants'
 import { demoSnapshot } from '../data/demo'
 import { DAILY_PAPER_CAP } from '../lib/cap'
 import { arxivSlug } from '../lib/arxiv'
@@ -223,7 +223,7 @@ export default function Landing() {
             <h2 className="label">Limits</h2>
             <ul className="mt-3 grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
               <li>arXiv papers only, and the analysis works best on papers written in English.</li>
-              <li>A paper nobody has analyzed takes about one to two minutes. One already analyzed opens right away.</li>
+              <li>A paper nobody has analyzed takes {ANALYSIS_TIME}. One already analyzed opens right away.</li>
               <li>Each account can start {DAILY_PAPER_CAP} new papers a day. A failed analysis does not count.</li>
               <li>Concepts and quotes come from a language model reading the paper's text, taken from the arXiv HTML version when there is one and from the PDF otherwise. Quotes are checked against the paper and hidden when they do not match.</li>
             </ul>

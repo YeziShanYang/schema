@@ -7,6 +7,9 @@ export const APP_DISPLAY_NAME = 'Schema'
 /** The paper the signed-out demo and the landing example use (Attention Is All You Need). */
 export const DEMO_ARXIV_ID = '1706.03762'
 
+/** How long analyzing a new paper usually takes, in every place the app says so (measured runs took 67 to 133 s). */
+export const ANALYSIS_TIME = '1 to 2 minutes'
+
 /** Immutable app identity — data scope keys to this, so renames never
  *  strand your records.
  *

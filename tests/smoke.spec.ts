@@ -27,6 +27,11 @@ test.describe('Smoke tests', () => {
     expect(errors).toEqual([])
   })
 
+  test('landing gives the same analysis time as the app', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('static-landing')).toContainText('A paper nobody has analyzed takes 1 to 2 minutes.')
+  })
+
   test('landing carries one title, one description, one canonical', async ({ page }) => {
     // <Seo> (src/pages/index.tsx, values from src/seo.ts) hoists these into
     // <head>. Exactly one of each: index.html ships no static description or

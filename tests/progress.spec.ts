@@ -134,6 +134,7 @@ test('progress view: stage checklist, branches one at a time, elapsed time, then
   await expect(stage(calm, 'text')).toHaveAttribute('data-state', 'active')
   expect(await calm.locator('.sheet-scan').evaluate((el) => getComputedStyle(el).display)).toBe('none')
   await expect(page.getByTestId('progress-elapsed')).toContainText(/Elapsed \d+s/)
+  await expect(page.getByTestId('paper-progress')).toContainText('Usually 1 to 2 minutes')
 
   // Finding concepts: reading is done and shows how long it took; highlights appear on the sheet.
   await expect(stage(page, 'concepts')).toHaveAttribute('data-state', 'active', { timeout: 30_000 })
