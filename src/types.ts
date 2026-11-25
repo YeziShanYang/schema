@@ -44,6 +44,8 @@ export interface PaperData {
   pipelineVersion?: number
   /** Story sentences and technical lines the verify stage dropped as unsupported by the paper. */
   overviewDropped?: { story: number; technical: number; regenerated: boolean }
+  /** Stored concepts that ended with no quote, counted when the run finishes; missing for papers analyzed before the count existed. */
+  conceptsWithoutQuote?: number
 }
 
 /** Stages with a recorded span: the queue wait, then the job's five stages. */

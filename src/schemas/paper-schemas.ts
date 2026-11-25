@@ -62,6 +62,7 @@ export const papersSchema: CollectionSchema = {
     { name: 'textSource', storage: 'text', interpretation: { kind: 'select', options: ['html', 'pdf'] } },
     { name: 'pipelineVersion', storage: 'number', interpretation: 'plain' },
     { name: 'overviewDropped', storage: 'text', interpretation: { kind: 'json' } },
+    { name: 'conceptsWithoutQuote', storage: 'number', interpretation: 'plain' },
   ],
   uniqueOn: ['arxivId'],
   permissions: readOnlyForEveryone,

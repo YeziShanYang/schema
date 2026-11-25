@@ -14,9 +14,11 @@
  *   extended to the end of the paper's sentence when the longer quote passes
  *   every rule; a quote that stops inside a bracket is extended the same way,
  * - and isn't used by another concept in the same paper.
- * When none passes, the concept has no quote and the card hides the block.
- * A quote that matches the paper exactly is stored as the paper's own text
- * (exactQuoteSpan), so its math keeps the paper's LaTeX delimiters.
+ * When none passes, the job looks for a sentence that names the concept
+ * (lib/quote-fallback); failing that, the concept has no quote and the card
+ * hides the block. A quote that matches the paper exactly is stored as the
+ * paper's own text (exactQuoteSpan), so its math keeps the paper's LaTeX
+ * delimiters.
  */
 
 import { exactQuoteRange, isQuoteVerified, normalizeForMatch, spanText, type PaperIndex, type QuoteRange } from './quotes'

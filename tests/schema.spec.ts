@@ -144,6 +144,8 @@ test('analyze a paper end to end: graph, panel, lazy links, sequence, walkthroug
 
   await openBranch(page, 'foundations')
   await expect(card(page, 'c1').locator('blockquote')).toContainText('The softmax function turns a vector')
+  // c5's only candidate was c1's quote, so the server found the sentence that names gradient descent.
+  await expect(card(page, 'c5').locator('blockquote')).toContainText('We assume the reader knows how gradient descent updates parameters')
   // Opening a branch loads its links when any topic has none (cached afterwards).
   await expect(page.getByTestId('branch-links')).toHaveAttribute('data-links', 'ready', { timeout: 20_000 })
   await expect(card(page, 'c1').getByTestId('concept-resources')).toBeVisible()

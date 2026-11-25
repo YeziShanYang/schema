@@ -48,6 +48,7 @@ export function reanalysisReset(now: number): Record<string, unknown> {
     error: '',
     mainContribution: '',
     conceptCount: 0,
+    conceptsWithoutQuote: 0,
     branches: [],
     topicKeys: [],
     overview: null,

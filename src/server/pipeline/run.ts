@@ -7,7 +7,8 @@
  * Steps: seed -> text -> concepts -> overview -> explain -> verify -> remap -> finish.
  * - seed: starter topics, and clearing the concepts and sections of an earlier analysis.
  * - text: the arXiv HTML with its math as LaTeX, or the PDF through CloudConvert.
- * - concepts: one model call; the server applies the graph, branch, topic and quote rules.
+ * - concepts: one model call; the server applies the graph, branch, topic and quote rules,
+ *   and finds a quote in the text for a concept whose candidates all failed them.
  * - overview: one model call (plain summary, story, plain roles).
  * - explain: one model call for the section walkthrough.
  * - verify: one model call checks the overview against the paper and drops what
@@ -33,6 +34,7 @@ import { preparePaperText } from '../../lib/paper-text'
 import { arxivHtmlToText, arxivHtmlUrl, MIN_HTML_TEXT_CHARS } from '../../lib/paper-html'
 import { indexPaperText } from '../../lib/quotes'
 import { pickQuote, quotePickOrder } from '../../lib/quote-rules'
+import { findNamedQuote, nameTerms, quoteSearch } from '../../lib/quote-fallback'
 import { hasMath } from '../../lib/math'
 import { cleanGraph } from '../../lib/graph'
 import { asString, asStringArray } from '../../lib/json'
@@ -210,6 +212,8 @@ async function runStep(state: AnalyzeState, s: StepCtx): Promise<boolean> {
       const stored = (await s.ctx.records.query('concepts', { where: { paperId: s.paper.recordId }, limit: 200 })) as Envelope<{
         key: string
         topicKey: string
+        quote?: string
+        quoteVerified?: boolean
       }>[]
       if (s.paper.data.conceptCount && stored.length !== s.paper.data.conceptCount) {
         console.warn(`[analyze] ${s.paper.data.arxivId}: ${stored.length} of ${s.paper.data.conceptCount} concepts stored`)
@@ -222,6 +226,7 @@ async function runStep(state: AnalyzeState, s: StepCtx): Promise<boolean> {
         progressMessage: '',
         error: '',
         conceptCount: stored.length,
+        conceptsWithoutQuote: stored.filter((c) => !c.data.quote || !c.data.quoteVerified).length,
         topicKeys: [...new Set(stored.map((c) => c.data.topicKey).filter(Boolean))],
         pipelineVersion: PIPELINE_VERSION,
       })
@@ -425,12 +430,29 @@ async function stepConcepts(state: AnalyzeState, s: StepCtx) {
   const paperIndex = indexPaperText(state.text)
   const usedQuotes = new Set<string>()
   const quoteOf: Record<string, string> = {}
-  for (const c of quotePickOrder(kept)) {
+  const pickOrder = quotePickOrder(kept)
+  for (const c of pickOrder) {
     const { quote, rejected: badQuotes, extendedFrom } = pickQuote(c.quotes, paperIndex, usedQuotes)
     if (badQuotes.length) console.info(`[analyze] ${paper.data.arxivId}: ${c.id} quotes rejected: ${badQuotes.map((b) => b.problem).join(', ')}`)
     if (extendedFrom) console.info(`[analyze] ${paper.data.arxivId}: ${c.id} quote carried on to the end of its sentence`)
     quoteOf[c.id] = quote
   }
+  // A concept whose candidates all failed gets the first sentence that names it and passes the same rules.
+  // This runs after every concept has had its candidates, so it never takes a passage a candidate chose.
+  const missing = pickOrder.filter((c) => !quoteOf[c.id])
+  if (missing.length) {
+    const search = quoteSearch(paperIndex)
+    const topicName = (id: string) => topicByKey.get(topicFor[id])?.data.name ?? newTopics.get(topicFor[id])?.name ?? ''
+    for (const c of missing) {
+      const others = kept.filter((o) => o.id !== c.id).flatMap((o) => [o.name, topicName(o.id)])
+      const found = findNamedQuote(nameTerms(c.name, topicName(c.id), others, state.text), search, usedQuotes)
+      if (!found) continue
+      quoteOf[c.id] = found.quote
+      console.info(`[analyze] ${paper.data.arxivId}: ${c.id} quote found in the text by its ${found.kind} "${found.term}"`)
+    }
+  }
+  const unquoted = kept.filter((c) => !quoteOf[c.id]).map((c) => c.id)
+  if (unquoted.length) console.info(`[analyze] ${paper.data.arxivId}: ${unquoted.length} of ${kept.length} concepts have no quote: ${unquoted.join(', ')}`)
   let order = 0
   for (const c of kept) {
     const quote = quoteOf[c.id]

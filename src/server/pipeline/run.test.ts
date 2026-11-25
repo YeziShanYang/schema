@@ -188,3 +188,28 @@ describe('analyze job timings', () => {
     expect(d.timings!.text!.endedAt).toBe(Date.now())
   })
 })
+
+type ConceptRow = { key: string; branchKey: string; quote: string; quoteVerified: boolean; plainRole?: string }
+
+async function conceptRows(paperId: string): Promise<Record<string, ConceptRow>> {
+  const rows = await h.records.query('concepts', { where: { paperId } })
+  return Object.fromEntries(rows.map((r) => [r.data.key as string, r.data as unknown as ConceptRow]))
+}
+
+describe('analyze job grounding and placement', () => {
+  it('finds a quote in the text for a concept whose candidates all failed, and counts concepts left without one', async () => {
+    const real = await vi.importActual<typeof import('./fixtures')>('./fixtures')
+    vi.mocked(fixtureIntegration).mockImplementation(real.fixtureIntegration)
+    const id = await createPaper('0000.00003')
+    await runJob(id, '0000.00003')
+
+    const concepts = await conceptRows(id)
+    // c5's only candidate was c1's quote; the sentence naming gradient descent replaces it.
+    expect(concepts.c5).toMatchObject({
+      quote: 'We assume the reader knows how gradient descent updates parameters by following the negative gradient of a loss.',
+      quoteVerified: true,
+    })
+    expect(concepts.c4).toMatchObject({ quote: '', quoteVerified: false })
+    expect((await paperData(id)).conceptsWithoutQuote).toBe(1)
+  })
+})

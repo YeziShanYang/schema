@@ -16,7 +16,10 @@
  *   word with its name, so the server gives it a topic of its own.
  * - c6's first quote is display math and c8's first quote ends in a lead-in,
  *   so both fall back to their second quote. c7's first quote is c3's, so it
- *   takes its second. c4's only quote is not in the paper, so it has none.
+ *   takes its second. c4's only quote is not in the paper, and no sentence
+ *   names it, so it has none.
+ * - c5's only quote is c1's, so the server finds c5's quote in the text: the
+ *   first sentence that names "gradient descent" and passes the rules.
  * - c6's quote has inline math, so on the HTML path it renders with KaTeX.
  * - "deployment" holds only c9, so it merges into geometry, where c9's
  *   prerequisites are. c4 and c8 name branches that do not exist, so they
@@ -166,7 +169,7 @@ const concepts = {
       name: 'Gradient descent',
       why_needed: 'The layer is trained like any other by gradient descent.',
       section: '2 Background',
-      quotes: ['We assume the reader knows how gradient descent updates parameters by following the negative gradient of a loss.'],
+      quotes: ['The softmax function turns a vector of real-valued scores into a probability distribution over positions.'],
       depends_on: [],
       depth: 'skim',
       branch_key: 'foundations',

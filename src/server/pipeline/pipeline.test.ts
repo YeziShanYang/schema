@@ -6,8 +6,9 @@ import { conceptCountRange, conceptsSystem, resourcesUser, sourceNote } from './
 import { parseConcepts } from './run'
 import { preparePaperText } from '../../lib/paper-text'
 import { arxivHtmlToText } from '../../lib/paper-html'
-import { normalizeForMatch } from '../../lib/quotes'
-import { pickQuote } from '../../lib/quote-rules'
+import { indexPaperText, normalizeForMatch } from '../../lib/quotes'
+import { pickQuote, quotePickOrder } from '../../lib/quote-rules'
+import { findNamedQuote, nameTerms, quoteSearch } from '../../lib/quote-fallback'
 
 const ATOM = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
@@ -63,14 +64,21 @@ function fixtureConcepts() {
 
 describe('fixtures', () => {
   it('fixture quotes pass the quote rules against the HTML text as the header describes', () => {
-    const norm = normalizeForMatch(preparePaperText(arxivHtmlToText(FIXTURE_PAPER_HTML), undefined, 'html').text)
+    const index = indexPaperText(preparePaperText(arxivHtmlToText(FIXTURE_PAPER_HTML), undefined, 'html').text)
     const used = new Set<string>()
-    const picks = Object.fromEntries(fixtureConcepts().map((c) => [c.id, pickQuote(c.quotes, norm, used)]))
-    expect(Object.entries(picks).filter(([, p]) => !p.quote).map(([id]) => id)).toEqual(['c4'])
+    const picks = Object.fromEntries(quotePickOrder(fixtureConcepts()).map((c) => [c.id, pickQuote(c.quotes, index, used)]))
+    expect(Object.entries(picks).filter(([, p]) => !p.quote).map(([id]) => id).sort()).toEqual(['c4', 'c5'])
+    expect(picks.c5.rejected.map((r) => r.problem)).toEqual(['duplicate'])
     expect(picks.c6.rejected.map((r) => r.problem)).toEqual(['display-math'])
     expect(picks.c6.quote).toContain('\\(\\sqrt{d_{k}}\\)')
     expect(picks.c7.rejected.map((r) => r.problem)).toEqual(['duplicate'])
     expect(picks.c8.rejected.map((r) => r.problem)).toEqual(['short'])
+    // c5 then finds its quote by name; c4's name is in no sentence.
+    const search = quoteSearch(index)
+    expect(findNamedQuote(nameTerms('Gradient descent', 'Gradient descent'), search, used)?.quote).toBe(
+      'We assume the reader knows how gradient descent updates parameters by following the negative gradient of a loss.',
+    )
+    expect(findNamedQuote(nameTerms('Invented concept with a made-up quote', 'Invented concept with a made-up quote'), search, used)).toBeNull()
   })
 
   it('takes the PDF path for ids ending in 77, 99 or 66, and the PDF text keeps its quotes', () => {
@@ -78,7 +86,7 @@ describe('fixtures', () => {
     for (const id of ['0000.00177', '0000.00199', '0000.00166']) expect(fixtureHtml(`https://arxiv.org/html/${id}`).status).toBe(404)
     const norm = normalizeForMatch(preparePaperText(FIXTURE_PAPER_TEXT).text)
     const used = new Set<string>()
-    expect(fixtureConcepts().filter((c) => !pickQuote(c.quotes, norm, used).quote).map((c) => c.id)).toEqual(['c4'])
+    expect(quotePickOrder(fixtureConcepts()).filter((c) => !pickQuote(c.quotes, norm, used).quote).map((c) => c.id).sort()).toEqual(['c4', 'c5'])
   })
 
   it('reads the older single-quote format', () => {
