@@ -340,7 +340,7 @@ test('the step strip is one row at 1440 and puts Next up on its own row at 390',
   await expect(strip.getByTestId('sequence-scroll')).toHaveAttribute('data-fade-right', 'true')
 })
 
-test('Home fits a 390px screen when a paper has a long title', async ({ users }) => {
+test('Home and a paper page fit a 390px screen when a paper has a long title', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada] = await users(['Schema ada'])
   const page = ada.page
@@ -357,6 +357,11 @@ test('Home fits a 390px screen when a paper has a long title', async ({ users })
     const title = recent.locator('li a > span').filter({ hasText: 'Deliberately Long Title' }).first()
     expect(await title.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
   }
+  expect(await pageWidth()).toBeLessThanOrEqual(390)
+
+  // The step strip scrolls inside itself; its screen-reader labels must not widen the page.
+  await page.goto(`/p/${LONG_SLUG}`)
+  await expect(page.getByTestId('sequence-strip')).toBeVisible({ timeout: 20_000 })
   expect(await pageWidth()).toBeLessThanOrEqual(390)
 })
 

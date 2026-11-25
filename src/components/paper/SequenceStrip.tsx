@@ -132,7 +132,9 @@ export function SequenceStrip({
     >
       <div
         ref={scrollRef}
-        className="strip-scroll -mx-1 min-w-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain px-1 py-1"
+        // `relative` makes this the containing block of the steps' sr-only labels (position: absolute), which
+        // otherwise sit against the page and widen it by the strip's whole scroll width.
+        className="strip-scroll relative -mx-1 min-w-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain px-1 py-1"
         data-fade-left={fade.left || undefined}
         data-fade-right={fade.right || undefined}
         data-testid="sequence-scroll"
