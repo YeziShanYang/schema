@@ -1,5 +1,5 @@
 /**
- * The migration for the topic-reuse rule (scripts/remap-topics.mjs): papers
+ * The migration for the topic-reuse rule (scripts/migrations/remap-topics.mjs): papers
  * analyzed before the rule existed may map a concept to a broader topic
  * ("BLEU score" to "Evaluation metrics"). Each concept whose name shares no
  * content word with its topic's name moves to a topic named for the concept,

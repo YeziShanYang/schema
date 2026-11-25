@@ -6,13 +6,13 @@
  * topic named after itself, created if missing. Then the paper's topicKeys
  * are recomputed. Prints the plan; --apply writes it. Safe to re-run.
  *
- *   node scripts/split-shared-topics.mjs [app] [--apply]
+ *   node scripts/migrations/split-shared-topics.mjs [app] [--apply]
  *
  * Readers' knowledge rows for the shared topic are left as they are, so a
  * re-keyed concept starts unmarked.
  */
-import { conceptsOf, invoke, query } from './agent.mjs'
-import { splitSharedTopics } from '../src/lib/knowledge/topics.ts'
+import { conceptsOf, invoke, query } from '../agent.mjs'
+import { splitSharedTopics } from '../../src/lib/knowledge/topics.ts'
 
 const app = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'schema'
 const apply = process.argv.includes('--apply')

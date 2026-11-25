@@ -6,14 +6,14 @@
  * analyze job (planTopicMoves in src/lib/knowledge/topic-remap.ts). Then the paper's
  * topicKeys are recomputed. Prints the plan; --apply writes it. Safe to re-run.
  *
- *   node scripts/remap-topics.mjs [app] [--apply]
+ *   node scripts/migrations/remap-topics.mjs [app] [--apply]
  *
  * Papers re-analyzed with the current pipeline are skipped: the job already
  * applies the rule. Readers' checkmarks are per concept, so a move does not
  * change what anyone has checked; the topic only decides shared links and hints.
  */
-import { conceptsOf, invoke, query } from './agent.mjs'
-import { planTopicMoves } from '../src/lib/knowledge/topic-remap.ts'
+import { conceptsOf, invoke, query } from '../agent.mjs'
+import { planTopicMoves } from '../../src/lib/knowledge/topic-remap.ts'
 
 const app = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'schema'
 const apply = process.argv.includes('--apply')

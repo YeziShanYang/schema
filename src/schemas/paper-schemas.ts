@@ -6,7 +6,7 @@
  * read them, so a paper's page is shareable. No client role may create,
  * update or delete. Admins (the app owner) may update and delete for
  * moderation, and may create topics so maintenance scripts such as
- * scripts/split-shared-topics.mjs can add a topic.
+ * scripts/migrations/split-shared-topics.mjs can add a topic.
  */
 
 import type { CollectionSchema, RolePermissions } from 'deepspace/schema'

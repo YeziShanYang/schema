@@ -3,9 +3,9 @@
  * analyzed before topicKeys existed. Safe to re-run; --force rewrites papers
  * that already have topic keys.
  *
- *   node scripts/backfill-topic-keys.mjs [app] [--force]
+ *   node scripts/migrations/backfill-topic-keys.mjs [app] [--force]
  */
-import { conceptsOf, invoke, query } from './agent.mjs'
+import { conceptsOf, invoke, query } from '../agent.mjs'
 
 const app = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'schema'
 const force = process.argv.includes('--force')

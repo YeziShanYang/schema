@@ -9,13 +9,13 @@
  * "why" line) never count against a topic. Prints the plan; --apply writes
  * it. Safe to re-run.
  *
- *   node scripts/clear-fallback-links.mjs [app] [--apply]
+ *   node scripts/migrations/clear-fallback-links.mjs [app] [--apply]
  *
  * A cleared topic costs one search and part of one pick call the next time
  * a reader loads links for a branch that uses it.
  */
-import { invoke, query } from './agent.mjs'
-import { failingFallbackLinks } from '../src/lib/knowledge/links.ts'
+import { invoke, query } from '../agent.mjs'
+import { failingFallbackLinks } from '../../src/lib/knowledge/links.ts'
 
 const app = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'schema'
 const apply = process.argv.includes('--apply')

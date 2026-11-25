@@ -37,7 +37,7 @@ The Add button opens one window for papers and workspaces. For a paper, `peekPap
 7. Readers' checkmarks from an earlier analysis of the paper move to the new concepts with the same normalized name (`src/lib/knowledge/knowledge-remap.ts`). A checkmark with no match stays, marked stale.
 8. The paper is marked ready with `pipelineVersion: 2`.
 
-Explainer links are not part of the job. When a reader opens a branch and asks for links, `loadBranchResources` runs one `exa/search` per topic in that branch that has no links yet, then one Haiku call per five topics picks one or two results. A topic the pick finds nothing for keeps an empty list. Raw search results are used only when the pick call fails, and only those whose title shares at least two content words with the topic's name. `scripts/clear-fallback-links.mjs` lists topics holding raw results stored under the older one-word rule and, with `--apply`, resets them so the next branch load searches again. A specialized topic that only one paper uses gets no search: it is marked `skipped`, and its cards lead with Explain with AI. Links are stored on the topic, so every later paper that needs it gets them free. Topics are marked `loading` with a timestamp before any paid call, which keeps two readers from paying twice. A mark older than five minutes is treated as stale.
+Explainer links are not part of the job. When a reader opens a branch and asks for links, `loadBranchResources` runs one `exa/search` per topic in that branch that has no links yet, then one Haiku call per five topics picks one or two results. A topic the pick finds nothing for keeps an empty list. Raw search results are used only when the pick call fails, and only those whose title shares at least two content words with the topic's name. `scripts/migrations/clear-fallback-links.mjs` lists topics holding raw results stored under the older one-word rule and, with `--apply`, resets them so the next branch load searches again. A specialized topic that only one paper uses gets no search: it is marked `skipped`, and its cards lead with Explain with AI. Links are stored on the topic, so every later paper that needs it gets them free. Topics are marked `loading` with a timestamp before any paid call, which keeps two readers from paying twice. A mark older than five minutes is treated as stale.
 
 Record writes are queued in the checkpoint and flushed 20 per tick, so no tick approaches the Worker subrequest limit. A failing step is retried once after three seconds. A second failure marks the paper failed with a message, and the requester can retry it. A verify call that fails twice leaves the overview unchecked instead of failing the paper.
 
@@ -121,9 +121,9 @@ Both read the deployed app through the owner's CLI login (`npx deepspace agent i
 
 ## Maintenance
 
-Papers analyzed before pipeline version 2 used the PDF text and an older topic rule. `reanalyzePaper` brings a paper up to date. `scripts/remap-topics.mjs` applies the topic-reuse rule to older papers without re-analyzing them: it moves each concept whose name shares no content word with its topic's name to a topic named for the concept, and skips version 2 papers. It prints the plan, and writes only with `--apply`:
+Papers analyzed before pipeline version 2 used the PDF text and an older topic rule. `reanalyzePaper` brings a paper up to date. `scripts/migrations/remap-topics.mjs` applies the topic-reuse rule to older papers without re-analyzing them: it moves each concept whose name shares no content word with its topic's name to a topic named for the concept, and skips version 2 papers. It prints the plan, and writes only with `--apply`:
 
 ```bash
-node scripts/remap-topics.mjs schema
-node scripts/remap-topics.mjs schema --apply
+node scripts/migrations/remap-topics.mjs schema
+node scripts/migrations/remap-topics.mjs schema --apply
 ```

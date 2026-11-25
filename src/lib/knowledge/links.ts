@@ -51,7 +51,7 @@ export interface StoredLink {
 /**
  * A topic's stored links that the current rule would not store: links with
  * no "why" line (raw results kept when the pick call failed) whose title
- * fails fallbackTitleFits. Used by scripts/clear-fallback-links.mjs.
+ * fails fallbackTitleFits. Used by scripts/migrations/clear-fallback-links.mjs.
  */
 export function failingFallbackLinks(topicName: string, links: StoredLink[]): StoredLink[] {
   return links.filter((l) => !(l.why ?? '').trim() && !fallbackTitleFits(topicName, l.title))
