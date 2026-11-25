@@ -3,7 +3,9 @@
  * topic description and explainer links, and the AI explanation. A concept
  * not checked here can carry a muted note: checked in another paper, or in
  * the reader's profile. The topic line is left out when the topic has the
- * concept's own name. Works with the real rows or the signed-out demo adapter.
+ * concept's own name, and the plain role ("Where it fits") when it mostly
+ * restates the why-needed line (lib/plain-role). Works with the real rows or
+ * the signed-out demo adapter.
  */
 
 import { useState } from 'react'
@@ -18,6 +20,7 @@ import { arxivSlug } from '../../lib/arxiv'
 import { hintText, type ConceptHint } from '../../lib/hints'
 import { linkTitle } from '../../lib/links'
 import { normalizeConceptName } from '../../lib/topics'
+import { roleRestatesWhy } from '../../lib/plain-role'
 import { ConceptName, MathText } from '../MathText'
 import { KnownToggle } from '../StatusControl'
 import { Chip } from '../blueprint'
@@ -137,7 +140,7 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
           </p>
         )}
 
-        {c.plainRole && (
+        {c.plainRole && !roleRestatesWhy(c.plainRole, c.whyNeeded) && (
           <p className="mt-1.5 text-[13px] leading-[1.45]" data-testid="concept-role">
             <span className="label mr-1.5">Where it fits</span>
             <MathText text={c.plainRole} />
