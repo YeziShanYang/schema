@@ -144,7 +144,7 @@ export interface ConceptData {
   explanationPendingAt?: number
   /** Under 20 plain words on why this concept matters for this paper. */
   plainRole?: string
-  /** `quote` with its formulas as LaTeX, shown instead of it; set only when its words match `quote` (see lib/analysis/quote-display). */
+  /** `quote` with its formulas as LaTeX, shown instead of it. The analysis job sets it when the text came from arXiv HTML, whose math is already LaTeX, and the quote has math. */
   quoteDisplay?: string
 }
 
