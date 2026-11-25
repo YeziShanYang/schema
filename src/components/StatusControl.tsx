@@ -30,7 +30,7 @@ export function KnownToggle({ status, name, disabled, onChange, className }: Pro
       data-testid="status-known"
       className={cn(
         'press relative grid size-5 shrink-0 cursor-pointer place-items-center rounded-[3px] border-[1.5px] disabled:cursor-not-allowed disabled:opacity-50',
-        known ? 'border-known bg-known text-known-foreground' : 'border-[color-mix(in_oklab,var(--color-foreground)_28%,transparent)] bg-card text-transparent',
+        known ? 'border-known bg-known text-known-foreground' : 'border-[color-mix(in_oklab,var(--color-foreground)_28%,transparent)] bg-card text-transparent dark:border-input',
         className,
       )}
     >
