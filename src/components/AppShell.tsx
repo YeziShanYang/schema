@@ -1,8 +1,9 @@
 /**
  * App chrome for every page under (app)/.
  *
- * Signed in: a 232px sidebar (workspaces, recent papers, knowledge count,
- * daily allowance, account) beside the page; on narrow screens the sidebar
+ * Signed in: a 232px sidebar (Add, the Home, Library and Knowledge pages,
+ * workspaces, recent papers, then the concepts-learned count, daily allowance
+ * and account) beside the page; on narrow screens the sidebar
  * becomes a sheet behind a menu button. The sheet takes focus while open,
  * Esc closes it, and focus returns to the menu button. Signed out: a slim
  * top bar with the brand and sign-in. A page banner with its own Sign in
@@ -17,7 +18,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode,
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { signOut, useAuthProfileReady } from 'deepspace'
 import { cn, plural } from '@/lib/utils'
-import { Button } from './ui'
+import { Button, buttonVariants } from './ui'
 import { AddButton } from './AddDialog'
 import { SignInOverlay } from './SignInOverlay'
 import { CloseIcon, MarkIcon, MenuIcon } from './icons'
@@ -27,6 +28,13 @@ import { useAllowance, useRefreshAllowanceOnSettle } from '../hooks/useAllowance
 import { arxivSlug } from '../lib/arxiv'
 import { APP_DISPLAY_NAME } from '../constants'
 import { FOCUSABLE, isTopOverlay, pushOverlay, trapTab } from '../lib/overlays'
+
+/** The app's own pages, listed under Add in the sidebar. */
+const PAGES = [
+  { to: '/home', label: 'Home' },
+  { to: '/library', label: 'Library' },
+  { to: '/knowledge', label: 'Knowledge' },
+]
 
 const TopSignIn = createContext<(hidden: boolean) => void>(() => {})
 
@@ -76,6 +84,18 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <div className="px-0 pb-3"><Brand /></div>
       <AddButton className="w-full justify-start" />
 
+      <nav aria-label="Pages" className="flex shrink-0 flex-col pt-2">
+        <ul className="flex flex-col gap-0.5" data-testid="sidebar-pages">
+          {PAGES.map((pg) => (
+            <li key={pg.to}>
+              <NavLink to={pg.to} end className={itemClass} onClick={onNavigate} data-testid={`nav-${pg.label.toLowerCase()}`}>
+                {pg.label}
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
       {/* A long workspace list scrolls inside its own section, so Recent papers and the footer stay in view. */}
       <nav aria-label="Workspaces" className="flex min-h-[7.5rem] flex-col">
         <div className="label px-2 pb-1.5 pt-3">Workspaces</div>
@@ -118,18 +138,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             ))}
           </ul>
         )}
-        <NavLink to="/library" onClick={onNavigate} className="mt-1 px-2 text-[13px] text-primary hover:underline">
-          Library
-        </NavLink>
       </nav>
 
       <div className="mt-auto flex flex-col gap-2 border-t border-border px-2 pt-2.5 text-[13px] text-muted-foreground">
-        <NavLink to="/knowledge" onClick={onNavigate} className="flex items-center justify-between rounded hover:text-foreground" data-testid="sidebar-knowledge">
-          <span>Knowledge</span>
-          <span className="tabular-nums">
-            <b className="font-semibold text-foreground">{knownCount}</b> checked
-          </span>
-        </NavLink>
+        <Link to="/knowledge" onClick={onNavigate} className="flex items-center justify-between rounded transition-[color] duration-150 ease-out hover:text-foreground" data-testid="sidebar-knowledge">
+          <span>Concepts learned</span>
+          <b className="font-semibold text-foreground tabular-nums">{knownCount}</b>
+        </Link>
         <div className="flex items-center justify-between" data-testid="sidebar-allowance" data-remaining={a?.remaining ?? ""} title="New papers you can start in a rolling 24 hours. Papers someone already analyzed are free.">
           <span>New papers today</span>
           <span className="tabular-nums">{a ? <><b className="font-semibold text-foreground">{a.remaining}</b> of {a.used + a.remaining} left</> : '…'}</span>
@@ -151,6 +166,17 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             {menuOpen && (
               <div className="surface absolute bottom-full left-0 z-20 mb-1 w-full p-2 shadow-[var(--shadow-ring-hi)]">
                 <div data-testid="nav-user-email" className="truncate px-1 pb-2 text-xs text-muted-foreground">{user.email}</div>
+                <Link
+                  to="/knowledge"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onNavigate?.()
+                  }}
+                  className={cn(buttonVariants({ size: 'sm', variant: 'ghost' }), 'w-full justify-start')}
+                  data-testid="account-knowledge"
+                >
+                  Knowledge
+                </Link>
                 <Button size="sm" variant="ghost" className="w-full justify-start" onClick={() => signOut()}>Sign out</Button>
               </div>
             )}

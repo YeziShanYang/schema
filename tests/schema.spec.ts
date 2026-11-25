@@ -934,6 +934,55 @@ test('the first-run link scrolls to the starter topics once they have loaded', a
   expect(order).toEqual(['checked-concepts', 'profile', 'starter-topics'])
 })
 
+test('the sidebar lists Home, Library and Knowledge under Add, and its footer counts concepts learned', async ({ users }) => {
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/home')
+  const pages = page.getByRole('navigation', { name: 'Pages' })
+  await expect(pages.getByRole('link')).toHaveText(['Home', 'Library', 'Knowledge'])
+  await expect(pages.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page')
+  // The group sits right under Add, above the workspaces.
+  const add = (await page.getByTestId('add-open').boundingBox())!
+  const group = (await pages.boundingBox())!
+  const workspaces = (await page.getByRole('navigation', { name: 'Workspaces' }).boundingBox())!
+  expect(group.y).toBeGreaterThanOrEqual(add.y + add.height)
+  expect(group.y + group.height).toBeLessThanOrEqual(workspaces.y + 1)
+  // Library left Recent papers.
+  await expect(page.getByRole('navigation', { name: 'Recent papers' }).getByRole('link', { name: 'Library' })).toHaveCount(0)
+
+  await pages.getByRole('link', { name: 'Knowledge' }).click()
+  await expect(page).toHaveURL(/\/knowledge$/)
+  await expect(pages.getByRole('link', { name: 'Knowledge' })).toHaveAttribute('aria-current', 'page')
+  await expect(pages.getByRole('link', { name: 'Home' })).not.toHaveAttribute('aria-current', 'page')
+  // The footer stat counts the checked concepts the page lists (stale ones aside), and links there.
+  await expect(page.getByTestId('knowledge-page')).toHaveAttribute('data-ready', 'true', { timeout: 15_000 })
+  const stat = page.getByTestId('sidebar-knowledge')
+  await expect(stat).toHaveText(/^Concepts learned\s*\d+$/)
+  await expect(stat.locator('b')).toHaveText(String(await page.locator('[data-testid="checked-concept"]:not([data-stale])').count()))
+  await page.goto('/library')
+  await stat.click()
+  await expect(page).toHaveURL(/\/knowledge$/)
+
+  // The account menu links to Knowledge too.
+  await page.goto('/home')
+  await page.getByRole('button', { name: 'Account menu' }).click()
+  await page.getByTestId('account-knowledge').click()
+  await expect(page).toHaveURL(/\/knowledge$/)
+
+  // The phone menu shows the same group.
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/library')
+  await page.getByRole('button', { name: 'Open menu' }).click()
+  const menu = page.getByRole('dialog', { name: 'Menu' })
+  const sheetPages = menu.getByRole('navigation', { name: 'Pages' })
+  await expect(sheetPages.getByRole('link')).toHaveText(['Home', 'Library', 'Knowledge'])
+  await expect(sheetPages.getByRole('link', { name: 'Library' })).toHaveAttribute('aria-current', 'page')
+  await sheetPages.getByRole('link', { name: 'Knowledge' }).click()
+  await expect(page).toHaveURL(/\/knowledge$/)
+  await expect(menu).toHaveCount(0)
+})
+
 test('finishing a paper can check its remaining concepts; Read again reopens it', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada] = await users(['Schema ada'])
