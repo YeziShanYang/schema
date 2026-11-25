@@ -92,7 +92,7 @@ npx deepspace test run all   # unit, smoke, api and e2e suites
 npx deepspace deploy
 ```
 
-The Playwright suite needs two test accounts (`npx deepspace test accounts create`). In local test runs (`ALLOW_DEBUG_ROUTES=true`), papers with ids starting `0000.` and workspaces named `[fixture] ...` get canned arXiv HTML, CloudConvert, Claude, Exa and arXiv responses from `src/server/pipeline/fixtures.ts`. Fixture ids ending in 66, 77 or 99 have no HTML and take the PDF path, and ids ending in 55 answer each call after four seconds, which keeps every stage on screen long enough to watch the progress view. The file's header lists which server rule each fixture concept exercises. Everything else, including the actions, the job, the record rooms and permissions, runs for real.
+The Playwright suite needs two test accounts (`npx deepspace test accounts create`). In local test runs (`ALLOW_DEBUG_ROUTES=true`), papers with ids starting `0000.` and workspaces named `[fixture] ...` get canned arXiv HTML, CloudConvert, Claude, Exa and arXiv responses from `src/server/pipeline/fixtures.ts`. Fixture ids ending in 66, 77 or 99 have no HTML and take the PDF path, and ids ending in 55 answer each call after four seconds, which keeps every stage on screen long enough to watch the progress view. Ids ending in 44 get a title too long for one line on a phone, for the 390px layout checks. The file's header lists which server rule each fixture concept exercises. Everything else, including the actions, the job, the record rooms and permissions, runs for real.
 
 `tests/live` holds a check against the deployed app with real integration calls. It is not part of `test run` and costs credits:
 
