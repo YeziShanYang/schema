@@ -140,7 +140,7 @@ A content review by another fresh agent read the stored output of ten papers off
 
 The walkthrough prompt was tested with direct Haiku calls on 1706.03762, 2611.29886 and 2611.30998, for 1.44 credits. Each walkthrough ran through the paper's conclusion with headings copied from the paper, with no formula outside LaTeX and no KaTeX error. The stored walkthroughs of the last two papers had stopped at 14 entries before their conclusion, and 1706.03762's had 9 formulas in plain text.
 
-A rule that sets the concept count by walking the paper's sections was tested on three papers for 4.35 credits and not adopted. It raised the counts from 16 to 18, 18 to 21 and 18 to 28.
+A rule that sets the concept count by walking the paper's sections was tested on three papers for 4.35 credits and not adopted. It raised the counts from 16 to 18, 18 to 21 and 18 to 28, and filled most of the coverage gaps the second evaluation had named. It did not lower the count for the shortest paper, which was asked for 8 to 16 and returned 18, two of them generic foundations.
 
 The four rules in the analysis job reach a stored paper only when it is re-analyzed. The card and step-strip rules apply to every paper when it is shown. The second evaluation's scores were measured before these rules and before the grounding fixes, and the rubric has not been run again since.
 
