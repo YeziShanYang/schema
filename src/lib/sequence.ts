@@ -159,17 +159,35 @@ export function recommendedSequence<C extends SeqConcept>(
 /** The longest step label the strip shows before cutting it. */
 export const STEP_LABEL_MAX = 24
 
+/** Words a cut label may not end on before its ellipsis ("Linear algebra and…" reads as "Linear algebra…"). */
+const TRAILING_FUNCTION_WORDS = new Set([
+  'a', 'an', 'the', 'and', 'or', 'nor', 'but', 'of', 'to', 'in', 'on', 'at', 'by', 'for', 'from', 'with', 'into', 'onto', 'over',
+  'under', 'via', 'as', 'its', 'their', 'vs', 'versus',
+])
+
+const TRAILING_PUNCTUATION = /[\s,;:.\-–—&]+$/
+
 /**
  * A step-strip label: the branch name, or, when it is longer than `max`
  * characters, its first `max - 1` characters with an ellipsis. The cut moves
  * back to the last word break when one falls in the final 8 characters, so a
- * word is cut only when it would leave a much shorter label.
+ * word is cut only when it would leave a much shorter label. A cut at a word
+ * break drops trailing function words ("and", "of", "the") and punctuation
+ * before the ellipsis, unless that would leave nothing.
  */
 export function stepLabel(name: string, max = STEP_LABEL_MAX): string {
   const clean = name.trim().replace(/\s+/g, ' ')
   if (clean.length <= max) return clean
   const head = clean.slice(0, max - 1)
   const space = head.lastIndexOf(' ')
-  const cut = space >= max - 8 ? head.slice(0, space) : head
-  return `${cut.replace(/[\s,;:.\-–—]+$/, '')}…`
+  const atBreak = space >= max - 8
+  let cut = (atBreak ? head.slice(0, space) : head).replace(TRAILING_PUNCTUATION, '')
+  if (atBreak) {
+    for (;;) {
+      const words = cut.split(' ')
+      if (words.length < 2 || !TRAILING_FUNCTION_WORDS.has(words[words.length - 1].toLowerCase())) break
+      cut = words.slice(0, -1).join(' ').replace(TRAILING_PUNCTUATION, '')
+    }
+  }
+  return `${cut}…`
 }

@@ -128,9 +128,18 @@ describe('stepLabel', () => {
     expect(stepLabel('Training and evaluation.')).toBe('Training and evaluation.')
   })
   it('cuts a longer name at a word break near 24 characters', () => {
-    expect(stepLabel('Linear algebra and neural network basics')).toBe('Linear algebra and…')
     expect(stepLabel('Sequence modeling background')).toBe('Sequence modeling…')
-    expect(stepLabel('Transformer block and stack')).toBe('Transformer block and…')
+    expect(stepLabel('Curvature estimation and statistics')).toBe('Curvature estimation…')
+  })
+  it('drops function words and a comma left at the end of the cut', () => {
+    expect(stepLabel('Linear algebra and neural network basics')).toBe('Linear algebra…')
+    expect(stepLabel('Transformer block and stack')).toBe('Transformer block…')
+    expect(stepLabel('Probability, and the distance foundations')).toBe('Probability…')
+    // A function word inside the label stays.
+    expect(stepLabel('Leakage and fractional covering')).toBe('Leakage and fractional…')
+  })
+  it('leaves a cut inside a word as it is', () => {
+    expect(stepLabel('Foundations of probability, linear algebra and neural networks')).toBe('Foundations of probabil…')
   })
   it('cuts inside a word when the last break is far back, and never ends on punctuation', () => {
     expect(stepLabel('Backpropagation-through-structure methods')).toBe('Backpropagation-through…')
