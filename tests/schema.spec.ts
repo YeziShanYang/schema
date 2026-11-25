@@ -965,6 +965,22 @@ test('bad input shows a clear error', async ({ users }) => {
   await expect(ada.page.getByTestId('analyze-error')).toContainText('does not look like an arXiv link')
 })
 
+test('the mobile menu takes focus, closes on Esc and gives focus back to the menu button', async ({ users }) => {
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await calm(page)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/home')
+  const menuButton = page.getByRole('button', { name: 'Open menu' })
+  await menuButton.click()
+  const menu = page.getByRole('dialog', { name: 'Menu' })
+  await expect(menu).toBeVisible()
+  await expect.poll(() => menu.evaluate((el) => el.contains(document.activeElement))).toBe(true)
+  await page.keyboard.press('Escape')
+  await expect(menu).toHaveCount(0)
+  await expect(menuButton).toBeFocused()
+})
+
 test('a long workspace list scrolls inside the sidebar and leaves Recent papers and the footer in view', async ({ users }) => {
   const [ada] = await users(['Schema ada'])
   const page = ada.page

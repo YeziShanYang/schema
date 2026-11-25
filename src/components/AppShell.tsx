@@ -3,14 +3,15 @@
  *
  * Signed in: a 232px sidebar (workspaces, recent papers, knowledge count,
  * daily allowance, account) beside the page; on narrow screens the sidebar
- * becomes a sheet behind a menu button. Signed out: a slim top bar with the
- * brand and sign-in.
+ * becomes a sheet behind a menu button. The sheet takes focus while open,
+ * Esc closes it, and focus returns to the menu button. Signed out: a slim
+ * top bar with the brand and sign-in.
  *
  * Keep the data-testid hooks (app-navigation, nav-sign-in-button,
  * nav-user-name, nav-user-email); the shipped specs use them.
  */
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { signOut, useAuthProfileReady } from 'deepspace'
 import { cn } from '@/lib/utils'
@@ -23,6 +24,7 @@ import { useWorkspaces } from '../hooks/useWorkspaces'
 import { useAllowance, useRefreshAllowanceOnSettle } from '../hooks/useAllowance'
 import { arxivSlug } from '../lib/arxiv'
 import { APP_DISPLAY_NAME } from '../constants'
+import { FOCUSABLE, isTopOverlay, pushOverlay, trapTab } from '../lib/overlays'
 
 function Brand({ to = '/home' }: { to?: string }) {
   return (
@@ -155,6 +157,32 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => setSheetOpen(false), [location.pathname])
 
+  // The open sheet is an overlay layer: focus moves into the panel (not the backdrop), Esc closes it, and focus
+  // returns to the menu button.
+  const menuButton = useRef<HTMLButtonElement>(null)
+  const sheetRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!sheetOpen) return
+    const layer = {}
+    const pop = pushOverlay(layer)
+    sheetRef.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus()
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!isTopOverlay(layer)) return
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setSheetOpen(false)
+      } else if (e.key === 'Tab' && sheetRef.current) {
+        trapTab(e, sheetRef.current)
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      pop()
+      menuButton.current?.focus()
+    }
+  }, [sheetOpen])
+
   if (isLoaded && !isSignedIn) {
     return (
       <div className="flex min-h-screen flex-col bg-background">
@@ -184,7 +212,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <header className="sticky top-0 z-30 flex h-12 items-center justify-between border-b border-border bg-card px-3 md:hidden">
         <Brand />
-        <button type="button" aria-label="Open menu" aria-expanded={sheetOpen} onClick={() => setSheetOpen(true)} className="press grid size-[34px] cursor-pointer place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground">
+        <button ref={menuButton} type="button" aria-label="Open menu" aria-expanded={sheetOpen} onClick={() => setSheetOpen(true)} className="press grid size-[34px] cursor-pointer place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground">
           <MenuIcon size={18} />
         </button>
       </header>
@@ -192,7 +220,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {sheetOpen && (
         <div className="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true" aria-label="Menu">
           <button type="button" aria-label="Close menu" className="backdrop absolute inset-0 cursor-default bg-[rgba(15,23,42,0.25)]" onClick={() => setSheetOpen(false)} />
-          <div className="sheet absolute inset-y-0 left-0 w-[min(300px,86vw)] overflow-y-auto overscroll-contain border-r border-border bg-surface-2 shadow-[var(--shadow-ring-hi)]">
+          <div ref={sheetRef} className="sheet absolute inset-y-0 left-0 w-[min(300px,86vw)] overflow-y-auto overscroll-contain border-r border-border bg-surface-2 shadow-[var(--shadow-ring-hi)]">
             <button type="button" aria-label="Close menu" onClick={() => setSheetOpen(false)} className="press absolute right-2 top-3 grid size-[30px] cursor-pointer place-items-center rounded text-muted-foreground hover:bg-accent">
               <CloseIcon size={16} />
             </button>
