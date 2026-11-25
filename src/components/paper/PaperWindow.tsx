@@ -577,7 +577,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
             setConfirmRemove(false)
             navigate(`/w/${ws.recordId}`)
           }}
-          title="Remove this paper from the workspace?"
+          title="Remove this paper?"
           description={`It leaves ${ws.data.name}. The paper stays in your library, and your checkmarks stay.`}
           confirmText="Remove paper"
         />

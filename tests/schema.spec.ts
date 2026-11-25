@@ -844,7 +844,7 @@ test('Remove from workspace in the paper window asks first, then goes back to th
   await page.goto(paperUrl)
   await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'ready', { timeout: 20_000 })
 
-  const confirm = page.getByRole('dialog', { name: 'Remove this paper from the workspace?' })
+  const confirm = page.getByRole('dialog', { name: 'Remove this paper?' })
   await page.getByTestId('remove-from-workspace').click()
   await expect(confirm).toBeVisible()
   await confirm.getByRole('button', { name: 'Cancel' }).click()
