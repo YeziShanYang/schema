@@ -17,7 +17,7 @@ import { generateOverview, storedPaperText, type OverviewConcept } from '../serv
 import { recommendForWorkspace } from '../server/recommend'
 import { generateExplanation } from '../server/explain-concept'
 import { loadBranch } from '../server/branch-resources'
-import { releaseUsage, reserveUsage, setUsageRef, USAGE_CAPS, usageState, usedRecently } from '../server/usage'
+import { paperSlot, releaseUsage, reserveUsage, setUsageRef, USAGE_CAPS, usageState, usedRecently } from '../server/usage'
 import { enqueueAnalyze, isOwner, startReanalysis, STUCK_AFTER_MS, toMsTime } from '../server/reanalyze'
 
 const SEED_BATCH = 20
@@ -433,8 +433,16 @@ const myAllowance: ActionHandler<Env> = async ({ userId, tools }) => {
   return { success: true, data: { analyze, recommend, explain, branch, overview } }
 }
 
+/** Whether the caller's latest request of a failed paper still uses a daily slot or was given back. No paid calls. */
+const myPaperSlot: ActionHandler<Env> = async ({ userId, params, tools }) => {
+  const paperId = typeof params.paperId === 'string' ? params.paperId : ''
+  if (!paperId) return fail('Missing paperId.')
+  return { success: true, data: { slot: await paperSlot(tools, userId, paperId) } }
+}
+
 export const actions: Record<string, ActionHandler<Env>> = {
   myAllowance,
+  myPaperSlot,
   peekPaper,
   analyzePaper,
   retryPaper,

@@ -32,6 +32,13 @@ test.describe('Smoke tests', () => {
     await expect(page.getByTestId('static-landing')).toContainText('A paper nobody has analyzed takes 1 to 2 minutes.')
   })
 
+  test('landing says which failed analyses count toward the daily papers', async ({ page }) => {
+    await page.goto('/')
+    const landing = page.getByTestId('static-landing')
+    await expect(landing).toContainText('A failed analysis counts only if it failed after a paid step.')
+    await expect(landing).not.toContainText('A failed analysis does not count')
+  })
+
   test('landing carries one title, one description, one canonical', async ({ page }) => {
     // <Seo> (src/pages/index.tsx, values from src/seo.ts) hoists these into
     // <head>. Exactly one of each: index.html ships no static description or

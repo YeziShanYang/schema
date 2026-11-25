@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ActionTools } from 'deepspace/worker'
-import { eventsInWindow, reserveUsage, usageState, USAGE_CAPS } from './usage'
+import { eventsInWindow, paperSlot, refundAnalyze, actionRecords, reserveUsage, usageState, USAGE_CAPS } from './usage'
 import { CAP_WINDOW_MS } from '../lib/cap'
 
 /**
@@ -87,5 +87,24 @@ describe('eventsInWindow', () => {
     const { tools } = memoryTools(seed)
     expect(await eventsInWindow(tools, 'u', 'analyze', now)).toHaveLength(4)
     expect((await usageState(tools, 'u', 'analyze')).remaining).toBe(1)
+  })
+})
+
+describe('paperSlot', () => {
+  it("reads the caller's latest request of a paper: counted, refunded, or none", async () => {
+    const { tools, rows } = memoryTools()
+    expect(await paperSlot(tools, 'u', 'p1')).toBe('none')
+    await tools.create('usage_events', { userId: 'u', kind: 'analyze', ref: 'p1', state: 'counted' })
+    // Another reader's request of the same paper is not the caller's.
+    await tools.create('usage_events', { userId: 'v', kind: 'analyze', ref: 'p1', state: 'counted' })
+    expect(await paperSlot(tools, 'u', 'p1')).toBe('counted')
+    await refundAnalyze(actionRecords(tools), 'p1')
+    expect(await paperSlot(tools, 'u', 'p1')).toBe('refunded')
+    // A later retry that is still counted wins over the refunded request.
+    await tools.create('usage_events', { userId: 'u', kind: 'analyze', ref: 'p1', state: 'counted' })
+    expect(await paperSlot(tools, 'u', 'p1')).toBe('counted')
+    // Requests older than the cap window no longer use a slot either way.
+    for (const r of rows.values()) r.createdAt -= CAP_WINDOW_MS + 1000
+    expect(await paperSlot(tools, 'u', 'p1')).toBe('none')
   })
 })

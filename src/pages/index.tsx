@@ -228,7 +228,7 @@ export default function Landing() {
             <ul className="mt-3 grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
               <li>arXiv papers only, and the analysis works best on papers written in English.</li>
               <li>A paper nobody has analyzed takes {ANALYSIS_TIME}. One already analyzed opens right away.</li>
-              <li>Each account can start {DAILY_PAPER_CAP} new papers a day. A failed analysis does not count.</li>
+              <li>Each account can start {DAILY_PAPER_CAP} new papers a day. A failed analysis counts only if it failed after a paid step.</li>
               <li>Concepts and quotes come from a language model reading the paper's text, taken from the arXiv HTML version when there is one and from the PDF otherwise. Quotes are checked against the paper and hidden when they do not match.</li>
             </ul>
           </section>

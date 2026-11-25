@@ -105,6 +105,21 @@ export async function usedRecently(tools: ActionTools, userId: string, kind: Usa
   )
 }
 
+export type PaperSlot = 'counted' | 'refunded' | 'none'
+
+/**
+ * Whether this user's latest request of a paper inside the cap window still
+ * uses a daily slot ('counted'), was given back by refundAnalyze
+ * ('refunded'), or there is none.
+ */
+export async function paperSlot(tools: ActionTools, userId: string, paperId: string, now = Date.now()): Promise<PaperSlot> {
+  const r = await tools.query('usage_events', { where: { userId, kind: 'analyze', ref: paperId }, limit: 50 })
+  if (!r.success) return 'none'
+  const rows = (r.data.records as unknown as Envelope<UsageEventData>[]).filter((e) => now - toMs(e.createdAt) < CAP_WINDOW_MS).sort(byInsertion)
+  const latest = rows[rows.length - 1]
+  return !latest ? 'none' : counted(latest) ? 'counted' : 'refunded'
+}
+
 /** Users who requested this paper (counted or refunded), for the retry permission check. */
 export async function paperRequesters(tools: ActionTools, paperId: string): Promise<Set<string>> {
   const r = await tools.query('usage_events', { where: { kind: 'analyze', ref: paperId }, limit: 50 })

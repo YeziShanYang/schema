@@ -1383,13 +1383,17 @@ test('a failure before anything is billed gives the slot back; after conversion 
   const before = Math.max(left[0], left[1])
   test.skip(before < 2, 'Cara and Ada are near the daily cap in this local state')
 
-  // The conversion itself fails: nothing was billed, so the slot comes back.
+  // The conversion itself fails: nothing was billed, so the slot comes back, and the failed card says so.
   await analyzeUntilFailed(requester.page, await newFixtureId(requester.page, '77'), 'Fixture conversion failure')
+  await expect(requester.page.getByTestId('paper-failed-slot')).toHaveAttribute('data-slot', 'refunded')
+  await expect(requester.page.getByTestId('paper-failed-slot')).toContainText('your new paper for today was given back')
   expect(await allowanceLeft(requester.page)).toBe(before)
 
-  // A scanned PDF fails after the paid conversion: the slot stays used.
+  // A scanned PDF fails after the paid conversion: the slot stays used, and the card says that too.
   const scanned = await newFixtureId(requester.page, '99')
   await analyzeUntilFailed(requester.page, scanned, 'almost no extractable text')
+  await expect(requester.page.getByTestId('paper-failed-slot')).toHaveAttribute('data-slot', 'counted')
+  await expect(requester.page.getByTestId('paper-failed-slot')).toContainText('used one of your new papers for today')
   expect(await allowanceLeft(requester.page)).toBe(before - 1)
 
   // Another reader can retry it; the retry uses the retrier's slot.

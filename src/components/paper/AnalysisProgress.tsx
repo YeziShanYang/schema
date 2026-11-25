@@ -30,7 +30,7 @@ import { cn } from '@/lib/utils'
 import type { PaperData, PaperStatus, TimedStage } from '../../types'
 import type { BranchProgress } from '../../lib/branches'
 import { lastStartedStage, runStartedAt, stageDurations } from '../../lib/timings'
-import { useRetryPaper } from '../../hooks/useRetryPaper'
+import { useRetryPaper, usePaperSlot } from '../../hooks/useRetryPaper'
 import { ANALYSIS_TIME } from '../../constants'
 import { FloatingGraph } from '../graph/FloatingGraph'
 import { CheckIcon } from '../icons'
@@ -207,6 +207,7 @@ export function AnalysisProgress({
   const stuck = running && minute - (Date.parse(paper.updatedAt) || minute) > STUCK_AFTER_MS
 
   const { retry, retrying, error: retryError } = useRetryPaper(paper.recordId)
+  const slot = usePaperSlot(paper.recordId, d.status, signedIn)
 
   // While in the page flow, remember the view's box (after every render and
   // resize); when it starts leaving it keeps that box, absolutely positioned,
@@ -329,6 +330,13 @@ export function AnalysisProgress({
             <p className="text-[13px] text-pretty">Analysis failed: {d.error || 'unknown error'}</p>
             <TotalTime paper={d} running={false} prefix="Stopped after" />
           </div>
+          {slot === 'counted' || slot === 'refunded' ? (
+            <p className="mt-1 text-xs text-muted-foreground" data-testid="paper-failed-slot" data-slot={slot}>
+              {slot === 'counted'
+                ? 'It failed after a paid step, so your request used one of your new papers for today.'
+                : 'It failed before any paid step, so your new paper for today was given back.'}
+            </p>
+          ) : null}
           {retryControls}
           {retryError && <p className="mt-1 text-xs text-destructive">{retryError}</p>}
         </div>

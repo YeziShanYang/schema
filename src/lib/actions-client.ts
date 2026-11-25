@@ -79,8 +79,12 @@ async function metered<T>(p: Promise<ActionResponse<T>>): Promise<ActionResponse
   return r
 }
 
+/** How the reader's latest request of a paper stands: still using a daily slot, given back, or none. */
+export type PaperSlot = 'counted' | 'refunded' | 'none'
+
 export const actions = {
   myAllowance: () => callAction<Allowances>('myAllowance'),
+  myPaperSlot: (paperId: string) => callAction<{ slot: PaperSlot }>('myPaperSlot', { paperId }),
   analyzePaper: (input: string, workspaceId?: string) =>
     metered(callAction<AnalyzeResult>('analyzePaper', workspaceId ? { input, workspaceId } : { input })),
   retryPaper: (paperId: string) => metered(callAction<{ paperId: string }>('retryPaper', { paperId })),
