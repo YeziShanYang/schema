@@ -1032,6 +1032,35 @@ test('page headers leave Add and the page name to the sidebar from md up', async
   await expect(page.getByTestId('add-dialog')).toHaveCount(0)
 })
 
+test('the theme toggle sits beside the account row and keeps its choice across a reload', async ({ users }) => {
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await page.emulateMedia({ colorScheme: 'light' })
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/home')
+  await page.evaluate(() => localStorage.removeItem('schema:theme'))
+  await page.reload()
+  const nav = page.getByTestId('app-navigation')
+  const toggle = nav.getByTestId('theme-toggle')
+  const account = nav.getByRole('button', { name: 'Account menu' })
+  await expect(account).toBeVisible()
+  // On the account row, to its right.
+  const a = (await account.boundingBox())!
+  const t = (await toggle.boundingBox())!
+  expect(Math.abs(a.y + a.height / 2 - (t.y + t.height / 2))).toBeLessThan(4)
+  expect(t.x).toBeGreaterThanOrEqual(a.x + a.width)
+  const isDark = () => page.evaluate(() => document.documentElement.classList.contains('dark'))
+  expect(await isDark()).toBe(false)
+  await toggle.click()
+  expect(await isDark()).toBe(true)
+  await page.reload()
+  await expect(nav.getByTestId('theme-toggle')).toHaveAccessibleName('Switch to light theme')
+  expect(await isDark()).toBe(true)
+  await nav.getByTestId('theme-toggle').click()
+  expect(await isDark()).toBe(false)
+  await page.evaluate(() => localStorage.removeItem('schema:theme'))
+})
+
 test('Uncheck all on the knowledge page asks first and unchecks only that paper', async ({ users }) => {
   test.setTimeout(200_000)
   const [ada] = await users(['Schema ada'])

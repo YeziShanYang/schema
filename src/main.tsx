@@ -4,9 +4,12 @@ import { createRoot, hydrateRoot } from 'react-dom/client'
 import { routes } from '@generouted/react-router/lazy'
 import { createBrowserRouter, RouterProvider } from 'react-router'
 import { installStaleChunkRecovery } from './stale-chunk-recovery'
+import { followSystemMode } from './themes'
 import './styles.css'
 
 async function main() {
+  // index.html applied the theme before first paint; this keeps it on the system setting until the reader picks.
+  followSystemMode()
   const root = document.getElementById('root')!
   const router = createBrowserRouter(routes)
   installStaleChunkRecovery(router)

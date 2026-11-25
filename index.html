@@ -1,17 +1,31 @@
 <!DOCTYPE html>
-<!-- Schema has one light theme, Blueprint; tokens live in src/styles.css. -->
+<!-- Schema has one theme, Blueprint, light and dark; tokens live in src/styles.css and src/themes.css. -->
 <html lang="en" data-theme="blueprint">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Dark mode before first paint, on every page including the prerendered landing: the reader's
+         stored choice, or else the system setting. No network, no globals. Keep the key and values
+         in step with src/themes.ts. -->
+    <script>
+      (function () {
+        var mode = null
+        try { mode = localStorage.getItem('schema:theme') } catch (e) {}
+        if (mode !== 'light' && mode !== 'dark') {
+          mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        }
+        if (mode === 'dark') document.documentElement.classList.add('dark')
+      })()
+    </script>
     <link rel="icon" href="/favicon.ico" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
     <title>Schema</title>
-    <!-- First-paint background; mirrors --color-background in src/styles.css. -->
+    <!-- First-paint background; mirrors --color-background in src/styles.css and src/themes.css. -->
     <style>
       html { background-color: #F4F6F9; color-scheme: light; }
+      html.dark { background-color: #0E131C; color-scheme: dark; }
     </style>
   </head>
   <body>

@@ -4,10 +4,11 @@
  * Signed in: a 232px sidebar (Add, the Home, Library and Knowledge pages
  * with their icons and, on Knowledge, the concepts-learned count, then
  * workspaces, recent papers, the concepts-learned stat, daily allowance and
- * account) beside the page; on narrow screens the sidebar
- * becomes a sheet behind a menu button. The sheet takes focus while open,
- * Esc closes it, and focus returns to the menu button. Signed out: a slim
- * top bar with the brand and sign-in. A page banner with its own Sign in
+ * the account row with the theme toggle) beside the page; on narrow screens
+ * the sidebar becomes a sheet behind a menu button. The sheet takes focus
+ * while open, Esc closes it, and focus returns to the menu button. Signed
+ * out: a slim top bar with the brand, the theme toggle and sign-in. A page
+ * banner with its own Sign in
  * (the demo banner) hides the top bar's while it is on screen
  * (useHideTopSignIn), so only one shows.
  *
@@ -22,6 +23,7 @@ import { cn, plural } from '@/lib/utils'
 import { Button, buttonVariants } from './ui'
 import { AddButton } from './AddDialog'
 import { SignInOverlay } from './SignInOverlay'
+import { ThemeToggle } from './ThemeToggle'
 import { CloseIcon, HomeIcon, KnownIcon, MarkIcon, MenuIcon, PapersIcon } from './icons'
 import { useConceptKnowledge, useRoadmaps } from '../hooks/useReader'
 import { useWorkspaces } from '../hooks/useWorkspaces'
@@ -159,39 +161,45 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           <span>New papers today</span>
           <span className="tabular-nums">{a ? <><b className="font-semibold text-foreground">{a.remaining}</b> of {a.used + a.remaining} left</> : '…'}</span>
         </div>
-        {user && (
-          <div className="relative">
-            <button
-              type="button"
-              aria-label="Account menu"
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((v) => !v)}
-              className="press mt-1 flex w-full cursor-pointer items-center gap-2 rounded py-1 text-left hover:text-foreground"
-            >
-              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-accent-soft font-mono text-[11px] text-primary">
-                {(user.name?.[0] ?? user.email?.[0] ?? '?').toUpperCase()}
-              </span>
-              <span data-testid="nav-user-name" className="truncate text-foreground">{user.name || user.email}</span>
-            </button>
-            {menuOpen && (
-              <div className="surface absolute bottom-full left-0 z-20 mb-1 w-full p-2 shadow-[var(--shadow-ring-hi)]">
-                <div data-testid="nav-user-email" className="truncate px-1 pb-2 text-xs text-muted-foreground">{user.email}</div>
-                <Link
-                  to="/knowledge"
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onNavigate?.()
-                  }}
-                  className={cn(buttonVariants({ size: 'sm', variant: 'ghost' }), 'w-full justify-start')}
-                  data-testid="account-knowledge"
-                >
-                  Knowledge
-                </Link>
-                <Button size="sm" variant="ghost" className="w-full justify-start" onClick={() => signOut()}>Sign out</Button>
-              </div>
-            )}
-          </div>
-        )}
+        {/* The account row, with the theme toggle beside it. */}
+        <div className="mt-1 flex items-center gap-1">
+          {user ? (
+            <div className="relative min-w-0 flex-1">
+              <button
+                type="button"
+                aria-label="Account menu"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((v) => !v)}
+                className="press flex w-full cursor-pointer items-center gap-2 rounded py-1 text-left hover:text-foreground"
+              >
+                <span className="grid size-6 shrink-0 place-items-center rounded-full bg-accent-soft font-mono text-[11px] text-primary">
+                  {(user.name?.[0] ?? user.email?.[0] ?? '?').toUpperCase()}
+                </span>
+                <span data-testid="nav-user-name" className="truncate text-foreground">{user.name || user.email}</span>
+              </button>
+              {menuOpen && (
+                <div className="surface absolute bottom-full left-0 z-20 mb-1 w-full p-2 shadow-[var(--shadow-ring-hi)]">
+                  <div data-testid="nav-user-email" className="truncate px-1 pb-2 text-xs text-muted-foreground">{user.email}</div>
+                  <Link
+                    to="/knowledge"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      onNavigate?.()
+                    }}
+                    className={cn(buttonVariants({ size: 'sm', variant: 'ghost' }), 'w-full justify-start')}
+                    data-testid="account-knowledge"
+                  >
+                    Knowledge
+                  </Link>
+                  <Button size="sm" variant="ghost" className="w-full justify-start" onClick={() => signOut()}>Sign out</Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex-1" />
+          )}
+          <ThemeToggle />
+        </div>
       </div>
 
     </div>
@@ -240,16 +248,19 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-h-screen flex-col bg-background">
         <header data-testid="app-navigation" className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4">
           <Brand to="/" />
-          {!hideSignIn && (
-            <button
-              type="button"
-              data-testid="nav-sign-in-button"
-              onClick={() => setShowAuth(true)}
-              className="press h-[30px] cursor-pointer rounded bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-[color-mix(in_oklab,var(--color-primary)_88%,black)]"
-            >
-              Sign in
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            {!hideSignIn && (
+              <button
+                type="button"
+                data-testid="nav-sign-in-button"
+                onClick={() => setShowAuth(true)}
+                className="press h-[30px] cursor-pointer rounded bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-[color-mix(in_oklab,var(--color-primary)_88%,black)]"
+              >
+                Sign in
+              </button>
+            )}
+          </div>
         </header>
         <main className="flex-1">
           <TopSignIn.Provider value={setHideSignIn}>{children}</TopSignIn.Provider>
@@ -275,7 +286,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {sheetOpen && (
         <div className="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true" aria-label="Menu">
-          <button type="button" aria-label="Close menu" className="backdrop absolute inset-0 cursor-default bg-[rgba(15,23,42,0.25)]" onClick={() => setSheetOpen(false)} />
+          <button type="button" aria-label="Close menu" className="backdrop absolute inset-0 cursor-default bg-scrim/25" onClick={() => setSheetOpen(false)} />
           <div ref={sheetRef} className="sheet absolute inset-y-0 left-0 w-[min(300px,86vw)] overflow-y-auto overscroll-contain border-r border-border bg-surface-2 shadow-[var(--shadow-ring-hi)]">
             <button type="button" aria-label="Close menu" onClick={() => setSheetOpen(false)} className="press absolute right-2 top-3 grid size-[30px] cursor-pointer place-items-center rounded text-muted-foreground hover:bg-accent">
               <CloseIcon size={16} />

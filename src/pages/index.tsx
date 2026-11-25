@@ -22,6 +22,7 @@ import { DAILY_PAPER_CAP } from '../lib/cap'
 import { arxivSlug } from '../lib/arxiv'
 import { seo } from '../seo'
 import { HeroSheet } from '../components/HeroSheet'
+import { ThemeToggle } from '../components/ThemeToggle'
 
 const STEPS = [
   ['Pick a paper', 'Paste an arXiv link, or create a workspace for a subject and get three recommended papers.'],
@@ -69,9 +70,12 @@ export default function Landing() {
             <span className="flex items-center gap-2 text-[17px] font-semibold">
               <MarkIcon size={18} className="text-primary" /> {APP_DISPLAY_NAME}
             </span>
-            <Link to="/home?signin=1" className="press rounded px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent" data-testid="landing-sign-in">
-              Sign in
-            </Link>
+            <div className="flex items-center gap-1">
+              <ThemeToggle />
+              <Link to="/home?signin=1" className="press rounded px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent" data-testid="landing-sign-in">
+                Sign in
+              </Link>
+            </div>
           </div>
         </header>
 

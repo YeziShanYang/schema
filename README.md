@@ -4,7 +4,9 @@ Schema turns an arXiv paper into a learning roadmap. A reader creates a workspac
 
 Live at https://schema.app.space. Built on the [DeepSpace SDK](https://docs.deep.space) (Cloudflare Workers, Durable Objects).
 
-The frontend uses the Blueprint theme (IBM Plex, dot-grid canvas). Data access is in the hooks in `src/hooks` and the modules in `src/lib`, and views can be redesigned without touching the backend.
+The frontend uses the Blueprint theme (IBM Plex, dot-grid canvas) in light and dark. Dark mode follows the system setting until the reader picks one with the sun/moon button, which sits in the sidebar footer, or in the top bar when signed out. The choice is stored in the browser, and an inline script in `index.html` applies it before first paint, on the prerendered landing too. The dark values in `src/themes.css` keep each light token's hue at a different lightness. The paper sheets on the landing and in the progress view stay paper-colored in dark mode, dimmed, with dark ink.
+
+Data access is in the hooks in `src/hooks` and the modules in `src/lib`, and views can be redesigned without touching the backend.
 
 ## Interface
 
