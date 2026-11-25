@@ -86,6 +86,8 @@ export interface AnalyzeState {
 
 const WRITES_PER_TICK = 20
 const MAX_CONCEPTS = 24
+/** Most walkthrough entries kept. The prompt asks for one per top-level section, which real papers keep well under this. */
+export const MAX_SECTIONS = 20
 /** Non-whitespace characters below which a PDF is treated as scanned or empty; real papers have tens of thousands. */
 const MIN_TEXT_CHARS = 600
 
@@ -539,6 +541,12 @@ async function stepOverview(state: AnalyzeState, s: StepCtx) {
   })
 }
 
+/** The walkthrough entries kept from the explain call (at most MAX_SECTIONS), and how many it returned. */
+function walkthroughSections(json: Record<string, unknown>): { sections: unknown[]; returned: number } {
+  const list = Array.isArray(json.sections) ? json.sections : []
+  return { sections: list.slice(0, MAX_SECTIONS), returned: list.length }
+}
+
 async function stepExplain(state: AnalyzeState, s: StepCtx) {
   const { ctx, client, paper } = s
   const concepts = (await ctx.records.query('concepts', { where: { paperId: paper.recordId }, limit: 200 })) as Envelope<{
@@ -564,7 +572,8 @@ async function stepExplain(state: AnalyzeState, s: StepCtx) {
   const old = (await ctx.records.query('sections', { where: { paperId: paper.recordId }, limit: 100 })) as Envelope<unknown>[]
   for (const o of old) state.writes.push({ op: 'delete', collection: 'sections', recordId: o.recordId })
 
-  const sections = Array.isArray(json.sections) ? json.sections.slice(0, 14) : []
+  const { sections, returned } = walkthroughSections(json)
+  if (returned > sections.length) console.info(`[analyze] ${paper.data.arxivId}: walkthrough cut from ${returned} to ${sections.length} sections`)
   sections.forEach((sec, i) => {
     if (!sec || typeof sec !== 'object') return
     const o = sec as Record<string, unknown>

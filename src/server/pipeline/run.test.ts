@@ -9,7 +9,7 @@ import type { Env } from '../../../worker'
 import type { PaperData } from '../../types'
 import { TIMED_STAGES, lastStartedStage, openStage, queuedTimings, stageDurations } from '../../lib/timings'
 import { FIXTURE_META, fixtureIntegration } from './fixtures'
-import { runAnalyzeTick, type AnalyzeState } from './run'
+import { MAX_SECTIONS, runAnalyzeTick, type AnalyzeState } from './run'
 
 type Row = { recordId: string; data: Record<string, unknown> }
 
@@ -238,5 +238,30 @@ describe('analyze job grounding and placement', () => {
     expect(concepts.c5.branchKey).toBe('geometry')
     expect((await paperData(id)).branches.map((b) => b.key)).toEqual(['attention', 'geometry', 'other'])
     expect(vi.mocked(console.info).mock.calls.flat()).toContain('[analyze] 0000.00004: c1 moved from branch geometry to attention (foundation-to-earlier-user)')
+  })
+})
+
+describe('analyze job walkthrough', () => {
+  it(`keeps up to ${MAX_SECTIONS} walkthrough sections and logs a longer answer it cuts`, async () => {
+    await editedFixture('explain', (json) => {
+      json.sections = Array.from({ length: MAX_SECTIONS + 3 }, (_, i) => ({ heading: `${i + 1} Section`, summary: 'What it does.', concept_ids: ['c1'] }))
+    })
+    const id = await createPaper('0000.00005')
+    await runJob(id, '0000.00005')
+
+    const sections = await h.records.query('sections', { where: { paperId: id } })
+    expect(sections).toHaveLength(MAX_SECTIONS)
+    expect(sections.map((s) => s.data.heading)).toContain(`${MAX_SECTIONS} Section`)
+    expect(vi.mocked(console.info).mock.calls.flat()).toContain(`[analyze] 0000.00005: walkthrough cut from ${MAX_SECTIONS + 3} to ${MAX_SECTIONS} sections`)
+  })
+
+  it('keeps every section of a walkthrough within the cap, without the cut message', async () => {
+    const real = await vi.importActual<typeof import('./fixtures')>('./fixtures')
+    vi.mocked(fixtureIntegration).mockImplementation(real.fixtureIntegration)
+    const id = await createPaper('0000.00006')
+    await runJob(id, '0000.00006')
+
+    expect(await h.records.query('sections', { where: { paperId: id } })).toHaveLength(3)
+    expect(vi.mocked(console.info).mock.calls.flat().some((m) => /walkthrough cut/.test(String(m)))).toBe(false)
   })
 })
