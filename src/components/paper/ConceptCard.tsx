@@ -75,6 +75,16 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
   const note = status !== 'known' && hint ? hint : null
   const depthMeaning = DEPTH_MEANING[c.depth] as string | undefined
   const showTopic = !!topic?.description && normalizeConceptName(topic.name) !== normalizeConceptName(c.name)
+  const showRole = !!c.plainRole && !roleRestatesWhy(c.plainRole, c.whyNeeded)
+  // The link sits at the end of the role line, or of the why-needed line when the role is hidden.
+  const seeInOverview = onSeeInOverview && (
+    <>
+      {' '}
+      <button type="button" onClick={onSeeInOverview} className="cursor-pointer whitespace-nowrap font-medium text-primary hover:underline" data-testid="see-in-overview">
+        See in overview
+      </button>
+    </>
+  )
 
   async function setStatus(next: KnowledgeStatus | null) {
     if (next === null) await knowledge.clear(concept.recordId)
@@ -140,18 +150,11 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
           </p>
         )}
 
-        {c.plainRole && !roleRestatesWhy(c.plainRole, c.whyNeeded) && (
+        {showRole && (
           <p className="mt-1.5 text-[13px] leading-[1.45]" data-testid="concept-role">
             <span className="label mr-1.5">Where it fits</span>
-            <MathText text={c.plainRole} />
-            {onSeeInOverview && (
-              <>
-                {' '}
-                <button type="button" onClick={onSeeInOverview} className="cursor-pointer whitespace-nowrap font-medium text-primary hover:underline" data-testid="see-in-overview">
-                  See in overview
-                </button>
-              </>
-            )}
+            <MathText text={c.plainRole!} />
+            {seeInOverview}
           </p>
         )}
 
@@ -166,7 +169,10 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
           </p>
         )}
 
-        <p className="mb-2 mt-1.5 text-[13px] leading-[1.45] text-muted-foreground"><MathText text={c.whyNeeded} /></p>
+        <p className="mb-2 mt-1.5 text-[13px] leading-[1.45] text-muted-foreground">
+          <MathText text={c.whyNeeded} />
+          {!showRole && seeInOverview}
+        </p>
         {showTopic && <p className="mb-2 text-xs text-faint" data-testid="concept-topic">Topic: {topic!.name}. {topic!.description}</p>}
 
         {/* quoteVerified is stored as 0 or 1, and a bare 0 would render as text. */}
