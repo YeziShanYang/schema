@@ -212,11 +212,7 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
             <Button size="sm" variant={skipped ? 'outline' : 'ghost'} className={cn('text-primary', skipped && 'order-first')} loading={explaining} onClick={explain} data-testid="explain-button">
               <SparkIcon size={13} /> Explain with AI
             </Button>
-          ) : (
-            <button type="button" onClick={(e) => onSignIn?.(e.currentTarget)} className={cn('press inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-[12.5px] font-medium text-primary hover:bg-accent-soft', skipped && 'order-first')} data-testid="explain-signin">
-              <SparkIcon size={13} /> Sign in to generate an AI explanation
-            </button>
-          )}
+          ) : null /* Signed out, the branch panel header asks to sign in once for the whole branch. */}
         </div>
         {explainError && <p role="alert" className="mt-1 text-xs text-destructive">{explainError}</p>}
 

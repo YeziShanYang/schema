@@ -355,6 +355,8 @@ export function OverviewWindow({
       testId="overview-window"
       closeLabel="Close overview"
       maxWidth={1120}
+      // It can open by itself on a first visit, so focus goes to its heading rather than a ringed close button.
+      initialFocus="title"
     >
       <section aria-labelledby="overview-plain-label">
         <h3 id="overview-plain-label" className="label">In plain words</h3>

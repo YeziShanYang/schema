@@ -38,7 +38,7 @@ import { OverviewWindow, type OverviewConcept } from './OverviewWindow'
 import { SequenceStrip } from './SequenceStrip'
 import { ConceptName, MathText } from '../MathText'
 import { hintText } from '../../lib/hints'
-import { BookIcon, CheckIcon } from '../icons'
+import { BookIcon, CheckIcon, SparkIcon } from '../icons'
 import { SignInOverlay } from '../SignInOverlay'
 import { useHideTopSignIn } from '../AppShell'
 
@@ -574,6 +574,12 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
                 )}
                 {isSignedIn && allowance && branchNeedsExplain && (
                   <span className="text-xs text-faint tabular-nums" data-testid="explain-allowance">{allowance.explain.remaining} AI explanations left today</span>
+                )}
+                {/* Signed out, the cards leave this out, so the panel says it once. */}
+                {!isSignedIn && branchNeedsExplain && (
+                  <button type="button" onClick={(e) => openSignIn(e.currentTarget)} className="inline-flex cursor-pointer items-center gap-1 font-medium text-primary hover:underline" data-testid="explain-signin">
+                    <SparkIcon size={13} /> Sign in to generate an AI explanation
+                  </button>
                 )}
               </div>
             </div>

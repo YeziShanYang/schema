@@ -2,8 +2,9 @@
  * Wide centered panel over the dimmed graph (not a sidebar): about 960px
  * wide, full width under 760px, its body scrolling inside with overscroll
  * contained. Esc, the close button and a click on the backdrop dismiss it.
- * Focus moves into the panel on open, stays inside while it is open, and
- * returns to the element that opened it on close. The exit runs 150ms before
+ * Focus moves into the panel on open (its close button, or its title for a
+ * panel that opens on its own), stays inside while it is open, and returns
+ * to the element that opened it on close. The exit runs 150ms before
  * the panel unmounts. While another overlay sits on top (the sign-in
  * window), that one takes Esc and Tab (see lib/overlays).
  */
@@ -44,6 +45,7 @@ export function BranchPanel({
   testId = 'branch-panel',
   closeLabel = 'Close branch',
   maxWidth = 960,
+  initialFocus = 'close',
 }: {
   open: boolean
   onClose: () => void
@@ -58,11 +60,17 @@ export function BranchPanel({
   testId?: string
   closeLabel?: string
   maxWidth?: number
+  /**
+   * Where focus lands on open: the close button, or the title (out of the Tab
+   * order and drawn without a ring), for a panel that can open on its own.
+   */
+  initialFocus?: 'close' | 'title'
 }) {
   const [mounted, setMounted] = useState(open)
   const [closing, setClosing] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
+  const titleRef = useRef<HTMLHeadingElement>(null)
   const [layer] = useState(() => ({}))
 
   useEffect(() => {
@@ -85,8 +93,10 @@ export function BranchPanel({
   // Focus moves into the panel when it opens, and again when its content
   // switches (a chip can open another branch and remove the focused element).
   useEffect(() => {
-    if (open && mounted && !panelRef.current?.contains(document.activeElement)) closeRef.current?.focus()
-  }, [open, mounted, title])
+    if (!open || !mounted || panelRef.current?.contains(document.activeElement)) return
+    if (initialFocus === 'title') titleRef.current?.focus()
+    else closeRef.current?.focus()
+  }, [open, mounted, title, initialFocus])
 
   const onKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -152,7 +162,14 @@ export function BranchPanel({
             <div className="min-w-0 flex-1">
               {back}
               {eyebrow && <div className="label">{eyebrow}</div>}
-              <h2 id={`${testId}-title`} className="mt-1 text-[21px] font-semibold leading-tight">{title}</h2>
+              <h2
+                ref={titleRef}
+                id={`${testId}-title`}
+                tabIndex={initialFocus === 'title' ? -1 : undefined}
+                className="mt-1 text-[21px] font-semibold leading-tight outline-none"
+              >
+                {title}
+              </h2>
               {description && <p className="mt-1 text-[13px] text-muted-foreground">{description}</p>}
             </div>
             <button

@@ -1681,9 +1681,33 @@ test('signed-out demo: status changes stay local, links and AI need sign-in', as
   await page.reload()
   await openBranch(page, 'foundations')
   await expect(card(page, 'c1')).toHaveAttribute('data-status', 'unknown', { timeout: 15_000 })
-  // c3 has no cached explanation, so generating one asks for sign-in.
+  // c3 has no cached explanation, so generating one asks for sign-in: once, in the panel header, not on each card.
   await openBranch(page, 'geometry')
-  await expect(card(page, 'c3').getByTestId('explain-signin')).toBeVisible()
+  const panel = page.getByTestId('branch-panel')
+  await expect(panel.getByTestId('explain-signin')).toHaveCount(1)
+  await expect(panel.getByTestId('explain-signin')).toHaveText('Sign in to generate an AI explanation')
+  await expect(panel.getByTestId('branch-concepts').getByTestId('explain-signin')).toHaveCount(0)
+})
+
+test('signed out, the first visit opens the overview with focus on its heading; Tab, Shift+Tab and Esc still work', async ({ page }) => {
+  // Static graph, but without calm(): the overview has to open on its own.
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto(`/p/${FIXTURE_SLUG}`)
+  const win = page.getByTestId('overview-window')
+  await expect(win).toBeVisible({ timeout: 20_000 })
+  const heading = win.locator('#overview-window-title')
+  await expect(heading).toBeFocused()
+  // Programmatic focus draws no ring on the heading, and the close button has none either.
+  expect(await heading.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('none')
+  await expect(win.getByTestId('panel-close')).not.toBeFocused()
+  // The heading is not in the Tab order: Tab goes to the close button, and Shift+Tab from there wraps to the last control.
+  await page.keyboard.press('Tab')
+  await expect(win.getByTestId('panel-close')).toBeFocused()
+  await page.keyboard.press('Shift+Tab')
+  await expect(win.getByTestId('overview-start')).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(win).toHaveCount(0)
 })
 
 test('signed out, the sign-in window over a branch takes focus and Esc, then gives focus back', async ({ page }) => {
@@ -1691,7 +1715,7 @@ test('signed out, the sign-in window over a branch takes focus and Esc, then giv
   await page.goto(`/p/${FIXTURE_SLUG}`)
   await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'ready', { timeout: 20_000 })
   await openBranch(page, 'geometry')
-  const trigger = card(page, 'c3').getByTestId('explain-signin')
+  const trigger = page.getByTestId('branch-panel').getByTestId('explain-signin')
   await trigger.click()
   const signIn = page.getByTestId('sign-in-window')
   await expect(signIn.getByTestId('auth-overlay')).toBeVisible()
