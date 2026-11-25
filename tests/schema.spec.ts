@@ -694,6 +694,61 @@ test('finishing a paper can check its remaining concepts; Read again reopens it'
   await expect(page.locator('[data-testid="library-row"][data-status="reading"]').filter({ hasText: `arXiv ${FIXTURE_ID}` })).toBeVisible()
 })
 
+/** Calls a server action as the signed-in reader of `page`. */
+async function action(page: Page, name: string, params: Record<string, unknown>) {
+  return page.evaluate(
+    async ({ name, params }) => {
+      const t = await fetch('/api/auth/token', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } }).then((r) => r.json())
+      const res = await fetch(`/api/actions/${name}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t.token}` },
+        body: JSON.stringify(params),
+      })
+      return res.json()
+    },
+    { name, params },
+  )
+}
+
+test('the library finishes a paper with the same dialog, and both its buttons update the workspace entry', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await openReadyFixturePaper(page)
+  if (await page.getByTestId('read-again').isVisible()) await page.getByTestId('read-again').click()
+  await expect(page.getByTestId('finish-toggle')).toBeVisible()
+  // A cached paper is free to add, so a fresh workspace holds it.
+  const added = await action(page, 'analyzePaper', { input: FIXTURE_ID, newWorkspace: { name: `[fixture] Library ${Date.now()}` } })
+  expect(added.success).toBe(true)
+  const entry = page.locator(`[data-testid="workspace-paper"][data-arxiv="${FIXTURE_ID}"]`)
+  await openBranch(page, 'geometry')
+  await resetStatus(page, 'c3')
+  await page.keyboard.press('Escape')
+
+  await page.goto('/library')
+  const row = page.getByTestId('library-row').filter({ hasText: `arXiv ${FIXTURE_ID}` })
+  await row.getByTestId('library-finish').click()
+  await expect(page.getByTestId('finish-panel')).toBeVisible()
+  await expect(page.getByRole('checkbox', { name: 'Also check the remaining concepts in this paper' })).toBeChecked()
+  await page.getByTestId('finish-confirm').click()
+  await expect(row).toHaveAttribute('data-status', 'finished', { timeout: 15_000 })
+
+  // Finished in its workspace too, with the remaining concepts checked.
+  await page.goto(`/w/${added.data.workspaceId}`)
+  await expect(entry).toHaveAttribute('data-status', 'finished', { timeout: 15_000 })
+  await page.goto(`/p/${FIXTURE_SLUG}`)
+  await openBranch(page, 'geometry')
+  await expect(card(page, 'c3')).toHaveAttribute('data-status', 'known', { timeout: 15_000 })
+  await page.keyboard.press('Escape')
+
+  // Read again in the library reopens the workspace entry as well.
+  await page.goto('/library')
+  await row.getByTestId('library-read-again').click()
+  await expect(row).toHaveAttribute('data-status', 'reading', { timeout: 15_000 })
+  await page.goto(`/w/${added.data.workspaceId}`)
+  await expect(entry).toHaveAttribute('data-status', 'active', { timeout: 15_000 })
+})
+
 /**
  * A fixture id nobody has analyzed yet (checked with peekPaper), ending in
  * `suffix`; '' gives a normal paper (not ending in 77 or 99).

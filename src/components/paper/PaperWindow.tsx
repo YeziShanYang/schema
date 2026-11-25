@@ -13,10 +13,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from 'deepspace'
-import { Button, Checkbox, Label, Modal } from '@/components/ui'
+import { Button } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { arxivAbsUrl, parseArxivId } from '../../lib/arxiv'
-import { usePaper, useFinishPaper } from '../../hooks/usePaper'
+import { usePaper, useReopenPaper } from '../../hooks/usePaper'
 import { useReaderKnowledge } from '../../hooks/useDemoKnowledge'
 import { useRoadmaps } from '../../hooks/useReader'
 import { useOverview } from '../../hooks/useOverview'
@@ -30,6 +30,7 @@ import { FloatingGraph } from '../graph/FloatingGraph'
 import { BranchNode, CenterCard } from '../graph/nodes'
 import { BranchPanel } from '../graph/BranchPanel'
 import { ConceptCard } from './ConceptCard'
+import { FinishDialog } from './FinishDialog'
 import { OverviewWindow, type OverviewConcept } from './OverviewWindow'
 import { SequenceStrip } from './SequenceStrip'
 import { ConceptName, MathText } from '../MathText'
@@ -58,7 +59,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const p = usePaper(arxivId, knowledge)
   const roadmaps = useRoadmaps()
   const workspaces = useWorkspaces()
-  const finishPaper = useFinishPaper()
+  const reopenPaper = useReopenPaper()
   const { allowance } = useAllowance()
   const ws = workspaceId ? workspaces.byId.get(workspaceId) : undefined
   // The progress view stands in for the graph until the paper is ready, then cross-fades out over it.
@@ -70,8 +71,6 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [focusConcept, setFocusConcept] = useState('')
   const [finishOpen, setFinishOpen] = useState(false)
-  const [markRest, setMarkRest] = useState(true)
-  const [finishing, setFinishing] = useState(false)
   const [showAuth, setShowAuth] = useState(false)
   // The control that opened the sign-in window, so focus returns there when it closes.
   const authTrigger = useRef<HTMLElement | null>(null)
@@ -266,17 +265,10 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const branchLoading = branch ? loadingBranches.has(branch.key) || branchLinks === 'loading' : false
   const linksState: 'loading' | 'signin' | null = branchLoading ? 'loading' : !isSignedIn && branchLinks === 'needs-load' ? 'signin' : null
 
-  const reopen = async () => {
-    await roadmaps.setStatus(paper.recordId, 'reading')
-    for (const w of workspaces.rows) {
-      if (workspaces.papersOf(w.recordId).some((x) => x.paperId === paper.recordId)) await workspaces.setPaperStatus(w.recordId, paper.recordId, 'active')
-    }
-  }
-
   const finishControls = finished ? (
     <span className="flex items-center gap-2">
       <Chip tone="known"><span data-testid="paper-finished">Finished</span></Chip>
-      {isSignedIn && <Button size="sm" variant="ghost" onClick={reopen} data-testid="read-again">Read again</Button>}
+      {isSignedIn && <Button size="sm" variant="ghost" onClick={() => reopenPaper(paper.recordId)} data-testid="read-again">Read again</Button>}
     </span>
   ) : isSignedIn && d.status === 'ready' ? (
     <Button size="sm" variant="outline" onClick={() => setFinishOpen(true)} data-testid="finish-toggle">Mark finished</Button>
@@ -572,31 +564,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
         />
       )}
 
-      <Modal open={finishOpen} onClose={() => setFinishOpen(false)} size="sm">
-        <Modal.Header>
-          <Modal.Title>Mark this paper finished?</Modal.Title>
-          <Modal.Description>It moves to Finished in your library and in its workspaces. You can read it again later.</Modal.Description>
-        </Modal.Header>
-        <div className="flex items-center gap-2" data-testid="finish-panel">
-          <Checkbox id="mark-rest" checked={markRest} onCheckedChange={setMarkRest} />
-          <Label htmlFor="mark-rest">Also check the remaining concepts in this paper</Label>
-        </div>
-        <Modal.Footer>
-          <Button variant="ghost" onClick={() => setFinishOpen(false)}>Cancel</Button>
-          <Button
-            loading={finishing}
-            data-testid="finish-confirm"
-            onClick={async () => {
-              setFinishing(true)
-              await finishPaper({ paper, concepts: p.concepts, markRemainingKnown: markRest })
-              setFinishing(false)
-              setFinishOpen(false)
-            }}
-          >
-            Mark finished
-          </Button>
-        </Modal.Footer>
-      </Modal>
+      <FinishDialog paper={paper} open={finishOpen} onClose={() => setFinishOpen(false)} />
 
       {showAuth && <SignInOverlay onClose={() => setShowAuth(false)} returnFocus={authTrigger.current} />}
     </div>

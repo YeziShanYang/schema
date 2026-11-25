@@ -124,3 +124,19 @@ export function useFinishPaper() {
     [knowledge, roadmaps, workspaces],
   )
 }
+
+/** Moves a finished paper back to reading: its roadmap and the entry in every workspace that holds it. */
+export function useReopenPaper() {
+  const roadmaps = useRoadmaps()
+  const workspaces = useWorkspaces()
+
+  return useCallback(
+    async (paperId: string) => {
+      await roadmaps.setStatus(paperId, 'reading')
+      for (const ws of workspaces.rows) {
+        if (workspaces.papersOf(ws.recordId).some((p) => p.paperId === paperId)) await workspaces.setPaperStatus(ws.recordId, paperId, 'active')
+      }
+    },
+    [roadmaps, workspaces],
+  )
+}

@@ -1,14 +1,19 @@
 /**
  * Library: every paper the reader has opened, with progress and last opened,
  * filtered by in progress or finished; finished papers can be read again.
+ * Finishing and reading again go through the same hooks and dialog as the
+ * paper window, so the paper's workspace entries follow.
  */
 
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from 'deepspace'
+import type { RecordData } from 'deepspace'
 import { Button } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { Chip, Meter, PageHeader } from '../../../components/blueprint'
+import { FinishDialog } from '../../../components/paper/FinishDialog'
+import { useReopenPaper } from '../../../hooks/usePaper'
 import { checkedPerPaper, useConceptKnowledge, useRoadmaps } from '../../../hooks/useReader'
 import { arxivSlug } from '../../../lib/arxiv'
 import type { PaperData } from '../../../types'
@@ -22,6 +27,8 @@ export default function LibraryPage() {
   const papers = useQuery<PaperData>('papers', { limit: 2000 })
   const paperById = useMemo(() => new Map(papers.records.map((p) => [p.recordId, p])), [papers.records])
   const [filter, setFilter] = useState<Filter>('all')
+  const reopenPaper = useReopenPaper()
+  const [finishing, setFinishing] = useState<RecordData<PaperData> | null>(null)
   const rows = roadmaps.rows.filter((r) => filter === 'all' || r.data.status === filter)
 
   return (
@@ -66,9 +73,9 @@ export default function LibraryPage() {
                   </div>
                   <div>
                     {r.data.status === 'finished' ? (
-                      <Button size="sm" variant="outline" onClick={() => roadmaps.setStatus(r.data.paperId, 'reading')} data-testid="library-read-again">Read again</Button>
+                      <Button size="sm" variant="outline" onClick={() => reopenPaper(r.data.paperId)} data-testid="library-read-again">Read again</Button>
                     ) : (
-                      <Button size="sm" variant="ghost" onClick={() => roadmaps.setStatus(r.data.paperId, 'finished')}>Mark finished</Button>
+                      <Button size="sm" variant="ghost" disabled={!paper} onClick={() => setFinishing(paper ?? null)} data-testid="library-finish">Mark finished</Button>
                     )}
                   </div>
                 </li>
@@ -77,6 +84,7 @@ export default function LibraryPage() {
           </ul>
         )}
       </div>
+      <FinishDialog paper={finishing} open={!!finishing} onClose={() => setFinishing(null)} />
     </div>
   )
 }
