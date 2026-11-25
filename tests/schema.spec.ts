@@ -1601,6 +1601,58 @@ test('the mobile menu takes focus, closes on Esc and gives focus back to the men
   await expect(menuButton).toBeFocused()
 })
 
+test('the account menu closes on Esc and on a click outside, and in the phone menu Esc closes it before the sheet', async ({ users }) => {
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await calm(page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/home')
+  const button = page.getByRole('button', { name: 'Account menu' })
+  const menu = page.getByTestId('account-menu')
+  await button.click()
+  await expect(menu).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(menu).toHaveCount(0)
+  await expect(button).toBeFocused()
+  await expect(button).toHaveAttribute('aria-expanded', 'false')
+
+  await button.click()
+  await expect(menu).toBeVisible()
+  await page.getByRole('heading', { level: 1 }).click()
+  await expect(menu).toHaveCount(0)
+  // A click on the button itself still toggles it.
+  await button.click()
+  await expect(menu).toBeVisible()
+  await button.click()
+  await expect(menu).toHaveCount(0)
+
+  // In the phone menu sheet, Esc closes the account menu first, then the sheet.
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('button', { name: 'Open menu' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Menu' })
+  await expect(sheet).toBeVisible()
+  await sheet.getByRole('button', { name: 'Account menu' }).click()
+  await expect(sheet.getByTestId('account-menu')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(sheet.getByTestId('account-menu')).toHaveCount(0)
+  await expect(sheet).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(sheet).toHaveCount(0)
+})
+
+test('recent papers in the sidebar carry the full title and arXiv id as a tooltip', async ({ users }) => {
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await calm(page)
+  // Opening the paper puts it at the top of Recent papers.
+  await page.goto(`/p/${FIXTURE_SLUG}`)
+  await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'ready', { timeout: 20_000 })
+  // Fixture papers share a title, so the tooltip's arXiv id is what tells their rows apart.
+  const row = page.getByTestId('sidebar-recent').locator(`a[href="/p/${FIXTURE_SLUG}"]`)
+  await expect(row).toHaveText(FIXTURE_TITLE)
+  await expect(row).toHaveAttribute('title', `${FIXTURE_TITLE} (arXiv ${FIXTURE_ID})`)
+})
+
 test('a long workspace list scrolls inside the sidebar and leaves Recent papers and the footer in view', async ({ users }) => {
   const [ada] = await users(['Schema ada'])
   const page = ada.page

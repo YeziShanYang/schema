@@ -6,7 +6,8 @@
  * papers, the concepts-learned stat, daily allowance and the account row
  * with the theme toggle) beside the page; on narrow screens the sidebar
  * becomes a sheet behind a menu button. The sheet takes focus while open,
- * Esc closes it, and focus returns to the menu button. Signed out: a slim
+ * Esc closes it, and focus returns to the menu button. The account menu
+ * closes on Esc and on a press outside it. Signed out: a slim
  * top bar with the brand, the theme toggle and sign-in. A page banner with
  * its own Sign in (the demo banner) hides the top bar's while it is on
  * screen (useHideTopSignIn), so only one shows.
@@ -71,6 +72,32 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const knowledge = useConceptKnowledge()
   const { allowance } = useAllowance()
   const [menuOpen, setMenuOpen] = useState(false)
+  const accountRef = useRef<HTMLDivElement>(null)
+  const accountButton = useRef<HTMLButtonElement>(null)
+
+  // The open account menu is an overlay layer: Esc closes it (and only it, inside the phone menu sheet) and gives
+  // focus back to its button; a press anywhere outside it closes it too.
+  useEffect(() => {
+    if (!menuOpen) return
+    const layer = {}
+    const pop = pushOverlay(layer)
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || !isTopOverlay(layer)) return
+      e.preventDefault()
+      setMenuOpen(false)
+      accountButton.current?.focus()
+    }
+    const onPointerDown = (e: PointerEvent) => {
+      if (!accountRef.current?.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('pointerdown', onPointerDown)
+      pop()
+    }
+  }, [menuOpen])
 
   const knownCount = knowledge.rows.filter((r) => r.data.status === 'known' && !r.data.stale).length
   const a = allowance?.analyze
@@ -127,6 +154,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 <NavLink
                   to={`/p/${arxivSlug(r.data.arxivId)}`}
                   onClick={onNavigate}
+                  title={r.data.title ? `${r.data.title} (arXiv ${r.data.arxivId})` : `arXiv ${r.data.arxivId}`}
                   className={({ isActive }) =>
                     cn(
                       'block truncate rounded px-2 py-1.5 text-[13px] transition-[background-color,color] duration-150 ease-out',
@@ -154,8 +182,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         {/* The account row, with the theme toggle beside it. */}
         <div className="mt-1 flex items-center gap-1">
           {user ? (
-            <div className="relative min-w-0 flex-1">
+            <div ref={accountRef} className="relative min-w-0 flex-1">
               <button
+                ref={accountButton}
                 type="button"
                 aria-label="Account menu"
                 aria-expanded={menuOpen}
@@ -168,7 +197,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 <span data-testid="nav-user-name" className="truncate text-foreground">{user.name || user.email}</span>
               </button>
               {menuOpen && (
-                <div className="surface absolute bottom-full left-0 z-20 mb-1 w-full p-2 shadow-[var(--shadow-ring-hi)]">
+                <div className="surface absolute bottom-full left-0 z-20 mb-1 w-full p-2 shadow-[var(--shadow-ring-hi)]" data-testid="account-menu">
                   <div data-testid="nav-user-email" className="truncate px-1 pb-2 text-xs text-muted-foreground">{user.email}</div>
                   <Link
                     to="/knowledge"
@@ -217,11 +246,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     const pop = pushOverlay(layer)
     sheetRef.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus()
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!isTopOverlay(layer)) return
       if (e.key === 'Escape') {
+        if (!isTopOverlay(layer)) return
         e.preventDefault()
         setSheetOpen(false)
-      } else if (e.key === 'Tab' && sheetRef.current) {
+      } else if (e.key === 'Tab' && sheetRef.current && (isTopOverlay(layer) || sheetRef.current.contains(document.activeElement))) {
+        // The account menu opens inside the sheet, so Tab stays in the sheet while it is on top.
         trapTab(e, sheetRef.current)
       }
     }
