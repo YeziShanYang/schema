@@ -9,6 +9,7 @@
  * - 77: no HTML, and the PDF conversion fails before anything is billed.
  * - 99: no HTML, and the PDF has no text (a scanned image), so the analysis fails.
  * - 66: no HTML; the PDF converts, so the paper is analyzed from the PDF text.
+ * - 44: analyzed from the HTML fixture, under a long one-line title (fixtureMeta).
  * - anything else: analyzed from the HTML fixture below.
  *
  * What the concept list exercises (see stepConcepts and its rules):
@@ -37,6 +38,15 @@ export const FIXTURE_META = {
     'We study attention layers whose scores are corrected by a curvature term. This fixture exists for automated tests.',
   primaryCategory: 'cs.LG',
   publishedAt: '2026-11-01T00:00:00Z',
+}
+
+/** The title fixture ids ending in 44 get, long enough to overflow a phone screen on one line. */
+export const LONG_FIXTURE_TITLE =
+  'A Fixture Paper on Curvature-Aware Attention with a Deliberately Long Title That Runs Well Past the Width of Any Phone Screen'
+
+/** arXiv metadata for a fixture id. */
+export function fixtureMeta(id: string): typeof FIXTURE_META {
+  return id.endsWith('44') ? { ...FIXTURE_META, title: LONG_FIXTURE_TITLE } : FIXTURE_META
 }
 
 /** Related-work filler, so the HTML text clears the minimum length the server accepts. */

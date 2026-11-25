@@ -27,7 +27,7 @@ export default function HomePage() {
       <PageHeader label="Home" title="Learn the ideas a paper is built on">
         <AddButton testId="home-add-open" />
       </PageHeader>
-      <div className="grid max-w-5xl gap-5 px-5 py-6 md:px-7">
+      <div className="grid max-w-5xl grid-cols-1 gap-5 px-5 py-6 md:px-7">
         <FirstRunPrompt />
         {(lastWorkspace || lastPaper) && (
           <section className="surface enter p-4" style={{ ['--i' as string]: 0 }} data-testid="continue">

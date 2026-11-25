@@ -26,6 +26,9 @@ const FIXTURE_SLUG = '0000~00001'
 const SECOND_ID = '0000.00031'
 const SECOND_SLUG = '0000~00031'
 const FIXTURE_TITLE = 'A Fixture Paper on Curvature-Aware Attention'
+/** Fixture ids ending in 44 get a title too long for one line on a phone (fixtureMeta in fixtures.ts). */
+const LONG_ID = '0000.00044'
+const LONG_SLUG = '0000~00044'
 const READY_TIMEOUT = 90_000
 /** Every fixture concept by branch, in the order the panel lists them. */
 const FIXTURE_CONCEPTS = [
@@ -45,7 +48,7 @@ async function calm(page: Page) {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.addInitScript((ids) => {
     for (const id of ids) localStorage.setItem(`schema:overview-shown:${id}`, '1')
-  }, [FIXTURE_ID, SECOND_ID])
+  }, [FIXTURE_ID, SECOND_ID, LONG_ID])
 }
 
 /** Wait until the paper's overview and this reader's read mark have loaded. */
@@ -335,6 +338,26 @@ test('the step strip is one row at 1440 and puts Next up on its own row at 390',
   const scroll = await strip.getByTestId('sequence-scroll').evaluate((e) => ({ sw: e.scrollWidth, cw: e.clientWidth }))
   expect(scroll.sw).toBeGreaterThan(scroll.cw)
   await expect(strip.getByTestId('sequence-scroll')).toHaveAttribute('data-fade-right', 'true')
+})
+
+test('Home fits a 390px screen when a paper has a long title', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  // A fixed id costs a slot only the first time; after that it is cached.
+  await openReadyFixturePaper(page, LONG_ID)
+  await page.setViewportSize({ width: 390, height: 844 })
+  const pageWidth = () => page.evaluate(() => document.documentElement.scrollWidth)
+
+  await page.goto('/home')
+  const recent = page.getByTestId('recently-analyzed')
+  await expect(recent.locator('li').first()).toBeVisible({ timeout: 15_000 })
+  // The list holds the ten papers analyzed last, so in a fresh local state the long title is among them.
+  if (await recent.getByText('Deliberately Long Title').count()) {
+    const title = recent.locator('li a > span').filter({ hasText: 'Deliberately Long Title' }).first()
+    expect(await title.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
+  }
+  expect(await pageWidth()).toBeLessThanOrEqual(390)
 })
 
 test('recommended sequence: next up follows prerequisites and opens the concept', async ({ users }) => {

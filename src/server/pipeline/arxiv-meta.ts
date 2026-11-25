@@ -4,7 +4,7 @@
  */
 
 import { isFixtureId } from '../../lib/arxiv'
-import { FIXTURE_META } from './fixtures'
+import { fixtureMeta } from './fixtures'
 
 export interface ArxivMeta {
   id: string
@@ -62,7 +62,7 @@ export function parseArxivAtom(xml: string, requestedId: string): ArxivMeta | nu
 
 export async function lookupArxiv(id: string, opts: { fixtures: boolean }): Promise<ArxivLookup> {
   if (opts.fixtures && isFixtureId(id)) {
-    return { ok: true, meta: { ...FIXTURE_META, id } }
+    return { ok: true, meta: { ...fixtureMeta(id), id } }
   }
   let res: Response
   try {
