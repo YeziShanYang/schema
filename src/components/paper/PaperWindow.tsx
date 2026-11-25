@@ -324,12 +324,15 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   // The explanation allowance shows once in the header, while a card in the branch can still use it.
   const branchNeedsExplain = !!branch && p.concepts.some((c) => c.data.branchKey === branch.key && !c.data.explanation)
 
+  // With every concept known the step strip offers Mark finished beside "All concepts known", so the card and the
+  // walkthrough leave theirs out. The strip shows that only once the overview is read.
+  const stripFinishes = !!isSignedIn && !finished && seq.allKnown && !overviewUnread && !(ov.overview && !ov.known)
   const finishControls = finished ? (
     <span className="flex items-center gap-2">
       <Chip tone="known"><span data-testid="paper-finished">Finished</span></Chip>
       {isSignedIn && <ReadAgainButton paperId={paper.recordId} size="sm" variant="ghost" testId="read-again" />}
     </span>
-  ) : isSignedIn && d.status === 'ready' ? (
+  ) : isSignedIn && d.status === 'ready' && !stripFinishes ? (
     <Button size="sm" variant="outline" onClick={() => setFinishOpen(true)} data-testid="finish-toggle">Mark finished</Button>
   ) : null
 
@@ -429,7 +432,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
             ) : seq.allKnown ? (
               <span className="flex h-[34px] items-center gap-2 text-[13px]" data-testid="sequence-done">
                 <span className="font-medium text-known">All concepts known</span>
-                {!finished && isSignedIn && <Button size="sm" onClick={() => setFinishOpen(true)}>Mark finished</Button>}
+                {stripFinishes && <Button size="sm" onClick={() => setFinishOpen(true)} data-testid="finish-toggle">Mark finished</Button>}
               </span>
             ) : seq.nextUp ? (
               <Button

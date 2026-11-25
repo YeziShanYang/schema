@@ -1317,6 +1317,17 @@ test('finishing a paper can check its remaining concepts; Read again reopens it'
   await expect(ask).toHaveCount(0)
   await page.getByRole('button', { name: 'In progress', exact: true }).click()
   await expect(page.locator('[data-testid="library-row"][data-status="reading"]').filter({ hasText: `arXiv ${FIXTURE_ID}` })).toBeVisible()
+
+  // Reopened with every concept still checked: Mark finished shows once, beside "All concepts known", in both views.
+  await page.goto(`/p/${FIXTURE_SLUG}`)
+  const done = page.getByTestId('sequence-done')
+  await expect(done).toContainText('All concepts known')
+  await expect(done.getByTestId('finish-toggle')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Mark finished', exact: true })).toHaveCount(1)
+  await page.getByTestId('view-walkthrough').click()
+  await expect(page.getByTestId('walkthrough')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Mark finished', exact: true })).toHaveCount(1)
+  await expect(done.getByTestId('finish-toggle')).toBeVisible()
 })
 
 test('each library filter has its own empty text', async ({ users }) => {
