@@ -27,8 +27,9 @@ export default function HomePage() {
 
   return (
     <div className="min-h-full" data-testid="home-page">
-      <PageHeader label="Home" title="Learn the ideas a paper is built on">
-        <AddButton testId="home-add-open" />
+      <PageHeader title="Learn the ideas a paper is built on">
+        {/* From md up the sidebar's Add sits beside the header, so only phones get this one. */}
+        <AddButton testId="home-add-open" className="md:hidden" />
       </PageHeader>
       <div className="grid max-w-5xl grid-cols-1 gap-5 px-5 py-6 md:px-7">
         <FirstRunPrompt />

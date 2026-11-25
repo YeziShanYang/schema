@@ -8,6 +8,8 @@ The frontend uses the Blueprint theme (IBM Plex, dot-grid canvas). Data access i
 
 ## Interface
 
+The sidebar starts with Add and links to Home, Library and Knowledge, each with an icon, and the Knowledge link shows how many concepts the reader has checked. Workspaces and recent papers follow. A page header carries only its title, because the highlighted sidebar link already names the page. Below 768px the sidebar opens from a menu button, so Home's header keeps its own Add button.
+
 A workspace page shows its papers as cards floating around the workspace name. Recommended papers appear as dashed cards with an Add button. A paper page shows its branches the same way, numbered in the recommended order. Clicking a branch opens a centered panel with that branch's concepts, and the branch's explainer links load when the panel opens. A toggle switches the paper page to the section walkthrough. Below 640px the cards stack in a list, and with reduced motion they hold still instead of drifting.
 
 `recommendedSequence()` in `src/lib/sequence.ts` orders branches by the mean prerequisite tier of their concepts, keeping the model's order on ties. Concepts are ordered by tier, then branch, then the model's order. The next concept is the first unchecked one whose dependencies are all checked. The paper page shows the steps and a Next up button, and the workspace page names the paper to continue with its next concept. A step's label is cut at about 24 characters, and the branch's full name is its tooltip and accessible name.

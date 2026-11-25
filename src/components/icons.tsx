@@ -90,3 +90,24 @@ export const ArrowRightIcon = (p: IconProps) => (
     <path d="M5 12h14M13 6l6 6-6 6" />
   </Svg>
 )
+export const HomeIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3.5 10.5 12 3.5l8.5 7" />
+    <path d="M6 9v10a1 1 0 0 0 1 1h3.5v-5.5h3V20H17a1 1 0 0 0 1-1V9" />
+  </Svg>
+)
+/** A stack of papers: the Library page. */
+export const PapersIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9 3h6.5L20 7.5V16a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+    <path d="M15 3v4.5h5" />
+    <path d="M5 7v13a1 1 0 0 0 1 1h10" />
+  </Svg>
+)
+/** A checked circle: the Knowledge page, where checked concepts are listed. */
+export const KnownIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="m8.5 12.3 2.4 2.4 4.6-5" />
+  </Svg>
+)

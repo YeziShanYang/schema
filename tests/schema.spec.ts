@@ -803,7 +803,7 @@ test('the Add window preselects the workspace opened last, and an analyzed paper
   const made = await action(page, 'analyzePaper', { input: FIXTURE_ID, newWorkspace: { name: `[fixture] Opened last ${Date.now()}` } })
   expect(made.success).toBe(true)
   await page.goto('/home')
-  await page.getByTestId('home-add-open').click()
+  await page.getByTestId('add-open').click()
   const dialog = page.getByTestId('add-dialog')
   await dialog.getByTestId('add-choice-paper').click()
   await dialog.getByTestId('add-paper-input').fill(SECOND_ID)
@@ -949,8 +949,14 @@ test('the sidebar lists Home, Library and Knowledge under Add, and its footer co
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/home')
   const pages = page.getByRole('navigation', { name: 'Pages' })
-  await expect(pages.getByRole('link')).toHaveText(['Home', 'Library', 'Knowledge'])
+  await expect(pages.getByRole('link')).toHaveText(['Home', 'Library', /^Knowledge\s*\d+ concepts learned$/])
   await expect(pages.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page')
+  // Each row is a button-like link with a 16px icon drawn in the text color.
+  for (const link of await pages.getByRole('link').all()) {
+    const icon = link.locator('svg')
+    await expect(icon).toHaveCount(1)
+    expect(await icon.evaluate((el) => [el.getAttribute('width'), el.getAttribute('stroke'), el.getAttribute('aria-hidden')])).toEqual(['16', 'currentColor', 'true'])
+  }
   // The group sits right under Add, above the workspaces.
   const add = (await page.getByTestId('add-open').boundingBox())!
   const group = (await pages.boundingBox())!
@@ -968,7 +974,10 @@ test('the sidebar lists Home, Library and Knowledge under Add, and its footer co
   await expect(page.getByTestId('knowledge-page')).toHaveAttribute('data-ready', 'true', { timeout: 15_000 })
   const stat = page.getByTestId('sidebar-knowledge')
   await expect(stat).toHaveText(/^Concepts learned\s*\d+$/)
-  await expect(stat.locator('b')).toHaveText(String(await page.locator('[data-testid="checked-concept"]:not([data-stale])').count()))
+  const learned = String(await page.locator('[data-testid="checked-concept"]:not([data-stale])').count())
+  await expect(stat.locator('b')).toHaveText(learned)
+  // The Knowledge row shows the same count on its right.
+  await expect(page.getByTestId('nav-knowledge-count')).toHaveText(`${learned} concepts learned`)
   await page.goto('/library')
   await stat.click()
   await expect(page).toHaveURL(/\/knowledge$/)
@@ -985,11 +994,42 @@ test('the sidebar lists Home, Library and Knowledge under Add, and its footer co
   await page.getByRole('button', { name: 'Open menu' }).click()
   const menu = page.getByRole('dialog', { name: 'Menu' })
   const sheetPages = menu.getByRole('navigation', { name: 'Pages' })
-  await expect(sheetPages.getByRole('link')).toHaveText(['Home', 'Library', 'Knowledge'])
+  await expect(sheetPages.getByRole('link')).toHaveText(['Home', 'Library', /^Knowledge\s*\d+ concepts learned$/])
+  await expect(sheetPages.locator('svg')).toHaveCount(3)
   await expect(sheetPages.getByRole('link', { name: 'Library' })).toHaveAttribute('aria-current', 'page')
   await sheetPages.getByRole('link', { name: 'Knowledge' }).click()
   await expect(page).toHaveURL(/\/knowledge$/)
   await expect(menu).toHaveCount(0)
+})
+
+test('page headers leave Add and the page name to the sidebar from md up', async ({ users }) => {
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await page.setViewportSize({ width: 1440, height: 900 })
+  for (const [path, testId, title] of [
+    ['/home', 'home-page', 'Learn the ideas a paper is built on'],
+    ['/library', 'library-page', 'Your papers'],
+    ['/knowledge', 'knowledge-page', 'What you know'],
+  ] as const) {
+    await page.goto(path)
+    const header = page.getByTestId(testId).locator('header').first()
+    await expect(header.getByRole('heading', { level: 1 })).toHaveText(title)
+    // No eyebrow label above the title: the highlighted sidebar row names the page.
+    await expect(header.locator('.label')).toHaveCount(0)
+  }
+  // Beside the sidebar there is one Add button, the sidebar's.
+  await page.goto('/home')
+  await expect(page.getByTestId('add-open')).toBeVisible()
+  await expect(page.getByTestId('home-add-open')).toBeHidden()
+  await expect(page.getByRole('button', { name: /^Add paper or workspace$/ })).toHaveCount(1)
+  // On a phone the sidebar is behind the menu, so the header keeps its Add, and it opens the Add window.
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.getByTestId('home-add-open')).toBeVisible()
+  await expect(page.getByTestId('add-open')).toBeHidden()
+  await page.getByTestId('home-add-open').click()
+  await expect(page.getByTestId('add-dialog')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('add-dialog')).toHaveCount(0)
 })
 
 test('Uncheck all on the knowledge page asks first and unchecks only that paper', async ({ users }) => {
@@ -1347,7 +1387,7 @@ test('at the daily cap the Add window says so up front and lets only analyzed pa
     await action(page, 'analyzePaper', { input: await newFixtureId(page, '') })
   }
   await page.reload()
-  await page.getByTestId('home-add-open').click()
+  await page.getByTestId('add-open').click()
   await page.getByTestId('add-choice-paper').click()
   const status = page.getByTestId('add-paper-status')
   const submit = page.getByTestId('add-paper-submit')

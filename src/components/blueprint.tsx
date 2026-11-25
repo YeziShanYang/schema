@@ -6,12 +6,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
-export function PageHeader({ label, title, children, className }: { label: string; title: ReactNode; children?: ReactNode; className?: string }) {
+/** A page's title bar. The highlighted sidebar row already names the page, so there is no eyebrow label. */
+export function PageHeader({ title, children, className }: { title: ReactNode; children?: ReactNode; className?: string }) {
   return (
     <header className={cn('flex flex-wrap items-end justify-between gap-4 border-b border-border bg-card px-5 pb-3.5 pt-5 md:px-7', className)}>
       <div className="min-w-0">
-        <div className="label">{label}</div>
-        <h1 className="mt-0.5 text-[26px] font-semibold leading-[1.15] tracking-[-0.01em] text-balance">{title}</h1>
+        <h1 className="text-[26px] font-semibold leading-[1.15] tracking-[-0.01em] text-balance">{title}</h1>
       </div>
       {children && <div className="flex flex-wrap gap-2">{children}</div>}
     </header>
