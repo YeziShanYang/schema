@@ -37,3 +37,18 @@ export function capState(createdAts: unknown[], now: number, cap = DAILY_PAPER_C
     nextSlotAt: used >= cap ? inWindow[used - cap] + windowMs : 0,
   }
 }
+
+/**
+ * When the next slot opens (CapState.nextSlotAt), in the reader's local
+ * time: "7:05 AM", or "7:05 AM tomorrow". The server's refusal can only
+ * name a time in UTC; the browser knows the reader's zone.
+ */
+export function formatSlotTime(at: number, now = Date.now(), locale?: string): string {
+  const d = new Date(at)
+  const time = d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })
+  const tomorrow = new Date(now)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  if (d.toDateString() === new Date(now).toDateString()) return time
+  if (d.toDateString() === tomorrow.toDateString()) return `${time} tomorrow`
+  return d.toLocaleString(locale, { weekday: 'long', hour: 'numeric', minute: '2-digit' })
+}

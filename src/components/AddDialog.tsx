@@ -20,6 +20,7 @@ import { useWorkspaces } from '../hooks/useWorkspaces'
 import { useAllowance } from '../hooks/useAllowance'
 import { actions, type PaperPeek } from '../lib/actions-client'
 import { arxivSlug } from '../lib/arxiv'
+import { formatSlotTime } from '../lib/cap'
 
 type Step = 'choose' | 'paper' | 'workspace'
 
@@ -57,6 +58,8 @@ export function AddDialog({ open, onClose, workspaceId }: { open: boolean; onClo
   }, [workspaceId, wsId, hasWorkspaces, workspaces.rows])
 
   const a = allowance?.analyze
+  // At the daily cap only a paper with no analysis yet is refused; one that exists (ready, running or failed) opens free.
+  const blocked = !!peek && peek.status === 'new' && !!a && !a.allowed
 
   async function lookUp(e: FormEvent) {
     e.preventDefault()
@@ -149,7 +152,16 @@ export function AddDialog({ open, onClose, workspaceId }: { open: boolean; onClo
                   {peek.categoryName && ` · ${peek.categoryName}`}
                 </p>
                 <p className="mt-1.5 text-xs" data-testid="add-paper-status">
-                  {peek.analyzed ? <span className="text-known">Already analyzed. Opening it is free.</span> : <span className="text-muted-foreground">New to Schema: analysis takes about a minute and uses one of today's papers.</span>}
+                  {peek.analyzed ? (
+                    <span className="text-known">Already analyzed. Opening it is free.</span>
+                  ) : blocked ? (
+                    <span className="text-destructive">
+                      You've reached today's limit of {a.used + a.remaining} new papers.
+                      {a.nextSlotAt > 0 && ` You can start this one after ${formatSlotTime(a.nextSlotAt)}.`} Papers someone already analyzed are still free to add.
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">New to Schema: analysis takes about a minute and uses one of today's papers.</span>
+                  )}
                 </p>
               </div>
 
@@ -179,7 +191,7 @@ export function AddDialog({ open, onClose, workspaceId }: { open: boolean; onClo
 
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => (workspaceId ? onClose() : setStep('choose'))}>Back</Button>
-                <Button type="submit" loading={busy} disabled={dest === 'new' ? !name.trim() : !wsId} data-testid="add-paper-submit">
+                <Button type="submit" loading={busy} disabled={blocked || (dest === 'new' ? !name.trim() : !wsId)} data-testid="add-paper-submit">
                   <PlusIcon size={14} /> Add paper
                 </Button>
               </div>

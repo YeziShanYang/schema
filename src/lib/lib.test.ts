@@ -5,7 +5,7 @@ import { isQuoteVerified, normalizeForMatch, quoteScore } from './quotes'
 import { cleanGraph } from './graph'
 import { extractJsonObject } from './json'
 import { normalizeTopicKey, STARTER_TOPICS } from './topics'
-import { capState, CAP_WINDOW_MS } from './cap'
+import { capState, CAP_WINDOW_MS, formatSlotTime } from './cap'
 import { plural } from './utils'
 
 describe('parseArxivId', () => {
@@ -192,5 +192,17 @@ describe('plural', () => {
     expect(plural(1, 'paper', 'papers')).toBe('1 paper')
     expect(plural(0, 'paper', 'papers')).toBe('0 papers')
     expect(plural(3, 'paper', 'papers')).toBe('3 papers')
+  })
+})
+
+describe('formatSlotTime', () => {
+  // Local-time dates, so the result does not depend on the machine's zone.
+  const now = new Date(2026, 10, 24, 20, 0).getTime()
+  it('names a time today plainly and one after midnight as tomorrow', () => {
+    expect(formatSlotTime(new Date(2026, 10, 24, 22, 30).getTime(), now, 'en-US')).toBe('10:30 PM')
+    expect(formatSlotTime(new Date(2026, 10, 25, 7, 5).getTime(), now, 'en-US')).toBe('7:05 AM tomorrow')
+  })
+  it('names the weekday for anything later', () => {
+    expect(formatSlotTime(new Date(2026, 10, 27, 9, 0).getTime(), now, 'en-US')).toBe('Friday 9:00 AM')
   })
 })

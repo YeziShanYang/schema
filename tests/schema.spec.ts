@@ -917,6 +917,39 @@ test('the sidebar\'s New papers today comes back on its own after a refunded fai
   await expect(sidebar).toHaveAttribute('data-remaining', String(before), { timeout: 10_000 })
 })
 
+test('at the daily cap the Add window says so up front and lets only analyzed papers through', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [dana] = await users(['Schema dana'])
+  const page = dana.page
+  await calm(page)
+  await page.goto('/home')
+  // The actions spec leaves Dana at her cap; use up anything left with fixture papers.
+  for (let i = 0; i < 6; i++) {
+    const left = await action(page, 'myAllowance', {})
+    if (left.data.analyze.remaining === 0) break
+    await action(page, 'analyzePaper', { input: await newFixtureId(page, '') })
+  }
+  await page.reload()
+  await page.getByTestId('home-add-open').click()
+  await page.getByTestId('add-choice-paper').click()
+  const status = page.getByTestId('add-paper-status')
+  const submit = page.getByTestId('add-paper-submit')
+
+  await page.getByTestId('add-paper-input').fill(await newFixtureId(page, ''))
+  await page.getByTestId('add-paper-lookup').click()
+  await expect(status).toContainText("You've reached today's limit of 5 new papers.")
+  // The time it opens up again is in the reader's own time, not UTC.
+  await expect(status).toContainText(/after \d{1,2}:\d{2}/)
+  await expect(status).not.toContainText('UTC')
+  await expect(submit).toBeDisabled()
+
+  // A paper someone already analyzed stays free to add.
+  await page.getByTestId('add-paper-input').fill(FIXTURE_ID)
+  await page.getByTestId('add-paper-lookup').click()
+  await expect(status).toContainText('Already analyzed')
+  await expect(submit).toBeEnabled()
+})
+
 test('the daily cap refuses a sixth new paper', async ({ users }) => {
   test.setTimeout(150_000)
   const [, bob] = await users(['Schema ada', 'Schema bob'])
