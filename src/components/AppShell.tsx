@@ -20,7 +20,7 @@ import { SignInOverlay } from './SignInOverlay'
 import { CloseIcon, MarkIcon, MenuIcon } from './icons'
 import { useConceptKnowledge, useRoadmaps } from '../hooks/useReader'
 import { useWorkspaces } from '../hooks/useWorkspaces'
-import { useAllowance } from '../hooks/useAllowance'
+import { useAllowance, useRefreshAllowanceOnSettle } from '../hooks/useAllowance'
 import { arxivSlug } from '../lib/arxiv'
 import { APP_DISPLAY_NAME } from '../constants'
 
@@ -150,6 +150,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [showAuth, setShowAuth] = useState(false)
   const location = useLocation()
+  // "New papers today" and every other allowance count follow a paper whose analysis fails (refunded) or finishes.
+  useRefreshAllowanceOnSettle()
 
   useEffect(() => setSheetOpen(false), [location.pathname])
 

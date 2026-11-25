@@ -111,13 +111,14 @@ export async function runAnalyzeTick(job: Job, jobCtx: JobContext, env: Env): Pr
   if (!paper) return { skipped: 'paper_missing' }
 
   if (jobCtx.signal.aborted) {
+    // The slot goes back before the paper shows failed, so a reader whose allowance refreshes on that change sees it.
+    if (!state.spent) await refundAnalyze(ctx.records, paper.recordId)
     await updatePaper(ctx, paper.recordId, {
       status: 'failed',
       stage: 'failed',
       error: 'Analysis was canceled.',
       timings: closeTimings(paper.data.timings, Date.now()),
     })
-    if (!state.spent) await refundAnalyze(ctx.records, paper.recordId)
     return { canceled: true }
   }
 
@@ -155,6 +156,13 @@ export async function runAnalyzeTick(job: Job, jobCtx: JobContext, env: Env): Pr
       jobCtx.continue(state, { afterMs: 3000 })
       return
     }
+    // The requester's daily slot is given back only if nothing was paid for yet. It goes back before the paper
+    // shows failed, so a reader whose allowance refreshes on that change sees it.
+    try {
+      if (!state.spent) await refundAnalyze(ctx.records, paper.recordId)
+    } catch (refundError) {
+      console.error(`[analyze] refund failed for ${payload.arxivId}: ${errMsg(refundError)}`)
+    }
     // `paper.data.timings` is kept current by enterPaperStage, so a stage entered in this tick is closed too.
     await updatePaper(ctx, paper.recordId, {
       status: 'failed',
@@ -163,12 +171,6 @@ export async function runAnalyzeTick(job: Job, jobCtx: JobContext, env: Env): Pr
       progressMessage: '',
       timings: closeTimings(paper.data.timings, Date.now()),
     })
-    // The requester's daily slot is given back only if nothing was paid for yet.
-    try {
-      if (!state.spent) await refundAnalyze(ctx.records, paper.recordId)
-    } catch (refundError) {
-      console.error(`[analyze] refund failed for ${payload.arxivId}: ${errMsg(refundError)}`)
-    }
     return { ok: false, error: message }
   }
 }

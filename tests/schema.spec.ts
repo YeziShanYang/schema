@@ -846,6 +846,28 @@ test('a failure before anything is billed gives the slot back; after conversion 
   expect(await allowanceLeft(retrier.page)).toBe(retrierBefore - 1)
 })
 
+test('the sidebar\'s New papers today comes back on its own after a refunded failure', async ({ users }) => {
+  test.setTimeout(120_000)
+  // The conversion fails before anything is billed, so the slot is only borrowed.
+  const people = await users(['Schema cara', 'Schema ada'])
+  let page = people[0].page
+  let before = 0
+  for (const p of people) {
+    before = await allowanceLeft(p.page)
+    page = p.page
+    if (before > 0) break
+  }
+  test.skip(before === 0, 'Cara and Ada are at the daily cap in this local state')
+  await calm(page)
+  const sidebar = page.getByTestId('sidebar-allowance')
+  await page.getByTestId('analyze-input').fill(await newFixtureId(page, '77'))
+  await page.getByTestId('analyze-submit').click()
+  await expect(sidebar).toHaveAttribute('data-remaining', String(before - 1), { timeout: 15_000 })
+  await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'failed', { timeout: READY_TIMEOUT })
+  // No reload and no refocus: the paper turning failed refreshes the count.
+  await expect(sidebar).toHaveAttribute('data-remaining', String(before), { timeout: 10_000 })
+})
+
 test('the daily cap refuses a sixth new paper', async ({ users }) => {
   test.setTimeout(150_000)
   const [, bob] = await users(['Schema ada', 'Schema bob'])
