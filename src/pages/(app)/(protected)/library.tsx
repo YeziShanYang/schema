@@ -1,6 +1,7 @@
 /**
  * Library: every paper the reader has opened, with progress and last opened,
- * filtered by in progress or finished; finished papers can be read again.
+ * filtered by in progress or finished; finished papers can be read again,
+ * and a failed analysis can be retried from its row.
  * Finishing and reading again go through the same hooks and dialog as the
  * paper window, so the paper's workspace entries follow, and Read again
  * offers to uncheck what finishing checked.
@@ -15,8 +16,9 @@ import { cn } from '@/lib/utils'
 import { Chip, Meter, PageHeader } from '../../../components/blueprint'
 import { FinishDialog, ReadAgainButton } from '../../../components/paper/FinishDialog'
 import { checkedPerPaper, useConceptKnowledge, useRoadmaps } from '../../../hooks/useReader'
+import { useRetryPaper } from '../../../hooks/useRetryPaper'
 import { arxivSlug } from '../../../lib/arxiv'
-import type { PaperData } from '../../../types'
+import type { PaperData, RoadmapData } from '../../../types'
 
 type Filter = 'all' | 'reading' | 'finished'
 
@@ -63,32 +65,16 @@ export default function LibraryPage() {
             {rows.map((r) => {
               const paper = paperById.get(r.data.paperId)
               const total = paper?.data.conceptCount || 0
-              const known = Math.min(checked.get(r.data.paperId) ?? 0, total)
               return (
-                <li key={r.recordId} className="grid gap-2 px-4 py-3 md:grid-cols-[minmax(0,1fr)_180px_auto] md:items-center" data-testid="library-row" data-status={r.data.status}>
-                  <div className="min-w-0">
-                    <Link to={`/p/${arxivSlug(r.data.arxivId)}`} className="font-medium hover:text-primary">{r.data.title || r.data.arxivId}</Link>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <span className="font-mono">arXiv {r.data.arxivId}</span>
-                      {r.data.lastOpenedAt ? <span>Opened {new Date(r.data.lastOpenedAt).toLocaleDateString()}</span> : null}
-                      {r.data.status === 'finished' && <Chip tone="known">Finished</Chip>}
-                    </div>
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    <div className="mb-1 flex justify-between tabular-nums" data-testid="library-known">
-                      <span>Concepts known</span>
-                      <b className="font-semibold text-foreground">{countsReady ? `${known} / ${total}` : '…'}</b>
-                    </div>
-                    <Meter value={total ? known / total : 0} />
-                  </div>
-                  <div>
-                    {r.data.status === 'finished' ? (
-                      <ReadAgainButton paperId={r.data.paperId} size="sm" variant="outline" testId="library-read-again" />
-                    ) : (
-                      <Button size="sm" variant="ghost" disabled={!paper} onClick={() => setFinishing(paper ?? null)} data-testid="library-finish">Mark finished</Button>
-                    )}
-                  </div>
-                </li>
+                <LibraryRow
+                  key={r.recordId}
+                  row={r}
+                  paper={paper}
+                  total={total}
+                  known={Math.min(checked.get(r.data.paperId) ?? 0, total)}
+                  countsReady={countsReady}
+                  onFinish={() => setFinishing(paper ?? null)}
+                />
               )
             })}
           </ul>
@@ -96,5 +82,68 @@ export default function LibraryPage() {
       </div>
       <FinishDialog paper={finishing} open={!!finishing} onClose={() => setFinishing(null)} />
     </div>
+  )
+}
+
+/**
+ * One paper. A failed analysis is not a readable paper: it shows the failure
+ * and Retry (the paper window's retry path) in place of the counts and Mark
+ * finished. A paper being analyzed says so until it is ready.
+ */
+function LibraryRow({
+  row: r,
+  paper,
+  total,
+  known,
+  countsReady,
+  onFinish,
+}: {
+  row: RecordData<RoadmapData>
+  paper: RecordData<PaperData> | undefined
+  total: number
+  known: number
+  countsReady: boolean
+  onFinish: () => void
+}) {
+  const status = paper?.data.status
+  const failed = status === 'failed'
+  const analyzing = status === 'queued' || status === 'processing'
+  const { retry, retrying, error } = useRetryPaper(paper?.recordId)
+  return (
+    <li className="grid gap-2 px-4 py-3 md:grid-cols-[minmax(0,1fr)_180px_auto] md:items-center" data-testid="library-row" data-status={r.data.status} data-paper-status={status ?? ''}>
+      <div className="min-w-0">
+        <Link to={`/p/${arxivSlug(r.data.arxivId)}`} className="font-medium hover:text-primary">{r.data.title || r.data.arxivId}</Link>
+        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span className="font-mono">arXiv {r.data.arxivId}</span>
+          {r.data.lastOpenedAt ? <span>Opened {new Date(r.data.lastOpenedAt).toLocaleDateString()}</span> : null}
+          {r.data.status === 'finished' && <Chip tone="known">Finished</Chip>}
+        </div>
+      </div>
+      {failed ? (
+        <div className="text-xs" data-testid="library-failed">
+          <span className="text-learning">Analysis failed</span>
+          {error && <p role="alert" className="mt-0.5 text-destructive">{error}</p>}
+        </div>
+      ) : analyzing ? (
+        <div className="text-xs text-primary" data-testid="library-analyzing">Analyzing…</div>
+      ) : (
+        <div className="text-xs text-muted-foreground">
+          <div className="mb-1 flex justify-between tabular-nums" data-testid="library-known">
+            <span>Concepts known</span>
+            <b className="font-semibold text-foreground">{countsReady ? `${known} / ${total}` : '…'}</b>
+          </div>
+          <Meter value={total ? known / total : 0} />
+        </div>
+      )}
+      <div>
+        {failed ? (
+          <Button size="sm" variant="outline" loading={retrying} onClick={retry} data-testid="library-retry">Retry</Button>
+        ) : analyzing ? null : r.data.status === 'finished' ? (
+          <ReadAgainButton paperId={r.data.paperId} size="sm" variant="outline" testId="library-read-again" />
+        ) : (
+          <Button size="sm" variant="ghost" disabled={!paper} onClick={onFinish} data-testid="library-finish">Mark finished</Button>
+        )}
+      </div>
+    </li>
   )
 }

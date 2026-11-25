@@ -1403,6 +1403,39 @@ test('a failure before anything is billed gives the slot back; after conversion 
   expect(await allowanceLeft(retrier.page)).toBe(retrierBefore - 1)
 })
 
+test('the library shows a failed paper as failed, with Retry and no Mark finished', async ({ users }) => {
+  test.setTimeout(150_000)
+  // The conversion fails before anything is billed, so the request and the retry each give their slot back.
+  const people = await users(['Schema cara', 'Schema ada'])
+  let page = people[0].page
+  let before = 0
+  for (const p of people) {
+    before = await allowanceLeft(p.page)
+    page = p.page
+    if (before > 0) break
+  }
+  test.skip(before === 0, 'Cara and Ada are at the daily cap in this local state')
+  await calm(page)
+  const id = await newFixtureId(page, '77')
+  await analyzeUntilFailed(page, id, 'Fixture conversion failure')
+  await page.goto('/library')
+  const row = page.locator('[data-testid="library-row"]').filter({ hasText: `arXiv ${id}` })
+  await expect(row).toHaveAttribute('data-paper-status', 'failed', { timeout: 15_000 })
+  await expect(row.getByTestId('library-failed')).toHaveText('Analysis failed')
+  await expect(row.getByTestId('library-known')).toHaveCount(0)
+  await expect(row.getByTestId('library-finish')).toHaveCount(0)
+  // Retry goes through the paper window's retry action; this fixture fails again and gives the slot back.
+  const retried = page.waitForResponse((r) => r.url().endsWith('/api/actions/retryPaper'))
+  await row.getByTestId('library-retry').click()
+  expect((await (await retried).json()).success).toBe(true)
+  // The fixture retries once inside the job (3 s), so the row shows the run before it fails again.
+  await expect(row).toHaveAttribute('data-paper-status', /queued|processing/, { timeout: 15_000 })
+  await expect(row.getByTestId('library-analyzing')).toHaveText('Analyzing…')
+  await expect(row).toHaveAttribute('data-paper-status', 'failed', { timeout: READY_TIMEOUT })
+  await expect(row.getByTestId('library-finish')).toHaveCount(0)
+  expect(await allowanceLeft(page)).toBe(before)
+})
+
 test('the sidebar\'s New papers today comes back on its own after a refunded failure', async ({ users }) => {
   test.setTimeout(120_000)
   // The conversion fails before anything is billed, so the slot is only borrowed.

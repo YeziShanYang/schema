@@ -30,7 +30,7 @@ import { cn } from '@/lib/utils'
 import type { PaperData, PaperStatus, TimedStage } from '../../types'
 import type { BranchProgress } from '../../lib/branches'
 import { lastStartedStage, runStartedAt, stageDurations } from '../../lib/timings'
-import { actions } from '../../lib/actions-client'
+import { useRetryPaper } from '../../hooks/useRetryPaper'
 import { ANALYSIS_TIME } from '../../constants'
 import { FloatingGraph } from '../graph/FloatingGraph'
 import { CheckIcon } from '../icons'
@@ -206,14 +206,7 @@ export function AnalysisProgress({
   const minute = useNow(running, 30_000)
   const stuck = running && minute - (Date.parse(paper.updatedAt) || minute) > STUCK_AFTER_MS
 
-  const [retryError, setRetryError] = useState('')
-  const [retrying, setRetrying] = useState(false)
-  const retry = async () => {
-    setRetrying(true)
-    const r = await actions.retryPaper(paper.recordId)
-    setRetrying(false)
-    setRetryError(r.success ? '' : r.error)
-  }
+  const { retry, retrying, error: retryError } = useRetryPaper(paper.recordId)
 
   // While in the page flow, remember the view's box (after every render and
   // resize); when it starts leaving it keeps that box, absolutely positioned,
