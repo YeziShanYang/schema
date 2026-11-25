@@ -929,9 +929,9 @@ test('the first-run link scrolls to the starter topics once they have loaded', a
   await expect.poll(() => starters.evaluate((el) => Math.round(el.getBoundingClientRect().top)), { timeout: 10_000 }).toBeLessThan(100)
   expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
   expect(await starters.evaluate((el) => el.getBoundingClientRect().top)).toBeGreaterThanOrEqual(48)
-  // The page keeps its order: checked concepts, then the profile, then the starters.
+  // Bob has nothing checked and an empty profile, so the starters come first.
   const order = await page.locator('[data-testid="checked-concepts"], [data-testid="profile"], [data-testid="starter-topics"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')))
-  expect(order).toEqual(['checked-concepts', 'profile', 'starter-topics'])
+  expect(order).toEqual(['starter-topics', 'checked-concepts', 'profile'])
 })
 
 test('the sidebar lists Home, Library and Knowledge under Add, and its footer counts concepts learned', async ({ users }) => {
@@ -981,6 +981,51 @@ test('the sidebar lists Home, Library and Knowledge under Add, and its footer co
   await sheetPages.getByRole('link', { name: 'Knowledge' }).click()
   await expect(page).toHaveURL(/\/knowledge$/)
   await expect(menu).toHaveCount(0)
+})
+
+test('Uncheck all on the knowledge page asks first and unchecks only that paper', async ({ users }) => {
+  test.setTimeout(200_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  // Paper B keeps a checkmark; paper A gets two.
+  await openReadyFixturePaper(page, SECOND_ID)
+  await openBranch(page, 'foundations')
+  await ensureKnown(page, 'c1')
+  await page.keyboard.press('Escape')
+  await openReadyFixturePaper(page)
+  await openBranch(page, 'foundations')
+  await ensureKnown(page, 'c1')
+  await ensureKnown(page, 'c5')
+  await page.keyboard.press('Escape')
+
+  await page.goto('/knowledge')
+  await expect(page.getByTestId('knowledge-page')).toHaveAttribute('data-ready', 'true', { timeout: 15_000 })
+  // Ada has checkmarks, so the starters keep their place after the profile.
+  const order = await page.locator('[data-testid="checked-concepts"], [data-testid="profile"], [data-testid="starter-topics"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')))
+  expect(order.slice(0, 2)).toEqual(['checked-concepts', 'profile'])
+  const groupA = page.getByTestId('checked-paper').filter({ hasText: `arXiv ${FIXTURE_ID}` })
+  const groupB = page.getByTestId('checked-paper').filter({ hasText: `arXiv ${SECOND_ID}` })
+  const inA = await groupA.getByTestId('checked-concept').count()
+  const inB = await groupB.getByTestId('checked-concept').count()
+  expect(inA).toBeGreaterThanOrEqual(2)
+  expect(inB).toBeGreaterThanOrEqual(1)
+
+  const confirm = page.getByRole('dialog', { name: `Uncheck ${inA} concepts in ${FIXTURE_TITLE}?` })
+  await groupA.getByTestId('uncheck-all').click()
+  await expect(confirm).toBeVisible()
+  await confirm.getByRole('button', { name: 'Cancel' }).click()
+  await expect(confirm).toHaveCount(0)
+  await expect(groupA.getByTestId('checked-concept')).toHaveCount(inA)
+
+  await groupA.getByTestId('uncheck-all').click()
+  await confirm.getByRole('button', { name: 'Uncheck all' }).click()
+  await expect(confirm).toHaveCount(0, { timeout: 15_000 })
+  await expect(groupA).toHaveCount(0, { timeout: 15_000 })
+  await expect(groupB.getByTestId('checked-concept')).toHaveCount(inB)
+  await page.goto(`/p/${FIXTURE_SLUG}`)
+  await openBranch(page, 'foundations')
+  await expect(card(page, 'c1')).toHaveAttribute('data-status', 'unknown', { timeout: 15_000 })
+  await expect(card(page, 'c5')).toHaveAttribute('data-status', 'unknown')
 })
 
 test('finishing a paper can check its remaining concepts; Read again reopens it', async ({ users }) => {

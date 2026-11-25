@@ -1,6 +1,6 @@
 /** Modal / ConfirmModal — app-level wrappers around Dialog primitives. */
 
-import React, { ReactNode, JSX } from 'react'
+import React, { ReactNode, JSX, useEffect, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,7 @@ import {
 } from './Dialog'
 import { Button } from './Button'
 import { cn } from '@/lib/utils'
+import { pushOverlay } from '@/lib/overlays'
 
 // ============================================================================
 // Modal - Accessible modal dialog (wraps the Base UI Dialog primitives in ./Dialog)
@@ -35,6 +36,10 @@ export function Modal({
   className,
   ...props
 }: ModalProps): JSX.Element {
+  // An open modal is the top layer of the app's overlay stack (lib/overlays), so a panel or the sign-in window
+  // under it leaves Esc and Tab to it. The Dialog primitive moves focus in, closes on Esc and returns focus.
+  const [layer] = useState(() => ({}))
+  useEffect(() => (open ? pushOverlay(layer) : undefined), [open, layer])
   const sizes = {
     sm: 'max-w-[calc(100vw-2rem)] sm:max-w-sm',
     md: 'max-w-[calc(100vw-2rem)] sm:max-w-lg',

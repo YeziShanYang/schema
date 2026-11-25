@@ -3,14 +3,16 @@
  * searchable, and their profile, the topics they declared known (the
  * starter list plus search over the shared vocabulary). Profile topics only
  * produce hints on concepts; they never check one. Rows written before
- * per-concept knowledge existed are profile topics too.
+ * per-concept knowledge existed are profile topics too. A reader with
+ * nothing checked and an empty profile sees the starter topics first. Each
+ * paper's group can uncheck all of that paper's concepts, after a confirm.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useQuery } from 'deepspace'
 import type { RecordData } from 'deepspace'
-import { Input } from '@/components/ui'
+import { Button, ConfirmModal, Input } from '@/components/ui'
 import { Chip, PageHeader } from '../../../components/blueprint'
 import { StatusControl } from '../../../components/StatusControl'
 import { ConceptName } from '../../../components/MathText'
@@ -19,6 +21,7 @@ import { actions } from '../../../lib/actions-client'
 import { arxivSlug } from '../../../lib/arxiv'
 import { STARTER_TOPICS } from '../../../lib/topics'
 import type { ConceptKnowledgeData, KnowledgeData, PaperData, TopicLevel } from '../../../types'
+import { plural } from '@/lib/utils'
 
 const LEVELS: TopicLevel[] = ['foundation', 'core', 'specialized']
 const SOURCE: Record<string, string> = { self: 'Checked by you', finished: 'Checked when you finished the paper' }
@@ -34,6 +37,9 @@ export default function KnowledgePage() {
   const paperById = useMemo(() => new Map(papers.records.map((p) => [p.recordId, p])), [papers.records])
   const [find, setFind] = useState('')
   const [q, setQ] = useState('')
+  // The paper group whose "Uncheck all" is waiting for its confirm.
+  const [unchecking, setUnchecking] = useState<{ paperId: string; title: string; ids: string[] } | null>(null)
+  const [uncheckBusy, setUncheckBusy] = useState(false)
 
   // Make sure the starter topics exist (idempotent, batched on the server).
   const seeded = useRef(false)
@@ -95,11 +101,28 @@ export default function KnowledgePage() {
   const scrolledFor = useRef('')
   const loaded = concepts.status === 'ready' && profile.status === 'ready' && topicsStatus === 'ready'
   const startersShown = starters.length > 0
+  // A reader with nothing checked and no profile topics sees the starters first. Decided once per visit, when the
+  // page has loaded, so ticking the first starter doesn't move the section out from under the pointer. The
+  // starters show once that is decided.
+  const [startersFirst, setStartersFirst] = useState<boolean | null>(null)
+  const emptyReader = checkedCount === 0 && profileRows.length === 0
   useEffect(() => {
-    if (location.hash !== '#starter' || !loaded || !startersShown || scrolledFor.current === location.key) return
+    if (loaded && startersFirst === null) setStartersFirst(emptyReader)
+  }, [loaded, startersFirst, emptyReader])
+
+  useEffect(() => {
+    if (location.hash !== '#starter' || startersFirst === null || !startersShown || scrolledFor.current === location.key) return
     scrolledFor.current = location.key
     document.getElementById('starter')?.scrollIntoView({ block: 'start' })
-  }, [location.hash, location.key, loaded, startersShown])
+  }, [location.hash, location.key, startersFirst, startersShown])
+
+  async function uncheckAll() {
+    if (!unchecking) return
+    setUncheckBusy(true)
+    for (const id of unchecking.ids) await concepts.clear(id)
+    setUncheckBusy(false)
+    setUnchecking(null)
+  }
 
   function profileList(items: RecordData<KnowledgeData>[]) {
     const byLevel = LEVELS.map((level) => ({ level, items: items.filter((r) => (byKey.get(r.data.topicKey)?.data.level ?? 'core') === level) })).filter((g) => g.items.length)
@@ -135,6 +158,28 @@ export default function KnowledgePage() {
     )
   }
 
+  const starterBlock = starters.length > 0 && (
+    <div data-testid="starter-topics" id="starter" className="scroll-mt-16">
+      <div className="label pb-1">Common starting points</div>
+      <p className="pb-2 text-sm text-muted-foreground">Tick what you already know. Papers will point these out on the concepts that use them.</p>
+      <ul className="flex flex-wrap gap-2">
+        {starters.map((t) => (
+          <li key={t.key}>
+            <button
+              type="button"
+              disabled={!profile.ready}
+              onClick={() => profile.set(t.key)}
+              data-testid="starter-topic"
+              className="press cursor-pointer rounded bg-card px-2.5 py-1 text-[13px] shadow-[var(--shadow-ring)] hover:shadow-[var(--shadow-ring-hi)] disabled:cursor-not-allowed disabled:opacity-50 border border-transparent"
+            >
+              {t.name}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+
   return (
     <div className="min-h-full" data-testid="knowledge-page" data-ready={concepts.status === 'ready' && profile.status === 'ready' ? 'true' : undefined}>
       <PageHeader label="Knowledge" title="What you know" />
@@ -142,6 +187,8 @@ export default function KnowledgePage() {
         <p className="-mt-1 text-sm text-muted-foreground">
           Each concept has its own checkmark, and checking one never checks anything in another paper. When a later paper uses an idea you checked, or a topic in your profile, its concept shows a note and you tick it yourself.
         </p>
+
+        {startersFirst === true && starterBlock}
 
         <section data-testid="checked-concepts">
           <div className="label pb-2">Checked concepts · <span className="tabular-nums">{checkedCount}</span></div>
@@ -154,10 +201,26 @@ export default function KnowledgePage() {
               <div className="grid gap-3">
                 {shown.map((g) => (
                   <div key={g.paperId} className="surface px-4 py-3" data-testid="checked-paper" data-paper-id={g.paperId}>
-                    <p className="pb-2 text-sm">
-                      <Link to={`/p/${arxivSlug(g.arxivId)}`} className="font-medium hover:text-primary hover:underline">{titleOf(g.paperId, g.arxivId)}</Link>{' '}
-                      <span className="font-mono text-xs text-faint">arXiv {g.arxivId}</span>
-                    </p>
+                    <div className="flex items-start justify-between gap-3 pb-2">
+                      <p className="min-w-0 text-sm">
+                        <Link to={`/p/${arxivSlug(g.arxivId)}`} className="font-medium hover:text-primary hover:underline">{titleOf(g.paperId, g.arxivId)}</Link>{' '}
+                        <span className="font-mono text-xs text-faint">arXiv {g.arxivId}</span>
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="-my-1 shrink-0"
+                        disabled={!concepts.ready}
+                        onClick={() => {
+                          // The whole paper, not only the rows a search left showing.
+                          const all = groups.find((x) => x.paperId === g.paperId)?.rows ?? g.rows
+                          setUnchecking({ paperId: g.paperId, title: titleOf(g.paperId, g.arxivId), ids: all.map((r) => r.data.conceptId) })
+                        }}
+                        data-testid="uncheck-all"
+                      >
+                        Uncheck all
+                      </Button>
+                    </div>
                     <ul className="flex flex-col gap-2">
                       {g.rows.map((r) => {
                         const on = concepts.statusOf(r.data.conceptId) === 'known'
@@ -221,29 +284,19 @@ export default function KnowledgePage() {
             {q.trim() && matches.length === 0 && <p className="mt-2 text-sm text-muted-foreground">No topic matches “{q.trim()}”.</p>}
           </div>
 
-          {starters.length > 0 && (
-            <div data-testid="starter-topics" id="starter" className="scroll-mt-16">
-              <div className="label pb-1">Common starting points</div>
-              <p className="pb-2 text-sm text-muted-foreground">Tick what you already know. Papers will point these out on the concepts that use them.</p>
-              <ul className="flex flex-wrap gap-2">
-                {starters.map((t) => (
-                  <li key={t.key}>
-                    <button
-                      type="button"
-                      disabled={!profile.ready}
-                      onClick={() => profile.set(t.key)}
-                      data-testid="starter-topic"
-                      className="press cursor-pointer rounded bg-card px-2.5 py-1 text-[13px] shadow-[var(--shadow-ring)] hover:shadow-[var(--shadow-ring-hi)] disabled:cursor-not-allowed disabled:opacity-50 border border-transparent"
-                    >
-                      {t.name}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          {startersFirst === false && starterBlock}
         </section>
       </div>
+
+      <ConfirmModal
+        open={!!unchecking}
+        onClose={() => !uncheckBusy && setUnchecking(null)}
+        onConfirm={() => void uncheckAll()}
+        loading={uncheckBusy}
+        title={unchecking ? `Uncheck ${plural(unchecking.ids.length, 'concept', 'concepts')} in ${unchecking.title}?` : ''}
+        description="Only this paper's checkmarks change. Checkmarks in other papers and your profile stay."
+        confirmText="Uncheck all"
+      />
     </div>
   )
 }
