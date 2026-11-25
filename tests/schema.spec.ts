@@ -365,6 +365,25 @@ test('See in overview keeps the requested highlight while the pointer stays stil
   await page.keyboard.press('Escape')
 })
 
+test('A plain role that restates why-needed is hidden, and See in overview moves to the why-needed line', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await openReadyFixturePaper(page)
+  const win = page.getByTestId('overview-window')
+  // c6's role ("These are the scores the correction is added to.") repeats its why-needed line.
+  await openBranch(page, 'attention')
+  const c6 = card(page, 'c6')
+  await expect(c6.getByTestId('concept-role')).toHaveCount(0)
+  await expect(c6).toContainText('The correction is added to scores scaled by')
+  await c6.getByTestId('see-in-overview').click()
+  await expect(win).toBeVisible()
+  await expect(win.locator('[data-testid="overview-map"] [data-testid="overview-chip"][data-concept-key="c6"]')).toHaveAttribute('data-hot', 'true')
+  await page.keyboard.press('Escape')
+  await expect(win).toHaveCount(0)
+  await expect(c6.getByTestId('see-in-overview')).toBeFocused()
+})
+
 test('Start in the overview counts as reading it, and the box can still be unticked', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada] = await users(['Schema ada'])
@@ -449,7 +468,7 @@ test('step labels are cut near 24 characters, and all five steps of a five-branc
     for (const l of await strip.getByTestId('step-label').allTextContents()) expect(l.length).toBeLessThanOrEqual(24)
     // A cut name keeps its full name as its tooltip and accessible name.
     const first = strip.locator('[data-testid="sequence-step"][data-branch-key="foundations"]')
-    await expect(first.getByTestId('step-label')).toHaveText('Mathematical and…')
+    await expect(first.getByTestId('step-label')).toHaveText('Mathematical…')
     await expect(first).toHaveAttribute('title', 'Mathematical and machine learning foundations')
     await expect(strip.getByRole('button', { name: /^Step 1: Mathematical and machine learning foundations/ })).toBeVisible()
   }
