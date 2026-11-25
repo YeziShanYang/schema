@@ -731,6 +731,20 @@ test('the library shows a placeholder, never 0 / 0, while its counts load', asyn
   expect(counts).not.toContain('0 / 0')
 })
 
+test('Home\'s Continue card counts one paper in the singular', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await openReadyFixturePaper(page)
+  // A workspace made by the action is opened last, so Home continues with it.
+  const name = `[fixture] One paper ${Date.now()}`
+  expect((await action(page, 'analyzePaper', { input: FIXTURE_ID, newWorkspace: { name } })).success).toBe(true)
+  await page.goto('/home')
+  const continueCard = page.getByTestId('continue')
+  await expect(continueCard).toContainText(name, { timeout: 15_000 })
+  await expect(continueCard.getByRole('link', { name })).toContainText(/1 paper$/)
+})
+
 /** Calls a server action as the signed-in reader of `page`. */
 async function action(page: Page, name: string, params: Record<string, unknown>) {
   return page.evaluate(

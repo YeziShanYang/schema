@@ -6,6 +6,7 @@ import { cleanGraph } from './graph'
 import { extractJsonObject } from './json'
 import { normalizeTopicKey, STARTER_TOPICS } from './topics'
 import { capState, CAP_WINDOW_MS } from './cap'
+import { plural } from './utils'
 
 describe('parseArxivId', () => {
   it.each([
@@ -183,5 +184,13 @@ describe('linkTitle', () => {
     expect(linkTitle('https://www.example.org/learn/softmax/?x=1', 'https://www.example.org/learn/softmax/?x=1')).toBe('example.org/learn/softmax')
     expect(linkTitle('', 'https://cs231n.github.io/neural-networks-1/')).toBe('cs231n.github.io/neural-networks-1')
     expect(prettyUrl('not a url')).toBe('not a url')
+  })
+})
+
+describe('plural', () => {
+  it('uses the singular only for one', () => {
+    expect(plural(1, 'paper', 'papers')).toBe('1 paper')
+    expect(plural(0, 'paper', 'papers')).toBe('0 papers')
+    expect(plural(3, 'paper', 'papers')).toBe('3 papers')
   })
 })

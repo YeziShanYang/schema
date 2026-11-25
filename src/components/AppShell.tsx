@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { signOut, useAuthProfileReady } from 'deepspace'
-import { cn } from '@/lib/utils'
+import { cn, plural } from '@/lib/utils'
 import { Button } from './ui'
 import { AddButton } from './AddDialog'
 import { SignInOverlay } from './SignInOverlay'
@@ -33,10 +33,6 @@ function Brand({ to = '/home' }: { to?: string }) {
       {APP_DISPLAY_NAME}
     </Link>
   )
-}
-
-function plural(n: number, one: string, many: string) {
-  return `${n} ${n === 1 ? one : many}`
 }
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {

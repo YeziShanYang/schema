@@ -4,6 +4,7 @@
  */
 
 import { Link } from 'react-router-dom'
+import { plural } from '@/lib/utils'
 import { useQuery } from 'deepspace'
 import { AnalyzeForm } from '../../../components/AnalyzeForm'
 import { AddButton } from '../../../components/AddDialog'
@@ -36,7 +37,7 @@ export default function HomePage() {
               <Link to={`/w/${lastWorkspace.recordId}`} className="mt-1 block text-lg font-semibold text-foreground hover:text-primary">
                 {lastWorkspace.data.name}
                 <span className="ml-2 text-sm font-normal text-muted-foreground">
-                  {workspaces.papersOf(lastWorkspace.recordId).length} papers
+                  {plural(workspaces.papersOf(lastWorkspace.recordId).length, 'paper', 'papers')}
                 </span>
               </Link>
             ) : (
