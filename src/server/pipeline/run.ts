@@ -37,6 +37,7 @@ import { pickQuote, quotePickOrder } from '../../lib/quote-rules'
 import { findNamedQuote, nameTerms, quoteSearch } from '../../lib/quote-fallback'
 import { hasMath } from '../../lib/math'
 import { cleanGraph } from '../../lib/graph'
+import { foundationDepth } from '../../lib/depth'
 import { asString, asStringArray } from '../../lib/json'
 import { STARTER_TOPICS } from '../../lib/topics'
 import { planKnowledgeRemap } from '../../lib/knowledge-remap'
@@ -437,6 +438,15 @@ async function stepConcepts(state: AnalyzeState, s: StepCtx) {
     if (t?.data.resourcesStatus === 'skipped') {
       state.writes.push({ op: 'update', collection: 'topics', recordId: t.recordId, data: { resourcesStatus: 'none' } })
     }
+  }
+
+  // A foundation with no prerequisites is at most "working". This runs before the quotes, which deep concepts pick first.
+  const levelOf = (id: string) => topicByKey.get(topicFor[id])?.data.level ?? newTopics.get(topicFor[id])?.level
+  for (const c of kept) {
+    const depth = foundationDepth(c.depth, graph.deps[c.id], levelOf(c.id))
+    if (depth === c.depth) continue
+    console.info(`[analyze] ${paper.data.arxivId}: ${c.id} is a foundation with no prerequisites, depth ${c.depth} -> ${depth}`)
+    c.depth = depth
   }
 
   // Deep concepts pick first, so a central idea keeps a passage it shares with a foundation.

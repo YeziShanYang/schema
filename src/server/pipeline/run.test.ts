@@ -189,7 +189,7 @@ describe('analyze job timings', () => {
   })
 })
 
-type ConceptRow = { key: string; branchKey: string; quote: string; quoteVerified: boolean; plainRole?: string }
+type ConceptRow = { key: string; branchKey: string; quote: string; quoteVerified: boolean; plainRole?: string; depth: string }
 
 /** The real fixture response for `hint`, with `edit` applied to its JSON. */
 async function editedFixture(hint: string, edit: (json: Record<string, unknown>) => void) {
@@ -238,6 +238,21 @@ describe('analyze job grounding and placement', () => {
     expect(concepts.c5.branchKey).toBe('geometry')
     expect((await paperData(id)).branches.map((b) => b.key)).toEqual(['attention', 'geometry', 'other'])
     expect(vi.mocked(console.info).mock.calls.flat()).toContain('[analyze] 0000.00004: c1 moved from branch geometry to attention (foundation-to-earlier-user)')
+  })
+})
+
+describe('analyze job depth', () => {
+  it('stores a deep foundation with no prerequisites as working, and keeps deep for a concept built on others', async () => {
+    await editedFixture('concepts', (json) => {
+      for (const c of json.concepts as { id: string; depth: string }[]) if (c.id === 'c1') c.depth = 'deep'
+    })
+    const id = await createPaper('0000.00007')
+    await runJob(id, '0000.00007')
+
+    const concepts = await conceptRows(id)
+    expect(concepts.c1.depth).toBe('working')
+    expect(concepts.c2.depth).toBe('deep')
+    expect(vi.mocked(console.info).mock.calls.flat()).toContain('[analyze] 0000.00007: c1 is a foundation with no prerequisites, depth deep -> working')
   })
 })
 
