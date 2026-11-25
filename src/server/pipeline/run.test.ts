@@ -191,6 +191,18 @@ describe('analyze job timings', () => {
 
 type ConceptRow = { key: string; branchKey: string; quote: string; quoteVerified: boolean; plainRole?: string }
 
+/** The real fixture response for `hint`, with `edit` applied to its JSON. */
+async function editedFixture(hint: string, edit: (json: Record<string, unknown>) => void) {
+  const real = await vi.importActual<typeof import('./fixtures')>('./fixtures')
+  vi.mocked(fixtureIntegration).mockImplementation((endpoint, body, h) => {
+    const out = real.fixtureIntegration(endpoint, body, h)
+    if (h !== hint) return out
+    const json = JSON.parse((out as { content: { text: string }[] }).content[0].text)
+    edit(json)
+    return { content: [{ type: 'text', text: JSON.stringify(json) }], stop_reason: 'end_turn' }
+  })
+}
+
 async function conceptRows(paperId: string): Promise<Record<string, ConceptRow>> {
   const rows = await h.records.query('concepts', { where: { paperId } })
   return Object.fromEntries(rows.map((r) => [r.data.key as string, r.data as unknown as ConceptRow]))
@@ -211,5 +223,20 @@ describe('analyze job grounding and placement', () => {
     })
     expect(concepts.c4).toMatchObject({ quote: '', quoteVerified: false })
     expect((await paperData(id)).conceptsWithoutQuote).toBe(1)
+  })
+
+  it('moves a foundation filed in a later branch to the earlier branch that uses it, before saving', async () => {
+    // Softmax (c1) filed under geometry: attention needs geometry for c1, and geometry needs attention for c2.
+    await editedFixture('concepts', (json) => {
+      for (const c of json.concepts as { id: string; branch_key: string }[]) if (c.id === 'c1' || c.id === 'c5') c.branch_key = 'geometry'
+    })
+    const id = await createPaper('0000.00004')
+    await runJob(id, '0000.00004')
+
+    const concepts = await conceptRows(id)
+    expect(concepts.c1.branchKey).toBe('attention')
+    expect(concepts.c5.branchKey).toBe('geometry')
+    expect((await paperData(id)).branches.map((b) => b.key)).toEqual(['attention', 'geometry', 'other'])
+    expect(vi.mocked(console.info).mock.calls.flat()).toContain('[analyze] 0000.00004: c1 moved from branch geometry to attention (foundation-to-earlier-user)')
   })
 })

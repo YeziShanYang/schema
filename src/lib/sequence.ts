@@ -60,18 +60,18 @@ export interface Sequence<C extends SeqConcept = SeqConcept> {
   stepInBranch: Map<string, number>
 }
 
-export function recommendedSequence<C extends SeqConcept>(
-  branches: SeqBranch[],
-  concepts: C[],
-  statusOf: (concept: C) => KnowledgeStatus | null,
-): Sequence<C> {
+/**
+ * The branches in learning order (see the file header). `cycle` is true when
+ * at some point no remaining branch had all its prerequisite branches
+ * placed, so the model's order decided: the branches' dependencies form a cycle.
+ */
+export function branchOrder<B extends SeqBranch>(
+  branches: B[],
+  concepts: Pick<SeqConcept, 'key' | 'branchKey' | 'dependsOn'>[],
+): { ordered: B[]; cycle: boolean } {
   const modelRank = new Map(branches.map((b, i) => [b.key, i]))
-  const byBranch = new Map<string, C[]>()
-  for (const c of concepts) {
-    const list = byBranch.get(c.branchKey) ?? []
-    list.push(c)
-    byBranch.set(c.branchKey, list)
-  }
+  const sizes = new Map<string, number>()
+  for (const c of concepts) sizes.set(c.branchKey, (sizes.get(c.branchKey) ?? 0) + 1)
   // Branch-level prerequisites from concept dependencies that cross branches.
   const branchOfConcept = new Map(concepts.map((c) => [c.key, c.branchKey]))
   const prereqs = new Map<string, Set<string>>(branches.map((b) => [b.key, new Set<string>()]))
@@ -82,17 +82,34 @@ export function recommendedSequence<C extends SeqConcept>(
     }
   }
   const modelOrder = [...branches].sort((a, b) => modelRank.get(a.key)! - modelRank.get(b.key)!)
-  const remaining = modelOrder.filter((b) => (byBranch.get(b.key)?.length ?? 0) > 0)
-  const orderedBranches: SeqBranch[] = []
+  const remaining = modelOrder.filter((b) => (sizes.get(b.key) ?? 0) > 0)
+  const ordered: B[] = []
   const placed = new Set<string>()
+  let cycle = false
   while (remaining.length) {
     // The earliest branch (in model order) whose prerequisite branches are all placed; on a cycle, the earliest.
-    const i = Math.max(0, remaining.findIndex((b) => [...(prereqs.get(b.key) ?? [])].every((p) => placed.has(p))))
-    const [next] = remaining.splice(i, 1)
-    orderedBranches.push(next)
+    const ready = remaining.findIndex((b) => [...(prereqs.get(b.key) ?? [])].every((p) => placed.has(p)))
+    if (ready === -1) cycle = true
+    const [next] = remaining.splice(Math.max(0, ready), 1)
+    ordered.push(next)
     placed.add(next.key)
   }
-  orderedBranches.push(...modelOrder.filter((b) => !placed.has(b.key)))
+  ordered.push(...modelOrder.filter((b) => !placed.has(b.key)))
+  return { ordered, cycle }
+}
+
+export function recommendedSequence<C extends SeqConcept>(
+  branches: SeqBranch[],
+  concepts: C[],
+  statusOf: (concept: C) => KnowledgeStatus | null,
+): Sequence<C> {
+  const byBranch = new Map<string, C[]>()
+  for (const c of concepts) {
+    const list = byBranch.get(c.branchKey) ?? []
+    list.push(c)
+    byBranch.set(c.branchKey, list)
+  }
+  const orderedBranches = branchOrder(branches, concepts).ordered
   const branchRank = new Map(orderedBranches.map((b, i) => [b.key, i]))
   const rankOf = (key: string) => branchRank.get(key) ?? orderedBranches.length
 

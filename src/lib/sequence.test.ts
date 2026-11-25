@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { recommendedSequence, type SeqConcept } from './sequence'
+import { branchOrder, recommendedSequence, type SeqConcept } from './sequence'
 import type { KnowledgeStatus } from '../types'
 
 const branches = [
@@ -110,5 +110,14 @@ describe('recommendedSequence', () => {
   it('puts branches with no concepts last', () => {
     const s = recommendedSequence([...branches, { key: 'empty', name: 'Empty' }], concepts, statuses({}))
     expect(s.steps[s.steps.length - 1].branchKey).toBe('empty')
+  })
+})
+
+describe('branchOrder', () => {
+  it('reports when the branches depend on each other in a circle and the model order decides', () => {
+    const two = [{ key: 'a', name: 'A' }, { key: 'b', name: 'B' }]
+    const cyclic = [c('a1', 'a', 0, 0, ['b1']), c('b1', 'b', 0, 1), c('b2', 'b', 1, 2, ['a1'])]
+    expect(branchOrder(two, cyclic)).toEqual({ ordered: two, cycle: true })
+    expect(branchOrder(two, [c('a1', 'a', 0, 0), c('b1', 'b', 1, 1, ['a1'])]).cycle).toBe(false)
   })
 })

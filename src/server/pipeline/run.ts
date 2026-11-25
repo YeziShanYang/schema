@@ -45,6 +45,7 @@ import { assignTopics, promptTopics } from './assign-topics'
 import { generateOverview, type OverviewConcept } from '../overview'
 import { cleanBranches } from '../../lib/branches'
 import { mergeSingletonBranches } from '../../lib/branch-merge'
+import { fixBranchPlacement } from '../../lib/branch-placement'
 import { createPipelineClient, fixturesAllowed, ownerContext } from './client'
 import { refundAnalyze } from '../usage'
 import type { PipelineClient } from './client'
@@ -407,8 +408,16 @@ async function stepConcepts(state: AnalyzeState, s: StepCtx) {
   const graph = cleanGraph(parsed.map((c) => ({ id: c.id, dependsOn: c.dependsOn })))
   const kept = parsed.filter((c) => graph.ids.includes(c.id))
   const cleaned = cleanBranches(json.branches, kept.map((c) => ({ id: c.id, branchKey: c.branchKey })))
-  const { branches, branchOf, merges } = mergeSingletonBranches(cleaned.branches, cleaned.branchOf, graph.deps)
-  for (const m of merges) console.info(`[analyze] ${paper.data.arxivId}: single-concept branch ${m.from} merged into ${m.to}`)
+  const merged = mergeSingletonBranches(cleaned.branches, cleaned.branchOf, graph.deps)
+  const branches = merged.branches
+  for (const m of merged.merges) console.info(`[analyze] ${paper.data.arxivId}: single-concept branch ${m.from} merged into ${m.to}`)
+  // Concepts filed so that the branches depend on each other in a circle move to a branch that breaks it.
+  const placement = fixBranchPlacement(branches, merged.branchOf, graph.deps, graph.tiers)
+  const branchOf = placement.branchOf
+  for (const m of placement.moves) console.info(`[analyze] ${paper.data.arxivId}: ${m.conceptId} moved from branch ${m.from} to ${m.to} (${m.rule})`)
+  if (placement.cycleBefore) {
+    console.info(`[analyze] ${paper.data.arxivId}: branch cycle ${placement.cycleAfter ? 'remains' : 'resolved'} after ${placement.moves.length} moves`)
+  }
 
   // Resolve each concept to its own topic key, creating new topics as needed.
   const topicByKey = new Map(topics.map((t) => [t.data.key, t]))
