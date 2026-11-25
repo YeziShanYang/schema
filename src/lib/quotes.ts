@@ -80,6 +80,22 @@ export function indexPaperText(raw: string): PaperIndex {
  * punctuation is kept. Null when the quote is not an exact match.
  */
 export function exactQuoteSpan(quote: string, index: PaperIndex): string | null {
+  const range = exactQuoteRange(quote, index)
+  return range ? spanText(index, range) : null
+}
+
+/** Raw offsets [start, end) of a quote's exact match, widened as exactQuoteSpan describes. */
+export interface QuoteRange {
+  start: number
+  end: number
+}
+
+/** The paper's text for a range, on one line. */
+export function spanText(index: PaperIndex, range: QuoteRange): string {
+  return index.raw.slice(range.start, range.end).replace(/\s+/g, ' ').trim()
+}
+
+export function exactQuoteRange(quote: string, index: PaperIndex): QuoteRange | null {
   const q = normalizeForMatch(quote)
   if (q.length < 12) return null
   const pos = index.norm.indexOf(q)
@@ -99,5 +115,5 @@ export function exactQuoteSpan(quote: string, index: PaperIndex): string | null 
   }
   const trailing = quote.trim().match(/[.!?;,:]$/)?.[0]
   if (trailing && raw[end] === trailing) end += 1
-  return raw.slice(start, end).replace(/\s+/g, ' ').trim()
+  return { start, end }
 }

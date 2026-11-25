@@ -426,8 +426,9 @@ async function stepConcepts(state: AnalyzeState, s: StepCtx) {
   const usedQuotes = new Set<string>()
   const quoteOf: Record<string, string> = {}
   for (const c of quotePickOrder(kept)) {
-    const { quote, rejected: badQuotes } = pickQuote(c.quotes, paperIndex, usedQuotes)
+    const { quote, rejected: badQuotes, extendedFrom } = pickQuote(c.quotes, paperIndex, usedQuotes)
     if (badQuotes.length) console.info(`[analyze] ${paper.data.arxivId}: ${c.id} quotes rejected: ${badQuotes.map((b) => b.problem).join(', ')}`)
+    if (extendedFrom) console.info(`[analyze] ${paper.data.arxivId}: ${c.id} quote carried on to the end of its sentence`)
     quoteOf[c.id] = quote
   }
   let order = 0
