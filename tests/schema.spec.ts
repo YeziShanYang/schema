@@ -521,6 +521,28 @@ test('a Learn first chip leaves one way back, and the card a jump lands on is ou
   await expect(back).toHaveCount(0)
 })
 
+test('concept cards drop a topic line that repeats the name, explain their depth, and show the explanation allowance once', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await openReadyFixturePaper(page)
+  await openBranch(page, 'foundations')
+  // c1's topic has another name, so its line stays; c5's topic is "Gradient descent", the concept's own name.
+  await expect(card(page, 'c1').getByTestId('concept-topic')).toHaveText('Topic: Softmax function. Turning a vector of scores into a probability distribution.')
+  await expect(card(page, 'c5').getByTestId('concept-topic')).toHaveCount(0)
+  // The depth label's tooltip says what the level asks of the reader.
+  await expect(card(page, 'c1').getByTestId('concept-depth')).toHaveAttribute('title', 'Working: You need it to follow the equations or arguments that use it.')
+  await expect(card(page, 'c5').getByTestId('concept-depth')).toHaveAttribute('title', 'Skim: Recognizing the term is enough.')
+
+  // No spec explains a geometry concept, so the allowance shows, once, in the panel header.
+  await openBranch(page, 'geometry')
+  await expect(card(page, 'c3').getByTestId('concept-depth')).toHaveAttribute('title', "Deep: It is central to the paper's contribution.")
+  await expect(page.getByTestId('explain-allowance')).toHaveText(/^\d+ AI explanations left today$/)
+  await expect(page.getByTestId('branch-concepts')).not.toContainText('left today')
+  await expect(card(page, 'c3').getByTestId('explain-button')).toHaveText('Explain with AI')
+  await page.keyboard.press('Escape')
+})
+
 test('known or not known, saved per reader with a green outline; the paper is shared', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada, bob] = await users(['Schema ada', 'Schema bob'])

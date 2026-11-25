@@ -317,6 +317,8 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const branchLinks = branch ? p.linksForBranch(branch.key) : 'ready'
   const branchLoading = branch ? loadingBranches.has(branch.key) || branchLinks === 'loading' : false
   const linksState: 'loading' | 'signin' | null = branchLoading ? 'loading' : !isSignedIn && branchLinks === 'needs-load' ? 'signin' : null
+  // The explanation allowance shows once in the header, while a card in the branch can still use it.
+  const branchNeedsExplain = !!branch && p.concepts.some((c) => c.data.branchKey === branch.key && !c.data.explanation)
 
   const finishControls = finished ? (
     <span className="flex items-center gap-2">
@@ -562,6 +564,9 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
                 {isSignedIn && allowance && branchLinks !== 'ready' && (
                   <span className="text-xs text-faint tabular-nums">{allowance.branch.remaining} branch link loads left today</span>
                 )}
+                {isSignedIn && allowance && branchNeedsExplain && (
+                  <span className="text-xs text-faint tabular-nums" data-testid="explain-allowance">{allowance.explain.remaining} AI explanations left today</span>
+                )}
               </div>
             </div>
           )
@@ -592,7 +597,6 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
                 hint={hint}
                 hintTitle={hint?.kind === 'checked' ? titleOf(hint.paperId) : undefined}
                 signedIn={!!isSignedIn}
-                explainLeft={allowance?.explain.remaining}
                 linksState={linksState}
                 onSignIn={openSignIn}
               />

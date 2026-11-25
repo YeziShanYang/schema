@@ -2,7 +2,8 @@
  * One concept: its checkmark, why the paper needs it, the verified quote,
  * topic description and explainer links, and the AI explanation. A concept
  * not checked here can carry a muted note: checked in another paper, or in
- * the reader's profile. Works with the real rows or the signed-out demo adapter.
+ * the reader's profile. The topic line is left out when the topic has the
+ * concept's own name. Works with the real rows or the signed-out demo adapter.
  */
 
 import { useState } from 'react'
@@ -10,17 +11,26 @@ import { Link } from 'react-router-dom'
 import type { RecordData } from 'deepspace'
 import { cn } from '@/lib/utils'
 import { Button } from '../ui'
-import type { ConceptData, KnowledgeStatus, PaperData, TopicData } from '../../types'
+import type { ConceptData, ConceptDepth, KnowledgeStatus, PaperData, TopicData } from '../../types'
 import type { ReaderKnowledgeApi } from '../../hooks/useDemoKnowledge'
 import { actions } from '../../lib/actions-client'
 import { arxivSlug } from '../../lib/arxiv'
 import { hintText, type ConceptHint } from '../../lib/hints'
 import { linkTitle } from '../../lib/links'
+import { normalizeConceptName } from '../../lib/topics'
 import { ConceptName, MathText } from '../MathText'
 import { KnownToggle } from '../StatusControl'
 import { Chip } from '../blueprint'
 import { CheckIcon, ExternalIcon, SparkIcon } from '../icons'
 import { cleanTitle, Markdown } from '../Markdown'
+
+/** What each depth asks of the reader, as the concepts prompt defines it. Shown as the depth chip's tooltip. */
+const DEPTH_MEANING: Record<ConceptDepth, string> = {
+  skim: 'Recognizing the term is enough.',
+  working: 'You need it to follow the equations or arguments that use it.',
+  deep: "It is central to the paper's contribution.",
+}
+const DEPTH_NAME: Record<ConceptDepth, string> = { skim: 'Skim', working: 'Working', deep: 'Deep' }
 
 interface Props {
   concept: RecordData<ConceptData>
@@ -39,7 +49,6 @@ interface Props {
   /** Title of the paper a `checked` hint points to, when known. */
   hintTitle?: string
   signedIn: boolean
-  explainLeft?: number
   /** Branch-level link state for topics that have no links yet. */
   linksState?: 'loading' | 'signin' | null
   /** Opens sign-in; gets the button that asked, so focus can return to it. */
@@ -49,7 +58,7 @@ interface Props {
   nextUp?: boolean
 }
 
-export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcept, onSeeInOverview, landed, status, knowledge, hint, hintTitle, signedIn, explainLeft, linksState, onSignIn, stepIndex, nextUp }: Props) {
+export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcept, onSeeInOverview, landed, status, knowledge, hint, hintTitle, signedIn, linksState, onSignIn, stepIndex, nextUp }: Props) {
   const c = concept.data
   // A cached explanation starts collapsed; one generated now opens right away.
   const [showExplain, setShowExplain] = useState(false)
@@ -61,6 +70,8 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
   // A paper-only topic gets no web search; its card leads with the AI explanation instead.
   const skipped = topic?.resourcesStatus === 'skipped'
   const note = status !== 'known' && hint ? hint : null
+  const depthMeaning = DEPTH_MEANING[c.depth] as string | undefined
+  const showTopic = !!topic?.description && normalizeConceptName(topic.name) !== normalizeConceptName(c.name)
 
   async function setStatus(next: KnowledgeStatus | null) {
     if (next === null) await knowledge.clear(concept.recordId)
@@ -103,7 +114,10 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
           </span>
           <span className="flex shrink-0 items-center gap-1.5">
             {nextUp && <Chip tone="accent"><span data-testid="next-up-badge">Next up</span></Chip>}
-            <Chip tone={c.depth === 'deep' ? 'accent' : 'plain'}>{c.depth}</Chip>
+            <span title={depthMeaning && `${DEPTH_NAME[c.depth]}: ${depthMeaning}`} data-testid="concept-depth">
+              <Chip tone={c.depth === 'deep' ? 'accent' : 'plain'}>{c.depth}</Chip>
+              {depthMeaning && <span className="sr-only">: {depthMeaning}</span>}
+            </span>
           </span>
         </div>
 
@@ -150,7 +164,7 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
         )}
 
         <p className="mb-2 mt-1.5 text-[13px] leading-[1.45] text-muted-foreground"><MathText text={c.whyNeeded} /></p>
-        {topic?.description && <p className="mb-2 text-xs text-faint">Topic: {topic.name}. {topic.description}</p>}
+        {showTopic && <p className="mb-2 text-xs text-faint" data-testid="concept-topic">Topic: {topic!.name}. {topic!.description}</p>}
 
         {/* quoteVerified is stored as 0 or 1, and a bare 0 would render as text. */}
         {c.quote && !!c.quoteVerified && (
@@ -197,7 +211,6 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
           ) : signedIn ? (
             <Button size="sm" variant={skipped ? 'outline' : 'ghost'} className={cn('text-primary', skipped && 'order-first')} loading={explaining} onClick={explain} data-testid="explain-button">
               <SparkIcon size={13} /> Explain with AI
-              {explainLeft !== undefined && <span className="font-normal text-faint tabular-nums">· {explainLeft} left today</span>}
             </Button>
           ) : (
             <button type="button" onClick={(e) => onSignIn?.(e.currentTarget)} className={cn('press inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-[12.5px] font-medium text-primary hover:bg-accent-soft', skipped && 'order-first')} data-testid="explain-signin">
