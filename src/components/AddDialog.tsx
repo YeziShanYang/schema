@@ -158,7 +158,7 @@ export function AddDialog({
   ) : null
 
   return (
-    <BranchPanel open={open} onClose={onClose} returnFocus={returnFocus} title={title} eyebrow={workspaceId ? 'This workspace' : 'Add'} header={allowanceLine} testId="add-dialog" closeLabel="Close" maxWidth={640}>
+    <BranchPanel open={open} onClose={onClose} returnFocus={returnFocus} title={title} header={allowanceLine} testId="add-dialog" closeLabel="Close" maxWidth={640}>
       {step === 'choose' && (
         <div className="grid gap-3 sm:grid-cols-2">
           <button type="button" onClick={() => setStep('paper')} data-testid="add-choice-paper"

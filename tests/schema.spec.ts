@@ -1038,6 +1038,26 @@ test('page headers leave Add and the page name to the sidebar from md up', async
     // No eyebrow label above the title: the highlighted sidebar row names the page.
     await expect(header.locator('.label')).toHaveCount(0)
   }
+  // The workspace page and the Add window have no eyebrow either; the workspace page keeps its own Add paper.
+  const made = await action(page, 'analyzePaper', { input: FIXTURE_ID, newWorkspace: { name: `[fixture] Header ${Date.now()}` } })
+  expect(made.success).toBe(true)
+  await page.goto(`/w/${made.data.workspaceId}`)
+  const wsHeader = page.getByTestId('workspace-page').locator('header').first()
+  await expect(page.getByTestId('workspace-name')).toBeVisible({ timeout: 15_000 })
+  await expect(wsHeader.getByRole('heading', { level: 1 })).toBeVisible()
+  await expect(wsHeader.locator('.label')).toHaveCount(0)
+  await expect(wsHeader.getByTestId('add-paper-open')).toBeVisible()
+  await wsHeader.getByTestId('add-paper-open').click()
+  await expect(page.locator('#add-dialog-title')).toHaveText('Add a paper')
+  await expect(page.getByTestId('add-dialog').locator('#add-dialog-title').locator('xpath=preceding-sibling::*')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await page.goto('/home')
+  await page.getByTestId('add-open').click()
+  await expect(page.locator('#add-dialog-title')).toHaveText('Add')
+  await expect(page.getByTestId('add-dialog').locator('#add-dialog-title').locator('xpath=preceding-sibling::*')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('add-dialog')).toHaveCount(0)
+
   // Beside the sidebar there is one Add button, the sidebar's.
   await page.goto('/home')
   await expect(page.getByTestId('add-open')).toBeVisible()

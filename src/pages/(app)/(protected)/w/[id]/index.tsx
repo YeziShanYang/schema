@@ -161,8 +161,7 @@ export default function WorkspacePage() {
     <div className="flex min-h-[calc(100vh-48px)] flex-col md:min-h-screen" data-testid="workspace-page">
       <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border bg-card px-5 pb-3.5 pt-5 md:px-7">
         <div className="min-w-0">
-          <div className="label">Workspace</div>
-          <h1 className="mt-0.5 text-[26px] font-semibold leading-[1.15] tracking-[-0.01em]">
+          <h1 className="text-[26px] font-semibold leading-[1.15] tracking-[-0.01em]">
             <InlineEdit value={ws.data.name} label="workspace name" onSave={async (v) => { if (v) await g.workspaces.update(id, { name: v }) }} />
           </h1>
           <div className="mt-0.5 text-sm text-muted-foreground">
