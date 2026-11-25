@@ -30,6 +30,8 @@ interface Props {
   onOpenConcept?: (key: string) => void
   /** Opens the paper overview with this concept highlighted. */
   onSeeInOverview?: () => void
+  /** Set when a jump just landed on this card; a new value outlines it again. */
+  landed?: number
   status: KnowledgeStatus | null
   knowledge: Pick<ReaderKnowledgeApi, 'ready' | 'isPending' | 'set' | 'clear'>
   /** Shown only while the concept is not checked here. */
@@ -47,7 +49,7 @@ interface Props {
   nextUp?: boolean
 }
 
-export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcept, onSeeInOverview, status, knowledge, hint, hintTitle, signedIn, explainLeft, linksState, onSignIn, stepIndex, nextUp }: Props) {
+export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcept, onSeeInOverview, landed, status, knowledge, hint, hintTitle, signedIn, explainLeft, linksState, onSignIn, stepIndex, nextUp }: Props) {
   const c = concept.data
   // A cached explanation starts collapsed; one generated now opens right away.
   const [showExplain, setShowExplain] = useState(false)
@@ -87,10 +89,11 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
       data-status={status ?? 'unknown'}
       data-next-up={nextUp ? 'true' : undefined}
       className={
-        'status-surface grid scroll-mt-4 grid-cols-[28px_minmax(0,1fr)] gap-2.5 rounded-lg border bg-card p-3.5 ' +
+        'status-surface relative grid scroll-mt-4 grid-cols-[28px_minmax(0,1fr)] gap-2.5 rounded-lg border bg-card p-3.5 ' +
         (status === 'known' ? 'known-outline' : nextUp ? 'border-primary shadow-[0_0_0_1px_var(--color-primary)]' : 'border-border')
       }
     >
+      {landed !== undefined && <span key={landed} className="land-ring" aria-hidden="true" data-testid="land-ring" />}
       <KnownToggle status={status} name={c.name} disabled={!knowledge.ready || knowledge.isPending(concept.recordId)} onChange={setStatus} className="mt-px" />
       <div className="min-w-0">
         <div className="flex items-baseline justify-between gap-2.5">
@@ -139,7 +142,7 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
           <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
             <span className="label">Learn first</span>
             {prerequisites.map((p) => (
-              <button key={p.key} type="button" onClick={() => onOpenConcept?.(p.key)} className="press cursor-pointer rounded-[3px] bg-surface-2 px-1.5 py-0.5 text-xs text-foreground border border-border hover:bg-accent-soft">
+              <button key={p.key} type="button" onClick={() => onOpenConcept?.(p.key)} data-testid="learn-first-chip" data-concept-key={p.key} className="press cursor-pointer rounded-[3px] bg-surface-2 px-1.5 py-0.5 text-xs text-foreground border border-border hover:bg-accent-soft">
                 <ConceptName name={p.name} />
               </button>
             ))}

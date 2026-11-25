@@ -36,6 +36,7 @@ export function BranchPanel({
   onClose,
   returnFocus,
   title,
+  back,
   eyebrow,
   description,
   header,
@@ -48,6 +49,8 @@ export function BranchPanel({
   onClose: () => void
   returnFocus?: RefObject<HTMLElement | null> | (() => HTMLElement | null)
   title: string
+  /** A way back to where a jump started, above the eyebrow. */
+  back?: ReactNode
   eyebrow?: ReactNode
   description?: string
   header?: ReactNode
@@ -147,6 +150,7 @@ export function BranchPanel({
         <div className="border-b border-border px-5 pb-3.5 pt-4 md:px-6">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
+              {back}
               {eyebrow && <div className="label">{eyebrow}</div>}
               <h2 id={`${testId}-title`} className="mt-1 text-[21px] font-semibold leading-tight">{title}</h2>
               {description && <p className="mt-1 text-[13px] text-muted-foreground">{description}</p>}

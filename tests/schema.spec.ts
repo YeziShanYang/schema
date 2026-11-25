@@ -302,8 +302,15 @@ test('overview: opens on its own once, is step 0 until read, the read mark persi
   await expect(panel).toHaveCount(0)
   await expect(win.locator('[data-testid="overview-map"] [data-testid="overview-chip"][data-concept-key="c3"]')).toHaveAttribute('data-hot', 'true')
   await expect(win.locator('[data-testid="overview-step"][data-item-id="s4"]')).toHaveAttribute('data-hot', 'true')
+  // Closing it goes back to the card: the branch reopens there, outlined, with focus on See in overview.
   await page.keyboard.press('Escape')
   await expect(win).toHaveCount(0)
+  await expect(panel).toBeVisible()
+  await expect(card(page, 'c3')).toBeInViewport()
+  await expect(card(page, 'c3').getByTestId('land-ring')).toBeAttached()
+  await expect(card(page, 'c3').getByTestId('see-in-overview')).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(panel).toHaveCount(0)
   await expect(page.locator('[data-testid="branch"][data-branch-key="geometry"]')).toBeFocused()
 })
 
@@ -394,6 +401,51 @@ test('recommended sequence: next up follows prerequisites and opens the concept'
   await expect(page.getByTestId('next-up')).toHaveText('Next up: Attention as a weighted average')
   await expect(page.locator('[data-testid="sequence-step"][data-state="done"]')).toContainText('Foundations')
   await expect(page.locator('[data-testid="branch"][data-branch-key="attention"] [data-testid="branch-current"]')).toHaveText('Continue')
+})
+
+test('a Learn first chip leaves one way back, and the card a jump lands on is outlined for a moment', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await openReadyFixturePaper(page)
+  const panel = page.getByTestId('branch-panel')
+  const title = page.locator('#branch-panel-title')
+  const back = page.getByTestId('panel-back')
+  await openBranch(page, 'geometry')
+  await expect(back).toHaveCount(0)
+
+  // c3 needs c2, which is in Attention.
+  await card(page, 'c3').getByTestId('learn-first-chip').filter({ hasText: 'Attention as a weighted average' }).click()
+  await expect(title).toHaveText('Attention')
+  await expect(card(page, 'c2')).toBeInViewport()
+  // The card it lands on is outlined; under reduced motion the outline holds still and fades, then goes.
+  const ring = card(page, 'c2').getByTestId('land-ring')
+  await expect(ring).toBeAttached()
+  expect(await ring.evaluate((el) => getComputedStyle(el).animationName)).toBe('land-fade')
+  await expect(ring).toHaveCount(0, { timeout: 3000 })
+  await expect(back).toHaveText('← Back to Second fundamental form of an embedding manifold')
+
+  // One level only: a second jump replaces the way back with the card just left.
+  await card(page, 'c2').getByTestId('learn-first-chip').filter({ hasText: 'Softmax over scores' }).click()
+  await expect(title).toHaveText('Foundations')
+  await expect(back).toHaveText('← Back to Attention as a weighted average')
+  await back.click()
+  await expect(title).toHaveText('Attention')
+  await expect(card(page, 'c2')).toBeInViewport()
+  await expect(card(page, 'c2').getByTestId('land-ring')).toBeAttached()
+  // Focus is back on the chip that started the jump, and there is no further back.
+  await expect(card(page, 'c2').getByTestId('learn-first-chip').filter({ hasText: 'Softmax over scores' })).toBeFocused()
+  await expect(back).toHaveCount(0)
+
+  // With motion allowed the outline also draws in.
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await card(page, 'c2').getByTestId('learn-first-chip').first().click()
+  await expect(title).toHaveText('Foundations')
+  await expect(card(page, 'c1').getByTestId('land-ring')).toBeAttached()
+  expect(await card(page, 'c1').getByTestId('land-ring').evaluate((el) => getComputedStyle(el).animationName)).toBe('land-settle')
+  await page.keyboard.press('Escape')
+  await expect(panel).toHaveCount(0)
+  await expect(back).toHaveCount(0)
 })
 
 test('known or not known, saved per reader with a green outline; the paper is shared', async ({ users }) => {

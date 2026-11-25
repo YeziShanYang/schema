@@ -587,6 +587,27 @@
   transition-timing-function: ease-out;
 }
 
+/* The card a jump lands on: a 2px accent outline held for 300ms (while the
+   panel scrolls to it), then faded out over 600ms. With motion it also draws
+   in from 3px further out; under reduced motion it holds still and fades. */
+.land-ring {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  animation: land-fade 600ms ease-out 300ms both;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .land-ring { animation-name: land-settle; }
+}
+@keyframes land-fade { to { opacity: 0; } }
+@keyframes land-settle {
+  from { outline-offset: 5px; }
+  to { outline-offset: 2px; opacity: 0; }
+}
+
 /* ---------- Floating graph ---------- */
 .graph-links path {
   fill: none;

@@ -6,6 +6,9 @@
  * the concept in its branch. The overview window (step 0 of the sequence)
  * opens on its own the first time a reader sees a paper they have not read
  * the overview of, and from the center card, the strip and concept cards.
+ * Jumps come back: closing an overview opened by "See in overview" reopens
+ * the card, and a "Learn first" chip leaves one "Back to" in the panel
+ * header. The card a jump lands on is outlined for a moment.
  * Used at /p/[arxivId] (also signed out, in demo mode) and at
  * /w/[id]/p/[arxivId] inside a workspace.
  */
@@ -91,6 +94,14 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   // When one panel closes because the other opens, the closing one leaves focus to the opening one.
   const branchHandoff = useRef(false)
   const overviewHandoff = useRef(false)
+  // The card "See in overview" came from: closing the overview reopens its branch there.
+  const overviewReturn = useRef<{ branchKey: string; key: string } | null>(null)
+  // One level of back: the card a "Learn first" chip jumped from, and the chip (via) to focus on return.
+  const [back, setBack] = useState<{ branchKey: string; key: string; name: string; via: string } | null>(null)
+  // The card a jump landed on; `n` restarts its outline when the same card is landed on again.
+  const [landed, setLanded] = useState<{ key: string; n: number } | null>(null)
+  // A control inside the landed card to focus, when a jump returns to where it started.
+  const landFocus = useRef('')
 
   const paper = p.paper
   const ov = useOverview(paper, { signedIn: !!isSignedIn, isDemo: knowledge.isDemo })
@@ -147,24 +158,35 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
       lastTrigger.current = trigger ?? null
       branchHandoff.current = false
       setOpenKey(key)
+      setBack(null)
       if (concept) setFocusConcept(concept)
       if (isSignedIn && p.linksForBranch(key) === 'needs-load' && !loadingBranches.has(key)) void loadLinks(key)
     },
     [isSignedIn, p, loadingBranches, loadLinks],
   )
 
-  // Scroll a requested concept into view once its panel is open.
+  // Scroll a requested concept into view once its panel is open, and outline it for a moment.
   useEffect(() => {
     if (!focusConcept || !openKey) return
     const t = setTimeout(() => {
       const el = document.getElementById(`concept-${focusConcept}`)
       if (el) {
         el.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+        const focus = landFocus.current
+        landFocus.current = ''
+        if (focus) el.querySelector<HTMLElement>(focus)?.focus({ preventScroll: true })
+        setLanded((l) => ({ key: focusConcept, n: (l?.n ?? 0) + 1 }))
         setFocusConcept('')
       }
     }, 60)
     return () => clearTimeout(t)
   }, [focusConcept, openKey])
+  // The outline fades over 600ms after a 300ms hold (styles.css), then its element goes.
+  useEffect(() => {
+    if (!landed) return
+    const t = setTimeout(() => setLanded(null), 1000)
+    return () => clearTimeout(t)
+  }, [landed])
 
   const openConceptByKey = useCallback(
     (key: string, trigger?: HTMLElement | null) => {
@@ -174,15 +196,18 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
     [p.conceptByKey, openBranch],
   )
 
-  // The overview closes the branch panel if one is open, and focus goes back to what opened it.
+  // The overview closes the branch panel if one is open, and focus goes back to what opened it,
+  // or, when it was opened from a card (`from`), the card's branch reopens at that card.
   const openOverview = useCallback(
-    (focus?: string, trigger?: HTMLElement | null) => {
+    (focus?: string, trigger?: HTMLElement | null, from?: { branchKey: string; key: string }) => {
       overviewTrigger.current = trigger ?? null
       overviewHandoff.current = false
+      overviewReturn.current = from ?? null
       setOverviewFocus(focus ?? '')
       if (openKey) {
         branchHandoff.current = true
         setOpenKey(null)
+        setBack(null)
       }
       setOverviewOpen(true)
     },
@@ -190,9 +215,35 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   )
   const leaveOverviewFor = useCallback((branchKey: string, concept: string) => {
     overviewHandoff.current = true
+    overviewReturn.current = null
     setOverviewOpen(false)
     openBranch(branchKey, concept)
   }, [openBranch])
+  const closeOverview = useCallback(() => {
+    const from = overviewReturn.current
+    overviewReturn.current = null
+    setOverviewOpen(false)
+    if (!from) return
+    overviewHandoff.current = true
+    landFocus.current = '[data-testid="see-in-overview"]'
+    openBranch(from.branchKey, from.key)
+  }, [openBranch])
+
+  // A "Learn first" chip opens the prerequisite in its branch and leaves one way back to the card it came from.
+  const learnFirst = useCallback(
+    (from: { branchKey: string; key: string; name: string }, key: string) => {
+      const c = p.conceptByKey.get(key)
+      if (!c) return
+      openBranch(c.data.branchKey, key)
+      setBack({ ...from, via: key })
+    },
+    [p.conceptByKey, openBranch],
+  )
+  const goBack = useCallback(() => {
+    if (!back) return
+    landFocus.current = `[data-testid="learn-first-chip"][data-concept-key="${CSS.escape(back.via)}"]`
+    openBranch(back.branchKey, back.key)
+  }, [back, openBranch])
 
   // Open the overview on its own once: the first time this browser shows the paper while it is unread.
   const autoChecked = useRef('')
@@ -468,7 +519,10 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
 
       <BranchPanel
         open={!!branch}
-        onClose={() => setOpenKey(null)}
+        onClose={() => {
+          setOpenKey(null)
+          setBack(null)
+        }}
         returnFocus={() =>
           branchHandoff.current
             ? null
@@ -479,6 +533,13 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
               : null
         }
         title={branch?.name ?? ''}
+        back={
+          back && (
+            <button type="button" onClick={goBack} data-testid="panel-back" className="press -ml-1 mb-1 flex max-w-full cursor-pointer rounded px-1 text-left text-[13px] text-primary hover:underline">
+              <span className="truncate">← Back to <ConceptName name={back.name} /></span>
+            </button>
+          )
+        }
         eyebrow={branch ? `${branch.known} of ${branch.total} known` : ''}
         description={branch?.description}
         header={
@@ -523,8 +584,9 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
                 paper={paper}
                 topic={p.topicsByKey.get(c.data.topicKey)?.data}
                 prerequisites={(c.data.dependsOn ?? []).map((k) => ({ key: k, name: p.conceptByKey.get(k)?.data.name ?? k }))}
-                onOpenConcept={openConceptByKey}
-                onSeeInOverview={ov.overview ? () => openOverview(c.data.key, branchButtons.current.get(c.data.branchKey) ?? null) : undefined}
+                onOpenConcept={(key) => learnFirst({ branchKey: c.data.branchKey, key: c.data.key, name: c.data.name }, key)}
+                onSeeInOverview={ov.overview ? () => openOverview(c.data.key, null, { branchKey: c.data.branchKey, key: c.data.key }) : undefined}
+                landed={landed?.key === c.data.key ? landed.n : undefined}
                 status={knowledge.statusOf(c.recordId)}
                 knowledge={knowledge}
                 hint={hint}
@@ -543,7 +605,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
       {ov.overview && (
         <OverviewWindow
           open={overviewOpen}
-          onClose={() => setOverviewOpen(false)}
+          onClose={closeOverview}
           returnFocus={() =>
             overviewHandoff.current
               ? null
