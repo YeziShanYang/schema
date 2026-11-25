@@ -38,7 +38,7 @@ import { OverviewWindow, type OverviewConcept } from './OverviewWindow'
 import { SequenceStrip } from './SequenceStrip'
 import { ConceptName, MathText } from '../MathText'
 import { hintText } from '../../lib/hints'
-import { BookIcon } from '../icons'
+import { BookIcon, CheckIcon } from '../icons'
 import { SignInOverlay } from '../SignInOverlay'
 import { useHideTopSignIn } from '../AppShell'
 
@@ -470,10 +470,14 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
                   {(s.data.conceptKeys ?? []).map((k) => {
                     const c = p.conceptByKey.get(k)
                     if (!c) return null
+                    // A known concept gets the shared known outline and a check, so color is not the only cue.
+                    const known = knowledge.statusOf(c.recordId) === 'known'
                     return (
-                      <button key={k} type="button" data-testid="walkthrough-chip" onClick={(e) => openConceptByKey(k, e.currentTarget)}
-                        className="press cursor-pointer rounded-[3px] border border-border bg-surface-2 px-2 py-0.5 text-xs hover:bg-accent-soft">
+                      <button key={k} type="button" data-testid="walkthrough-chip" data-status={known ? 'known' : 'unknown'} onClick={(e) => openConceptByKey(k, e.currentTarget)}
+                        className={cn('press inline-flex cursor-pointer items-center gap-1 rounded-[3px] border px-2 py-0.5 text-xs', known ? 'known-outline' : 'border-border bg-surface-2 hover:bg-accent-soft')}>
+                        {known && <CheckIcon size={11} className="shrink-0 text-known" aria-hidden="true" />}
                         <ConceptName name={c.data.name} />
+                        {known && <span className="sr-only">, known</span>}
                       </button>
                     )
                   })}

@@ -618,6 +618,20 @@ test('known or not known, saved per reader with a green outline; the paper is sh
   await openBranch(ada.page, 'foundations')
   await expect(card(ada.page, 'c1')).toHaveAttribute('data-status', 'known', { timeout: 15_000 })
 
+  // Walkthrough chips show the same outline for a known concept, with a check so color is not the only cue.
+  await ada.page.keyboard.press('Escape')
+  await ada.page.getByTestId('view-walkthrough').click()
+  const knownChip = ada.page.getByTestId('walkthrough-chip').filter({ hasText: 'Softmax over scores' }).first()
+  await expect(knownChip).toHaveAttribute('data-status', 'known')
+  await expect(knownChip).toHaveClass(/known-outline/)
+  await expect(knownChip).toHaveAccessibleName(/known/)
+  // Gradient descent (reset above) is not in a walkthrough section, so take any chip left unchecked.
+  const otherChip = ada.page.locator('[data-testid="walkthrough-chip"][data-status="unknown"]').first()
+  await expect(otherChip).toBeVisible()
+  await expect(otherChip).not.toHaveClass(/known-outline/)
+  await expect(otherChip).not.toHaveAccessibleName(/, known/)
+  await ada.page.getByTestId('view-branches').click()
+
   // The knowledge page lists the checked concept under its paper.
   await ada.page.goto('/knowledge')
   const row = ada.page.locator(`[data-testid="checked-concept"][data-concept-id="${conceptId}"]`)
