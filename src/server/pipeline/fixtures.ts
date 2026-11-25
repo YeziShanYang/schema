@@ -10,6 +10,8 @@
  * - 99: no HTML, and the PDF has no text (a scanned image), so the analysis fails.
  * - 66: no HTML; the PDF converts, so the paper is analyzed from the PDF text.
  * - 44: analyzed from the HTML fixture, under a long one-line title (fixtureMeta).
+ * - 33: analyzed from the HTML fixture into five branches with long names
+ *   (fiveBranchConcepts), for the step strip at 1440px.
  * - anything else: analyzed from the HTML fixture below.
  *
  * What the concept list exercises (see stepConcepts and its rules):
@@ -274,6 +276,36 @@ const concepts = {
   ],
 }
 
+/**
+ * Fixture ids ending in 33: the same concepts in five branches, each named
+ * past the step strip's 24-character cut. c4 joins c9 in deployment, and c10
+ * gives results its second concept, so no branch has one concept to merge.
+ */
+const fiveBranchConcepts = {
+  ...concepts,
+  branches: [
+    { key: 'foundations', name: 'Mathematical and machine learning foundations', description: 'Math and ML basics the paper assumes.' },
+    { key: 'attention', name: 'Attention layers and their scoring functions', description: 'How attention layers weigh inputs.' },
+    { key: 'geometry', name: 'Geometry of curved representation spaces', description: 'Curvature of embedding manifolds.' },
+    { key: 'deployment', name: 'Deploying the corrected layer in existing models', description: 'Using the layer in existing models.' },
+    { key: 'results', name: 'Experimental results on three benchmarks', description: 'What the experiments show.' },
+  ],
+  concepts: [
+    ...concepts.concepts.map((c) => (c.id === 'c4' ? { ...c, branch_key: 'deployment' } : c)),
+    {
+      id: 'c10',
+      name: 'Accuracy as an evaluation metric',
+      why_needed: 'The gains are reported as accuracy.',
+      section: '4 Experiments',
+      quotes: [],
+      depends_on: ['c8'],
+      depth: 'skim',
+      branch_key: 'results',
+      topic: topic('fixture-accuracy-metric', 'Accuracy metric (fixture)', 'specialized', 'The share of predictions a model gets right.'),
+    },
+  ],
+}
+
 const explain = {
   sections: [
     { heading: '1 Introduction', summary: 'Frames attention as a weighted average and notes that prior work assumes a flat space.', concept_ids: ['c1', 'c2', 'c7'] },
@@ -337,8 +369,8 @@ export function fixtureDelayMs(arxivId: string): number {
   return arxivId.endsWith('55') ? SLOW_FIXTURE_MS : 0
 }
 
-/** Respond like the real integration would, keyed by endpoint and a stage hint. */
-export function fixtureIntegration(endpoint: string, body: Record<string, unknown>, hint?: string): unknown {
+/** Respond like the real integration would, keyed by endpoint, a stage hint and (for variants) the paper id. */
+export function fixtureIntegration(endpoint: string, body: Record<string, unknown>, hint?: string, arxivId = ''): unknown {
   if (endpoint === 'cloudconvert/convert-file') {
     // Fixture ids ending in 77 fail the conversion itself, before anything is billed.
     if (String(body.url ?? '').endsWith('77')) throw new Error('Fixture conversion failure')
@@ -365,7 +397,7 @@ export function fixtureIntegration(endpoint: string, body: Record<string, unknow
     }
   }
   if (endpoint === 'anthropic/chat-completion') {
-    if (hint === 'concepts') return message(JSON.stringify(concepts))
+    if (hint === 'concepts') return message(JSON.stringify(arxivId.endsWith('33') ? fiveBranchConcepts : concepts))
     if (hint === 'explain') return message(JSON.stringify(explain))
     if (hint === 'recommend') {
       return message(JSON.stringify({ picks: [{ n: 1, reason: 'A broad survey to start with.' }, { n: 2, reason: 'Builds geometric intuition.' }, { n: 9, reason: 'Invented result number that must be ignored.' }] }))

@@ -29,6 +29,8 @@ const FIXTURE_TITLE = 'A Fixture Paper on Curvature-Aware Attention'
 /** Fixture ids ending in 44 get a title too long for one line on a phone (fixtureMeta in fixtures.ts). */
 const LONG_ID = '0000.00044'
 const LONG_SLUG = '0000~00044'
+/** Fixture ids ending in 33 get five branches with names longer than the step strip's cut (fixtures.ts). */
+const FIVE_ID = '0000.00033'
 const READY_TIMEOUT = 90_000
 /** Every fixture concept by branch, in the order the panel lists them. */
 const FIXTURE_CONCEPTS = [
@@ -48,7 +50,7 @@ async function calm(page: Page) {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.addInitScript((ids) => {
     for (const id of ids) localStorage.setItem(`schema:overview-shown:${id}`, '1')
-  }, [FIXTURE_ID, SECOND_ID, LONG_ID])
+  }, [FIXTURE_ID, SECOND_ID, LONG_ID, FIVE_ID])
 }
 
 /** Wait until the paper's overview and this reader's read mark have loaded. */
@@ -384,6 +386,40 @@ test('the step strip is one row at 1440 and puts Next up on its own row at 390',
   const scroll = await strip.getByTestId('sequence-scroll').evaluate((e) => ({ sw: e.scrollWidth, cw: e.clientWidth }))
   expect(scroll.sw).toBeGreaterThan(scroll.cw)
   await expect(strip.getByTestId('sequence-scroll')).toHaveAttribute('data-fade-right', 'true')
+})
+
+test('step labels are cut near 24 characters, and all five steps of a five-branch paper fit at 1440', async ({ users, browser }) => {
+  test.setTimeout(150_000)
+  // Bob analyzes it: Ada's and Cara's new papers a day go to the other specs, and the daily-cap spec uses up Bob's.
+  const [, bob] = await users(['Schema ada', 'Schema bob'])
+  await bob.page.setViewportSize({ width: 1440, height: 900 })
+  await openReadyFixturePaper(bob.page, FIVE_ID)
+  await overviewState(bob.page)
+  const labelsOf = async (strip: ReturnType<Page['getByTestId']>) => {
+    await expect(strip.getByTestId('sequence-step')).toHaveCount(5)
+    for (const l of await strip.getByTestId('step-label').allTextContents()) expect(l.length).toBeLessThanOrEqual(24)
+    // A cut name keeps its full name as its tooltip and accessible name.
+    const first = strip.locator('[data-testid="sequence-step"][data-branch-key="foundations"]')
+    await expect(first.getByTestId('step-label')).toHaveText('Mathematical and…')
+    await expect(first).toHaveAttribute('title', 'Mathematical and machine learning foundations')
+    await expect(strip.getByRole('button', { name: /^Step 1: Mathematical and machine learning foundations/ })).toBeVisible()
+  }
+  await labelsOf(bob.page.getByTestId('sequence-strip'))
+
+  // On the full-width page (the demo, with no sidebar) nothing hides behind the edge: no scroll, no fade.
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' })
+  const page = await ctx.newPage()
+  await page.addInitScript((id) => localStorage.setItem(`schema:overview-shown:${id}`, '1'), FIVE_ID)
+  await page.goto(`/p/${FIVE_ID.replace('.', '~')}`)
+  const strip = page.getByTestId('sequence-strip')
+  await expect(strip).toBeVisible({ timeout: 20_000 })
+  await labelsOf(strip)
+  const scroll = strip.getByTestId('sequence-scroll')
+  await page.evaluate(() => document.fonts.ready)
+  expect(await scroll.evaluate((e) => e.scrollWidth - e.clientWidth)).toBeLessThanOrEqual(0)
+  await expect(scroll).not.toHaveAttribute('data-fade-right', 'true')
+  for (const step of await strip.locator('[data-testid="sequence-overview"], [data-testid="sequence-step"]').all()) await expect(step).toBeInViewport({ ratio: 1 })
+  await ctx.close()
 })
 
 test('Home and a paper page fit a 390px screen when a paper has a long title', async ({ users }) => {

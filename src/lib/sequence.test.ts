@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { branchOrder, recommendedSequence, type SeqConcept } from './sequence'
+import { branchOrder, recommendedSequence, stepLabel, type SeqConcept } from './sequence'
 import type { KnowledgeStatus } from '../types'
 
 const branches = [
@@ -119,5 +119,22 @@ describe('branchOrder', () => {
     const cyclic = [c('a1', 'a', 0, 0, ['b1']), c('b1', 'b', 0, 1), c('b2', 'b', 1, 2, ['a1'])]
     expect(branchOrder(two, cyclic)).toEqual({ ordered: two, cycle: true })
     expect(branchOrder(two, [c('a1', 'a', 0, 0), c('b1', 'b', 1, 1, ['a1'])]).cycle).toBe(false)
+  })
+})
+
+describe('stepLabel', () => {
+  it('keeps a name of 24 characters or fewer', () => {
+    expect(stepLabel('Attention machinery')).toBe('Attention machinery')
+    expect(stepLabel('Training and evaluation.')).toBe('Training and evaluation.')
+  })
+  it('cuts a longer name at a word break near 24 characters', () => {
+    expect(stepLabel('Linear algebra and neural network basics')).toBe('Linear algebra and…')
+    expect(stepLabel('Sequence modeling background')).toBe('Sequence modeling…')
+    expect(stepLabel('Transformer block and stack')).toBe('Transformer block and…')
+  })
+  it('cuts inside a word when the last break is far back, and never ends on punctuation', () => {
+    expect(stepLabel('Backpropagation-through-structure methods')).toBe('Backpropagation-through…')
+    expect(stepLabel('Geometry, curvature, and manifolds')).toBe('Geometry, curvature…')
+    expect(stepLabel('Geometry, curvature, and manifolds').length).toBeLessThanOrEqual(24)
   })
 })

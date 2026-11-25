@@ -155,3 +155,21 @@ export function recommendedSequence<C extends SeqConcept>(
 
   return { steps, concepts: ordered, nextUp, allKnown, fresh, stepInBranch }
 }
+
+/** The longest step label the strip shows before cutting it. */
+export const STEP_LABEL_MAX = 24
+
+/**
+ * A step-strip label: the branch name, or, when it is longer than `max`
+ * characters, its first `max - 1` characters with an ellipsis. The cut moves
+ * back to the last word break when one falls in the final 8 characters, so a
+ * word is cut only when it would leave a much shorter label.
+ */
+export function stepLabel(name: string, max = STEP_LABEL_MAX): string {
+  const clean = name.trim().replace(/\s+/g, ' ')
+  if (clean.length <= max) return clean
+  const head = clean.slice(0, max - 1)
+  const space = head.lastIndexOf(' ')
+  const cut = space >= max - 8 ? head.slice(0, space) : head
+  return `${cut.replace(/[\s,;:.\-–—]+$/, '')}…`
+}

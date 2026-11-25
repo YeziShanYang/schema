@@ -4,12 +4,14 @@
  * the primary "Next up" action beside them. Every step is one 34px row. Steps
  * never wrap: when they overflow, the row scrolls sideways behind a fade mask
  * while the action stays pinned on the right. Below 640px the action takes
- * its own row under the steps.
+ * its own row under the steps. A branch name longer than about 24 characters
+ * is cut with an ellipsis (stepLabel); the full name is the step's tooltip
+ * and accessible name.
  */
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
-import type { SequenceStep, StepState } from '../../lib/sequence'
+import { stepLabel, type SequenceStep, type StepState } from '../../lib/sequence'
 import { ArrowRightIcon, CheckIcon } from '../icons'
 
 function Step({
@@ -29,10 +31,12 @@ function Step({
   testId: string
   branchKey?: string
 }) {
+  const label = stepLabel(name)
   return (
     <button
       type="button"
       onClick={(e) => onClick(e.currentTarget)}
+      title={label === name ? undefined : name}
       data-testid={testId}
       data-state={state}
       data-branch-key={branchKey}
@@ -57,8 +61,8 @@ function Step({
         {state === 'done' ? <CheckIcon size={12} /> : <span className="translate-y-[0.5px]">{index}</span>}
       </span>
       <span>
-        <span className="sr-only">Step {index}: </span>
-        {name}
+        <span className="sr-only">Step {index}: {name}</span>
+        <span aria-hidden="true" data-testid="step-label">{label}</span>
         {state === 'done' && <span className="sr-only"> (done)</span>}
       </span>
       {count && <span className="text-xs leading-5 text-muted-foreground tabular-nums">{count}</span>}

@@ -66,7 +66,7 @@ export function ownerContext(env: Env): CronContext {
   return buildCronContext(env, env.OWNER_USER_ID, `app:${env.DEEPSPACE_APP_ID}`)
 }
 
-/** `arxivId` only selects a slow fixture (see fixtureDelayMs); real calls ignore it. */
+/** `arxivId` only selects a fixture variant (see fixtureDelayMs and fixtureIntegration); real calls ignore it. */
 export function createPipelineClient(env: Env, useFixtures: boolean, ctx: CronContext = ownerContext(env), arxivId = ''): PipelineClient {
   if (useFixtures && env.ALLOW_DEBUG_ROUTES === 'true') {
     const delay = fixtureDelayMs(arxivId)
@@ -74,7 +74,7 @@ export function createPipelineClient(env: Env, useFixtures: boolean, ctx: CronCo
       fixtures: true,
       call: async (endpoint, body, hint) => {
         if (delay) await new Promise((resolve) => setTimeout(resolve, delay))
-        return fixtureIntegration(endpoint, body, hint)
+        return fixtureIntegration(endpoint, body, hint, arxivId)
       },
       fetchText: async (url) => fixtureText(url),
       fetchPage: async (url) => {
