@@ -5,10 +5,11 @@
 
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AuthOverlay, useAuth } from 'deepspace'
+import { useAuth } from 'deepspace'
 import { Button, Input } from './ui'
 import { actions } from '../lib/actions-client'
 import { arxivSlug } from '../lib/arxiv'
+import { SignInOverlay } from './SignInOverlay'
 
 export function AnalyzeForm({
   workspaceId,
@@ -66,7 +67,7 @@ export function AnalyzeForm({
           {error}
         </p>
       )}
-      {showAuth && <AuthOverlay onClose={() => setShowAuth(false)} />}
+      {showAuth && <SignInOverlay onClose={() => setShowAuth(false)} />}
     </form>
   )
 }

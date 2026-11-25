@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AuthOverlay, useAuth } from 'deepspace'
+import { useAuth } from 'deepspace'
 import { Button, Checkbox, Label, Modal } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { arxivAbsUrl, parseArxivId } from '../../lib/arxiv'
@@ -35,6 +35,7 @@ import { SequenceStrip } from './SequenceStrip'
 import { ConceptName, MathText } from '../MathText'
 import { hintText } from '../../lib/hints'
 import { BookIcon } from '../icons'
+import { SignInOverlay } from '../SignInOverlay'
 
 function readPref(key: string): string {
   try {
@@ -72,6 +73,8 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const [markRest, setMarkRest] = useState(true)
   const [finishing, setFinishing] = useState(false)
   const [showAuth, setShowAuth] = useState(false)
+  // The control that opened the sign-in window, so focus returns there when it closes.
+  const authTrigger = useRef<HTMLElement | null>(null)
   const [loadingBranches, setLoadingBranches] = useState<Set<string>>(() => new Set())
   const [linkErrors, setLinkErrors] = useState<Record<string, string>>({})
   const branchButtons = useRef(new Map<string, HTMLButtonElement | null>())
@@ -223,6 +226,10 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   )
 
   const branch = useMemo(() => p.branches.find((b) => b.key === openKey) ?? null, [p.branches, openKey])
+  const openSignIn = (trigger?: HTMLElement | null) => {
+    authTrigger.current = trigger ?? null
+    setShowAuth(true)
+  }
 
   if (!parseArxivId(arxivId)) {
     return (
@@ -318,7 +325,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
       {knowledge.isDemo && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent-soft px-5 py-2 text-sm md:px-7" data-testid="demo-banner" role="status">
           <span>Demo: your progress isn't saved. Sign in to keep it.</span>
-          <Button size="sm" onClick={() => setShowAuth(true)}>Sign in</Button>
+          <Button size="sm" onClick={(e) => openSignIn(e.currentTarget)}>Sign in</Button>
         </div>
       )}
 
@@ -397,7 +404,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
           branches={p.branches}
           order={seq.steps.map((s) => s.branchKey)}
           signedIn={!!isSignedIn}
-          onSignIn={() => setShowAuth(true)}
+          onSignIn={openSignIn}
         />
       )}
       {covered ? null : view === 'walkthrough' && p.sections.length > 0 ? (
@@ -493,7 +500,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
                 )}
                 {!branchLoading && branchLinks === 'needs-load' && !isSignedIn && (
                   <span className="text-muted-foreground">
-                    <button type="button" className="text-primary hover:underline" onClick={() => setShowAuth(true)}>Sign in</button> to load explainer links for this branch.
+                    <button type="button" className="text-primary hover:underline" onClick={(e) => openSignIn(e.currentTarget)}>Sign in</button> to load explainer links for this branch.
                   </span>
                 )}
                 {linkErrors[branch.key] && <span role="alert" className="text-destructive">{linkErrors[branch.key]}</span>}
@@ -531,7 +538,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
                 signedIn={!!isSignedIn}
                 explainLeft={allowance?.explain.remaining}
                 linksState={linksState}
-                onSignIn={() => setShowAuth(true)}
+                onSignIn={openSignIn}
               />
               )
             })}
@@ -591,7 +598,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
         </Modal.Footer>
       </Modal>
 
-      {showAuth && <AuthOverlay onClose={() => setShowAuth(false)} />}
+      {showAuth && <SignInOverlay onClose={() => setShowAuth(false)} returnFocus={authTrigger.current} />}
     </div>
   )
 }

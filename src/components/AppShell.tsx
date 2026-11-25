@@ -12,10 +12,11 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
-import { AuthOverlay, signOut, useAuthProfileReady } from 'deepspace'
+import { signOut, useAuthProfileReady } from 'deepspace'
 import { cn } from '@/lib/utils'
 import { Button } from './ui'
 import { AddButton } from './AddDialog'
+import { SignInOverlay } from './SignInOverlay'
 import { CloseIcon, MarkIcon, MenuIcon } from './icons'
 import { useConceptKnowledge, useRoadmaps } from '../hooks/useReader'
 import { useWorkspaces } from '../hooks/useWorkspaces'
@@ -167,7 +168,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </header>
         <main className="flex-1">{children}</main>
-        {showAuth && <AuthOverlay onClose={() => setShowAuth(false)} />}
+        {showAuth && <SignInOverlay onClose={() => setShowAuth(false)} />}
       </div>
     )
   }

@@ -40,7 +40,8 @@ interface Props {
   explainLeft?: number
   /** Branch-level link state for topics that have no links yet. */
   linksState?: 'loading' | 'signin' | null
-  onSignIn?: () => void
+  /** Opens sign-in; gets the button that asked, so focus can return to it. */
+  onSignIn?: (trigger: HTMLElement) => void
   /** Position within the branch in the recommended sequence. */
   stepIndex?: number
   nextUp?: boolean
@@ -175,7 +176,7 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
           )}
           {linksState === 'signin' && noLinks && (
             <span className="w-full text-xs text-muted-foreground" data-testid="links-signin">
-              <button type="button" onClick={onSignIn} className="text-primary hover:underline">Sign in</button> to load links
+              <button type="button" onClick={(e) => onSignIn?.(e.currentTarget)} className="text-primary hover:underline">Sign in</button> to load links
             </span>
           )}
           {topic?.resourcesStatus === 'failed' && <span className="text-xs text-faint">No explainers found for this topic.</span>}
@@ -195,7 +196,7 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
               {explainLeft !== undefined && <span className="font-normal text-faint tabular-nums">· {explainLeft} left today</span>}
             </Button>
           ) : (
-            <button type="button" onClick={onSignIn} className={cn('press inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-[12.5px] font-medium text-primary hover:bg-accent-soft', skipped && 'order-first')} data-testid="explain-signin">
+            <button type="button" onClick={(e) => onSignIn?.(e.currentTarget)} className={cn('press inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-[12.5px] font-medium text-primary hover:bg-accent-soft', skipped && 'order-first')} data-testid="explain-signin">
               <SparkIcon size={13} /> Sign in to generate an AI explanation
             </button>
           )}

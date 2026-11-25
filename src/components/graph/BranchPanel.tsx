@@ -4,12 +4,14 @@
  * contained. Esc, the close button and a click on the backdrop dismiss it.
  * Focus moves into the panel on open, stays inside while it is open, and
  * returns to the element that opened it on close. The exit runs 150ms before
- * the panel unmounts.
+ * the panel unmounts. While another overlay sits on top (the sign-in
+ * window), that one takes Esc and Tab (see lib/overlays).
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { CloseIcon } from '../icons'
+import { isTopOverlay, pushOverlay, trapTab } from '../../lib/overlays'
 
 const EXIT_MS = 150
 
@@ -22,7 +24,7 @@ function lockScroll(): () => void {
   }
 }
 
-/** Focus inside another dialog stacked above this panel, such as sign-in: leave its keys alone. */
+/** Focus inside another dialog stacked above this panel (a Modal): leave its keys alone. */
 function focusInOtherDialog(panel: HTMLElement): boolean {
   const active = document.activeElement
   if (!active || active === document.body || panel.contains(active)) return false
@@ -58,6 +60,7 @@ export function BranchPanel({
   const [closing, setClosing] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
+  const [layer] = useState(() => ({}))
 
   useEffect(() => {
     if (open) {
@@ -84,7 +87,7 @@ export function BranchPanel({
 
   const onKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (panelRef.current && focusInOtherDialog(panelRef.current)) return
+      if (!isTopOverlay(layer) || (panelRef.current && focusInOtherDialog(panelRef.current))) return
       if (e.key === 'Escape') {
         e.stopPropagation()
         onClose()
@@ -97,22 +100,16 @@ export function BranchPanel({
         return
       }
       // Keep focus inside the panel while it is open.
-      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      )
-      if (!focusable.length) return
-      const first = focusable[0]
-      const last = focusable[focusable.length - 1]
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault()
-        last.focus()
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault()
-        first.focus()
-      }
+      trapTab(e, panelRef.current)
     },
-    [onClose],
+    [layer, onClose],
   )
+
+  // The open panel is an overlay layer; one opened over it (sign-in) takes the keys until it closes.
+  useEffect(() => {
+    if (!open || !mounted) return
+    return pushOverlay(layer)
+  }, [open, mounted, layer])
 
   // Keys are handled at the document level so Esc works wherever focus is.
   useEffect(() => {

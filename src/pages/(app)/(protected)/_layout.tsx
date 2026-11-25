@@ -17,8 +17,9 @@
 
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { AuthGate, AuthOverlay, useAuth } from 'deepspace'
+import { AuthGate, useAuth } from 'deepspace'
 import { Button } from '@/components/ui'
+import { SignInOverlay } from '../../../components/SignInOverlay'
 import { arxivSlug } from '../../../lib/arxiv'
 import { DEMO_ARXIV_ID } from '../../../constants'
 
@@ -67,7 +68,7 @@ function SignedOutPanel({ openAtStart }: { openAtStart: boolean }) {
         </p>
       </div>
 
-      {showAuthModal && <AuthOverlay onClose={() => setShowAuthModal(false)} />}
+      {showAuthModal && <SignInOverlay onClose={() => setShowAuthModal(false)} />}
     </div>
   )
 }

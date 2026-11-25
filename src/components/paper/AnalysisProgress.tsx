@@ -194,7 +194,7 @@ export function AnalysisProgress({
   /** Branch keys in the recommended order, so nodes sit where the paper window puts them. */
   order: string[]
   signedIn: boolean
-  onSignIn: () => void
+  onSignIn: (trigger: HTMLElement) => void
 }) {
   const d = paper.data
   const reduced = usePrefersReducedMotion()
@@ -276,7 +276,7 @@ export function AnalysisProgress({
     </>
   ) : (
     <p className="mt-1 text-xs text-muted-foreground">
-      <button type="button" className="cursor-pointer text-primary hover:underline" onClick={onSignIn}>Sign in</button> to retry it.
+      <button type="button" className="cursor-pointer text-primary hover:underline" onClick={(e) => onSignIn(e.currentTarget)}>Sign in</button> to retry it.
     </p>
   )
 

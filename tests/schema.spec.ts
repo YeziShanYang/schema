@@ -813,6 +813,30 @@ test('signed-out demo: status changes stay local, links and AI need sign-in', as
   await expect(card(page, 'c3').getByTestId('explain-signin')).toBeVisible()
 })
 
+test('signed out, the sign-in window over a branch takes focus and Esc, then gives focus back', async ({ page }) => {
+  await calm(page)
+  await page.goto(`/p/${FIXTURE_SLUG}`)
+  await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'ready', { timeout: 20_000 })
+  await openBranch(page, 'geometry')
+  const trigger = card(page, 'c3').getByTestId('explain-signin')
+  await trigger.click()
+  const signIn = page.getByTestId('sign-in-window')
+  await expect(signIn.getByTestId('auth-overlay')).toBeVisible()
+  const focusInside = () => signIn.evaluate((el) => el.contains(document.activeElement))
+  await expect.poll(focusInside).toBe(true)
+  // Tab cycles inside the sign-in window, never back into the panel behind it.
+  for (let i = 0; i < 8; i++) await page.keyboard.press('Tab')
+  expect(await focusInside()).toBe(true)
+
+  // Esc closes only the window on top; the panel stays and focus is back on the button that opened sign-in.
+  await page.keyboard.press('Escape')
+  await expect(signIn).toHaveCount(0)
+  await expect(page.getByTestId('branch-panel')).toBeVisible()
+  await expect(trigger).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('branch-panel')).toHaveCount(0)
+})
+
 test('landing shows the bundled example graph and a branch panel', async ({ page }) => {
   await calm(page)
   await page.goto('/')
