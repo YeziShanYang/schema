@@ -1,7 +1,85 @@
 /*
- * Schema ships one theme, Blueprint, defined in the @theme block of
- * styles.css. It is light only, so there are no override blocks here.
+ * Blueprint's light values are the @theme block in styles.css. This file
+ * redefines them for dark mode, which is on while <html> has the `dark`
+ * class: the head script in index.html sets it before first paint (the
+ * reader's stored choice, or else the system setting) and src/themes.ts
+ * switches it.
+ *
+ * Each dark value keeps its light token's hue and changes its lightness.
+ * Contrast against the dark card (oklch 0.225): foreground 14.3:1, muted
+ * text 6.9:1, primary as link text 6.8:1, dark ink on a primary button
+ * 7.4:1 (5.3:1 on its hover fill), known green 8.1:1, input edges 3.4:1,
+ * the focus ring 8.3:1 solid and 3.1:1 as the 50% halo.
  */
-[data-theme="blueprint"] {
+:root {
   color-scheme: light;
+}
+
+:root.dark {
+  color-scheme: dark;
+
+  --color-background: oklch(0.185 0.02 262);
+  --color-foreground: oklch(0.94 0.012 262);
+  --color-card: oklch(0.225 0.024 262);
+  --color-card-foreground: oklch(0.94 0.012 262);
+  --color-popover: oklch(0.225 0.024 262);
+  --color-popover-foreground: oklch(0.94 0.012 262);
+  --color-primary: oklch(0.72 0.145 264.5);
+  --color-primary-foreground: oklch(0.185 0.03 264.5);
+  --color-secondary: oklch(0.205 0.022 262);
+  --color-secondary-foreground: oklch(0.94 0.012 262);
+  --color-muted: oklch(0.205 0.022 262);
+  --color-muted-foreground: oklch(0.72 0.025 258);
+  --color-accent: oklch(0.275 0.026 262);
+  --color-accent-foreground: oklch(0.94 0.012 262);
+  --color-destructive: oklch(0.71 0.16 29.5);
+  --color-destructive-foreground: oklch(0.185 0.03 264.5);
+  --color-border: oklch(0.32 0.022 258);
+  --color-input: oklch(0.54 0.026 258);
+  --color-ring: oklch(0.78 0.13 264.5);
+
+  --color-surface-2: oklch(0.205 0.022 262);
+  --color-faint: oklch(0.53 0.028 258);
+  --color-accent-soft: oklch(0.31 0.075 266);
+  --color-known: oklch(0.75 0.125 169);
+  --color-known-foreground: oklch(0.185 0.03 264.5);
+  --color-learning: oklch(0.78 0.125 66);
+  --color-link: oklch(0.44 0.035 256);
+  --color-dot: oklch(0.3 0.02 258);
+  --color-scrim: oklch(0 0 0);
+
+  --color-success: oklch(0.75 0.125 169);
+  --color-success-foreground: oklch(0.185 0.03 264.5);
+  --color-warning: oklch(0.78 0.125 66);
+  --color-warning-foreground: oklch(0.185 0.03 264.5);
+  --color-info: oklch(0.72 0.145 264.5);
+  --color-info-foreground: oklch(0.185 0.03 264.5);
+
+  /* Still drawn over a transparent border, so forced-colors mode keeps an edge. */
+  --shadow-ring: 0 0 0 1px oklch(0.32 0.022 258), 0 1px 0 oklch(0 0 0 / 0.2);
+  --shadow-ring-hi: 0 0 0 1px oklch(0.4 0.028 258), 0 6px 16px oklch(0 0 0 / 0.35);
+  --shadow-panel: 0 24px 64px oklch(0 0 0 / 0.5);
+
+  --color-shell: oklch(0.205 0.022 262);
+  --color-shell-panel: oklch(0.225 0.024 262);
+}
+
+/*
+ * The paper sheets (the landing hero and the progress view) stay paper in
+ * dark mode: a dimmed off-white with the light theme's ink, so they read as
+ * paper without glare. Ink on the paper is 13:1, muted text 4.7:1 and the
+ * light primary 4.9:1.
+ */
+:root.dark :is(.hero-sheet, .paper-sheet) {
+  --paper: oklch(0.9 0.01 90);
+  --color-card: var(--paper);
+  --color-foreground: #0F172A;
+  --color-muted-foreground: #556070;
+  --color-faint: #94A0B2;
+  --color-border: color-mix(in oklab, #0F172A 14%, var(--paper));
+  --color-surface-2: color-mix(in oklab, #0F172A 3%, var(--paper));
+  --color-primary: #1F4FD8;
+  --color-accent-soft: color-mix(in oklab, #1F4FD8 14%, var(--paper));
+  --color-known: #0F8A6B;
+  --color-learning: #B26B00;
 }

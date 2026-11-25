@@ -132,7 +132,7 @@ export function BranchPanel({
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center px-0 pt-0 min-[760px]:px-6 min-[760px]:pt-[6vh]">
       <div
-        className="panel-backdrop absolute inset-0 bg-[rgba(15,23,42,0.38)]"
+        className="panel-backdrop absolute inset-0 bg-scrim/38"
         data-closing={closing}
         onClick={onClose}
         aria-hidden="true"
@@ -145,7 +145,7 @@ export function BranchPanel({
         data-testid={testId}
         data-closing={closing}
         style={{ maxWidth }}
-        className="branch-panel relative flex h-full w-full flex-col overflow-hidden border border-transparent bg-card shadow-[var(--shadow-ring-hi),0_24px_64px_rgba(15,23,42,0.18)] min-[760px]:h-auto min-[760px]:max-h-[86vh] min-[760px]:rounded-lg"
+        className="branch-panel relative flex h-full w-full flex-col overflow-hidden border border-transparent bg-card shadow-[var(--shadow-ring-hi),var(--shadow-panel)] min-[760px]:h-auto min-[760px]:max-h-[86vh] min-[760px]:rounded-lg"
       >
         <div className="border-b border-border px-5 pb-3.5 pt-4 md:px-6">
           <div className="flex items-start justify-between gap-4">

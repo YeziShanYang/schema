@@ -52,7 +52,7 @@ function Step({
         className={cn(
           'grid size-5 shrink-0 place-items-center rounded-full font-mono text-[11px] leading-none tabular-nums',
           state === 'done'
-            ? 'bg-known text-white'
+            ? 'bg-known text-known-foreground'
             : state === 'current'
               ? 'bg-primary text-primary-foreground'
               : 'border border-[color-mix(in_oklab,var(--color-foreground)_24%,transparent)] text-muted-foreground',

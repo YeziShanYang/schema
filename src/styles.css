@@ -5,11 +5,14 @@
 @source "./**/*.{ts,tsx}";
 @source "../node_modules/deepspace/dist/**/*.js";
 
+/* `dark:` follows the class the theme toggle sets on <html>, not the media query. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /*
- * Blueprint theme (light only). Values come from design/theme-trials.html.
- * shadcn token names are kept so the UI kit in src/components/ui reads them;
- * Schema-specific tokens (surface-2, faint, accent-soft, known, link) sit
- * beside them.
+ * Blueprint theme, light values. Values come from design/theme-trials.html;
+ * the dark ones are in themes.css. shadcn token names are kept so the UI kit
+ * in src/components/ui reads them; Schema-specific tokens (surface-2, faint,
+ * accent-soft, known, link, scrim) sit beside them.
  */
 @theme {
   --color-background: #F4F6F9;      /* bg */
@@ -36,9 +39,11 @@
   --color-faint: #94A0B2;
   --color-accent-soft: #E7EDFC;
   --color-known: #0F8A6B;
+  --color-known-foreground: #FFFFFF;
   --color-learning: #B26B00;
   --color-link: #A9B8CC;
   --color-dot: #D3DBE6;
+  --color-scrim: #0F172A;           /* backdrops, used with an alpha (bg-scrim/38) */
 
   --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
@@ -61,6 +66,7 @@
      `border: 1px solid transparent` so forced-colors mode still draws an edge. */
   --shadow-ring: 0 0 0 1px #D6DDE7, 0 1px 0 rgba(15, 23, 42, 0.04);
   --shadow-ring-hi: 0 0 0 1px #B9C6D8, 0 6px 16px rgba(15, 23, 42, 0.08);
+  --shadow-panel: 0 24px 64px rgba(15, 23, 42, 0.18);
   --shadow-card: var(--shadow-ring);
   --shadow-card-hover: var(--shadow-ring-hi);
 
@@ -72,7 +78,7 @@
   --animate-pulse-glow: pulse-glow 2s ease-in-out infinite;
 }
 
-/* Theme override blocks live in `themes.css` — imported above. */
+/* The dark values live in `themes.css`, imported above. */
 
 /*
  * Animation keyframes for shadcn components.
@@ -142,10 +148,6 @@
  * Custom base styles — must be in @layer base so utility classes can override.
  */
 @layer base {
-  html {
-    color-scheme: light;
-  }
-
   html, body, #root {
     min-height: 100vh;
     background-color: var(--color-background);
@@ -309,7 +311,7 @@
 }
 
 /* Used to suppress every transition for one frame during a theme swap. */
-.no-transitions, .no-transitions * { transition: none !important; }
+.no-transitions, .no-transitions *, .no-transitions *::before, .no-transitions *::after { transition: none !important; }
 
 /* Mobile sidebar sheet: enters from the left with the drawer easing, using
    @starting-style so it is a transition (no keyframes on a toggled element).
@@ -368,7 +370,6 @@
   --t0: 1000ms;
   --step: 350ms;
   --paper-font: "STIX Two Text", "STIX Two", "Times New Roman", Times, serif;
-  --paper-ink: color-mix(in oklab, var(--color-foreground) 82%, var(--color-card));
   clip-path: inset(-48px -48px 0 -48px);
   animation: schema-fade 300ms linear 150ms both;
 }
@@ -391,6 +392,8 @@
   }
 }
 .hero-sheet {
+  /* Set here, not on .hero-art, so it reads the sheet's paper colors in dark mode (themes.css). */
+  --paper-ink: color-mix(in oklab, var(--color-foreground) 82%, var(--color-card));
   position: absolute;
   left: 0;
   font-family: var(--paper-font);

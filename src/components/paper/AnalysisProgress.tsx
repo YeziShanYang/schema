@@ -411,10 +411,10 @@ function StageMark({ state }: { state: StageState }) {
       <span className="icon-swap absolute inset-0 grid place-items-center" data-shown={state === 'active'}>
         <span className="stage-dot relative size-2 rounded-full bg-primary" />
       </span>
-      <span className="icon-swap absolute inset-0 grid place-items-center rounded-full bg-known text-white" data-shown={state === 'done'}>
+      <span className="icon-swap absolute inset-0 grid place-items-center rounded-full bg-known text-known-foreground" data-shown={state === 'done'}>
         <CheckIcon size={10} weight={1.75} />
       </span>
-      <span className="icon-swap absolute inset-0 grid place-items-center rounded-full bg-destructive text-white" data-shown={state === 'failed'}>
+      <span className="icon-swap absolute inset-0 grid place-items-center rounded-full bg-destructive text-destructive-foreground" data-shown={state === 'failed'}>
         <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
           <path d="M1.5 1.5l5 5M6.5 1.5l-5 5" />
         </svg>
