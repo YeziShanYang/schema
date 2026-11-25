@@ -205,7 +205,7 @@ export function AddDialog({
                 </p>
               </div>
 
-              <fieldset className="grid gap-2">
+              <fieldset className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
                 <legend className="label pb-1">Where should it go?</legend>
                 {(hasWorkspaces || workspaceId) && (
                   <label className={cn('flex cursor-pointer items-center gap-2.5 rounded border p-2.5', dest === 'existing' ? 'border-primary bg-accent-soft' : 'border-border')}>
@@ -216,7 +216,7 @@ export function AddDialog({
                       onChange={(e) => { setWsId(e.target.value); pick('existing') }}
                       aria-label="Workspace"
                       data-testid="dest-select"
-                      className="ml-auto h-[30px] max-w-[55%] rounded border border-input bg-card px-2 text-sm"
+                      className="ml-auto h-[30px] min-w-0 max-w-[55%] rounded border border-input bg-card px-2 text-sm"
                     >
                       {workspaces.rows.map((w) => <option key={w.recordId} value={w.recordId}>{w.data.name}</option>)}
                     </select>

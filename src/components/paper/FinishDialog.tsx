@@ -73,9 +73,10 @@ export function FinishDialog({
             : 'It moves back to In progress in your library and in its workspaces.'}
         </Modal.Description>
       </Modal.Header>
-      <div className="flex items-center gap-2" data-testid={finishing ? 'finish-panel' : 'read-again-panel'}>
-        <Checkbox id={`${mode}-choice`} checked={choice} onCheckedChange={setChoice} />
-        <Label htmlFor={`${mode}-choice`}>
+      <div className="flex items-start gap-2" data-testid={finishing ? 'finish-panel' : 'read-again-panel'}>
+        <Checkbox id={`${mode}-choice`} checked={choice} onCheckedChange={setChoice} className="mt-px" />
+        {/* The read-again line can wrap, so it gets a reading line height and the box sits by its first line. */}
+        <Label htmlFor={`${mode}-choice`} className="leading-snug">
           {finishing
             ? 'Also check the remaining concepts in this paper'
             : `Also uncheck the ${plural(fromFinish.length, 'concept', 'concepts')} checked when you finished`}
