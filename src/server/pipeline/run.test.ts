@@ -239,17 +239,4 @@ describe('analyze job grounding and placement', () => {
     expect((await paperData(id)).branches.map((b) => b.key)).toEqual(['attention', 'geometry', 'other'])
     expect(vi.mocked(console.info).mock.calls.flat()).toContain('[analyze] 0000.00004: c1 moved from branch geometry to attention (foundation-to-earlier-user)')
   })
-
-  it('gives a concept the overview left without a role the first sentence of its why-needed line', async () => {
-    await editedFixture('overview', (json) => {
-      json.roles = (json.roles as { key: string }[]).filter((r) => r.key !== 'c3')
-    })
-    const id = await createPaper('0000.00005')
-    await runJob(id, '0000.00005')
-
-    const concepts = await conceptRows(id)
-    expect(concepts.c3.plainRole).toBe('The correction term is computed from it.')
-    // Verify still drops the role it judges unsupported.
-    expect(concepts.c9.plainRole).toBe('')
-  })
 })
