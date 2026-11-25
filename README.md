@@ -12,7 +12,7 @@ A workspace page shows its papers as cards floating around the workspace name. R
 
 `recommendedSequence()` in `src/lib/sequence.ts` orders branches by the mean prerequisite tier of their concepts, keeping the model's order on ties. Concepts are ordered by tier, then branch, then the model's order. The next concept is the first unchecked one whose dependencies are all checked. The paper page shows the steps and a Next up button, and the workspace page names the paper to continue with its next concept. A step's label is cut at about 24 characters, and the branch's full name is its tooltip and accessible name.
 
-The Add button opens one window for papers and workspaces. For a paper, `peekPaper` looks up the link on arXiv and reports whether the paper is already analyzed. The reader then picks an existing workspace or a new one, with a name suggested from the arXiv category. A new workspace is created only after the paper checks out. A workspace created from this window asks `recommendPapers` for starter papers once.
+The Add button opens one window for papers and workspaces. For a paper, `peekPaper` looks up the link on arXiv and reports whether the paper is already analyzed. The reader then picks an existing workspace (the one opened last is preselected) or a new one, with a name suggested from the arXiv category. A paper that already exists can also open without a workspace, since that costs nothing. A new workspace is created only after the paper checks out. A workspace created from this window asks `recommendPapers` for starter papers once. Home's paper box runs the same look-up: a paper that exists opens at once and uses no daily slot, and a new one opens this window with the link and its look-up filled in.
 
 ## How a paper is analyzed
 

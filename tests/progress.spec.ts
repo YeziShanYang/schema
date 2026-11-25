@@ -44,6 +44,17 @@ async function allowance(page: Page): Promise<number> {
   return r.success ? r.data.analyze.remaining : 0
 }
 
+/** Home's paper box sends a new paper through the Add window; it goes into a new fixture workspace. */
+async function startFromHome(page: Page, id: string) {
+  await page.getByTestId('analyze-input').fill(id)
+  await page.getByTestId('analyze-submit').click()
+  const dialog = page.getByTestId('add-dialog')
+  await expect(dialog.getByTestId('add-paper-preview')).toBeVisible({ timeout: 15_000 })
+  await dialog.getByTestId('dest-new').check()
+  await dialog.getByTestId('dest-name').fill(`[fixture] Progress ${Date.now()}`)
+  await dialog.getByTestId('add-paper-submit').click()
+}
+
 function stage(page: Page, key: string) {
   return page.locator(`[data-testid="progress-stage"][data-stage-key="${key}"]`)
 }
@@ -117,8 +128,7 @@ test('progress view: stage checklist, branches one at a time, elapsed time, then
 
   const id = await unusedId(page, '55')
   const slug = id.replace('.', '~')
-  await page.getByTestId('analyze-input').fill(id)
-  await page.getByTestId('analyze-submit').click()
+  await startFromHome(page, id)
   await expect(page).toHaveURL(new RegExp(`/p/${slug}$`), { timeout: 15_000 })
   await expect(page.getByTestId('analysis-progress')).toBeVisible()
   await startRecorder(page)
@@ -197,8 +207,7 @@ test('a failed analysis shows the stage it stopped in, the retry note, the error
   await page.emulateMedia({ reducedMotion: 'reduce' })
 
   const id = await unusedId(page, '77')
-  await page.getByTestId('analyze-input').fill(id)
-  await page.getByTestId('analyze-submit').click()
+  await startFromHome(page, id)
   await expect(page).toHaveURL(/\/p\/0000~/, { timeout: 15_000 })
   // The first conversion error is retried once, and the job says so under the stage.
   await expect(page.getByTestId('progress-note')).toContainText('Retrying after an error: Fixture conversion failure', { timeout: 20_000 })

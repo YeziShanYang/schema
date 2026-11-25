@@ -1,5 +1,6 @@
 /**
- * Home: continue where you left off, paste an arXiv link, recently analyzed
+ * Home: continue where you left off, paste an arXiv link (an analyzed paper
+ * opens at once, a new one goes through the Add window), recently analyzed
  * papers. Requires sign-in (it sits under (protected)).
  */
 
@@ -56,9 +57,9 @@ export default function HomePage() {
         )}
 
         <section className="surface enter p-4" style={{ ['--i' as string]: 1 }}>
-          <div className="label">Open a paper without a workspace</div>
+          <div className="label">Open a paper</div>
           <p className="mb-3 mt-1 text-sm text-muted-foreground">
-            Paste an arXiv link or id. A paper nobody has analyzed takes {ANALYSIS_TIME}; one already analyzed opens right away.
+            Paste an arXiv link or id. A paper already analyzed opens right away. A paper nobody has analyzed takes {ANALYSIS_TIME}, and you choose its workspace first.
           </p>
           <AnalyzeForm />
         </section>

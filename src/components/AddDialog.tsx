@@ -2,15 +2,17 @@
  * The one Add flow: a centered window with two paths.
  *
  * Paper: paste a link, look it up on arXiv (peekPaper, free), then choose
- * where it goes, a new workspace with a suggested name or an existing one,
- * and open its paper window. A new workspace is created on the server only
- * after the paper checks out.
+ * where it goes: an existing workspace (the one opened last is preselected),
+ * a new workspace with a suggested name, or, for a paper that already exists
+ * and so costs nothing, no workspace at all. Then open its paper window. A
+ * new workspace is created on the server only after the paper checks out.
+ * Home's paper box opens this path with its look-up already done (`initial`).
  *
  * Workspace: name and optional description, then open it; the workspace
  * page asks for starter recommendations once.
  */
 
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { Button, Input, Textarea } from './ui'
@@ -24,43 +26,74 @@ import { formatSlotTime } from '../lib/cap'
 import { ANALYSIS_TIME } from '../constants'
 
 type Step = 'choose' | 'paper' | 'workspace'
+type Dest = 'new' | 'existing' | 'none'
 
-export function AddDialog({ open, onClose, workspaceId }: { open: boolean; onClose: () => void; workspaceId?: string }) {
+export function AddDialog({
+  open,
+  onClose,
+  workspaceId,
+  initial,
+  returnFocus,
+}: {
+  open: boolean
+  onClose: () => void
+  workspaceId?: string
+  /** Where focus goes when the window closes. */
+  returnFocus?: () => HTMLElement | null
+  /** A look-up already done elsewhere (Home's paper box): the window opens on the paper path with it. */
+  initial?: { input: string; peek: PaperPeek }
+}) {
   const navigate = useNavigate()
   const workspaces = useWorkspaces()
   const { allowance } = useAllowance()
   const [step, setStep] = useState<Step>(workspaceId ? 'paper' : 'choose')
   const [input, setInput] = useState('')
   const [peek, setPeek] = useState<PaperPeek | null>(null)
-  const [dest, setDest] = useState<'new' | 'existing'>(workspaceId ? 'existing' : 'new')
+  const [dest, setDest] = useState<Dest>(workspaceId ? 'existing' : 'new')
   const [name, setName] = useState('')
   const [wsId, setWsId] = useState(workspaceId ?? '')
   const [wsName, setWsName] = useState('')
   const [wsDescription, setWsDescription] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // Once the reader picks a destination, a late workspace load no longer changes it.
+  const destPicked = useRef(false)
+  const rows = useRef(workspaces.rows)
+  rows.current = workspaces.rows
 
-  // Start fresh each time the window opens.
+  // Start fresh each time the window opens. The workspace opened last (rows are sorted that way) is preselected.
   useEffect(() => {
     if (!open) return
-    setStep(workspaceId ? 'paper' : 'choose')
-    setInput('')
-    setPeek(null)
-    setDest(workspaceId ? 'existing' : 'new')
-    setWsId(workspaceId ?? '')
+    const preselected = workspaceId ?? rows.current[0]?.recordId ?? ''
+    destPicked.current = false
+    setStep(workspaceId || initial ? 'paper' : 'choose')
+    setInput(initial?.input ?? '')
+    setPeek(initial?.peek ?? null)
+    setName(initial?.peek.suggestedWorkspaceName ?? '')
+    setDest(preselected ? 'existing' : 'new')
+    setWsId(preselected)
     setError('')
     setBusy(false)
-  }, [open, workspaceId])
+  }, [open, workspaceId, initial])
 
-  // Default the destination once workspaces have loaded.
+  // Workspaces that load after the window opened still preselect the one opened last.
   const hasWorkspaces = workspaces.rows.length > 0
   useEffect(() => {
-    if (!workspaceId && !wsId && hasWorkspaces) setWsId(workspaces.rows[0].recordId)
-  }, [workspaceId, wsId, hasWorkspaces, workspaces.rows])
+    if (!open || workspaceId || wsId || !hasWorkspaces) return
+    setWsId(workspaces.rows[0].recordId)
+    if (!destPicked.current) setDest('existing')
+  }, [open, workspaceId, wsId, hasWorkspaces, workspaces.rows])
+
+  const pick = (d: Dest) => {
+    destPicked.current = true
+    setDest(d)
+  }
 
   const a = allowance?.analyze
   // At the daily cap only a paper with no analysis yet is refused; one that exists (ready, running or failed) opens free.
   const blocked = !!peek && peek.status === 'new' && !!a && !a.allowed
+  // A paper that exists already costs nothing to open, so it can open without being filed anywhere.
+  const opensFree = !!peek && peek.status !== 'new'
 
   async function lookUp(e: FormEvent) {
     e.preventDefault()
@@ -72,12 +105,18 @@ export function AddDialog({ open, onClose, workspaceId }: { open: boolean; onClo
     if (!r.success) return setError(r.error)
     setPeek(r.data)
     setName(r.data.suggestedWorkspaceName)
-    if (!hasWorkspaces && !workspaceId) setDest('new')
+    // A new paper can't open without a workspace. (Read the rows through the ref: they may have loaded during the look-up.)
+    if (r.data.status === 'new') setDest((d) => (d === 'none' ? (workspaceId || rows.current.length ? 'existing' : 'new') : d))
   }
 
   async function addPaper(e: FormEvent) {
     e.preventDefault()
     if (!peek || busy) return
+    if (dest === 'none') {
+      onClose()
+      navigate(`/p/${arxivSlug(peek.arxivId)}`)
+      return
+    }
     setBusy(true)
     setError('')
     const r =
@@ -119,7 +158,7 @@ export function AddDialog({ open, onClose, workspaceId }: { open: boolean; onClo
   ) : null
 
   return (
-    <BranchPanel open={open} onClose={onClose} title={title} eyebrow={workspaceId ? 'This workspace' : 'Add'} header={allowanceLine} testId="add-dialog" closeLabel="Close" maxWidth={640}>
+    <BranchPanel open={open} onClose={onClose} returnFocus={returnFocus} title={title} eyebrow={workspaceId ? 'This workspace' : 'Add'} header={allowanceLine} testId="add-dialog" closeLabel="Close" maxWidth={640}>
       {step === 'choose' && (
         <div className="grid gap-3 sm:grid-cols-2">
           <button type="button" onClick={() => setStep('paper')} data-testid="add-choice-paper"
@@ -170,11 +209,11 @@ export function AddDialog({ open, onClose, workspaceId }: { open: boolean; onClo
                 <legend className="label pb-1">Where should it go?</legend>
                 {(hasWorkspaces || workspaceId) && (
                   <label className={cn('flex cursor-pointer items-center gap-2.5 rounded border p-2.5', dest === 'existing' ? 'border-primary bg-accent-soft' : 'border-border')}>
-                    <input type="radio" name="dest" checked={dest === 'existing'} onChange={() => setDest('existing')} data-testid="dest-existing" />
+                    <input type="radio" name="dest" checked={dest === 'existing'} onChange={() => pick('existing')} data-testid="dest-existing" />
                     <span className="text-sm">An existing workspace</span>
                     <select
                       value={wsId}
-                      onChange={(e) => { setWsId(e.target.value); setDest('existing') }}
+                      onChange={(e) => { setWsId(e.target.value); pick('existing') }}
                       aria-label="Workspace"
                       data-testid="dest-select"
                       className="ml-auto h-[30px] max-w-[55%] rounded border border-input bg-card px-2 text-sm"
@@ -184,16 +223,22 @@ export function AddDialog({ open, onClose, workspaceId }: { open: boolean; onClo
                   </label>
                 )}
                 <label className={cn('flex cursor-pointer flex-wrap items-center gap-2.5 rounded border p-2.5', dest === 'new' ? 'border-primary bg-accent-soft' : 'border-border')}>
-                  <input type="radio" name="dest" checked={dest === 'new'} onChange={() => setDest('new')} data-testid="dest-new" />
+                  <input type="radio" name="dest" checked={dest === 'new'} onChange={() => pick('new')} data-testid="dest-new" />
                   <span className="text-sm">A new workspace named</span>
-                  <Input value={name} onChange={(e) => { setName(e.target.value); setDest('new') }} aria-label="New workspace name" data-testid="dest-name" className="h-[30px] flex-1 min-w-[160px]" />
+                  <Input value={name} onChange={(e) => { setName(e.target.value); pick('new') }} aria-label="New workspace name" data-testid="dest-name" className="h-[30px] flex-1 min-w-[160px]" />
                 </label>
+                {opensFree && (
+                  <label className={cn('flex cursor-pointer items-center gap-2.5 rounded border p-2.5', dest === 'none' ? 'border-primary bg-accent-soft' : 'border-border')}>
+                    <input type="radio" name="dest" checked={dest === 'none'} onChange={() => pick('none')} data-testid="dest-none" />
+                    <span className="text-sm">Open without a workspace</span>
+                  </label>
+                )}
               </fieldset>
 
               <div className="flex justify-end gap-2">
-                <Button variant="ghost" onClick={() => (workspaceId ? onClose() : setStep('choose'))}>Back</Button>
-                <Button type="submit" loading={busy} disabled={blocked || (dest === 'new' ? !name.trim() : !wsId)} data-testid="add-paper-submit">
-                  <PlusIcon size={14} /> Add paper
+                <Button variant="ghost" onClick={() => (workspaceId || initial ? onClose() : setStep('choose'))}>Back</Button>
+                <Button type="submit" loading={busy} disabled={blocked || (dest === 'new' ? !name.trim() : dest === 'existing' && !wsId)} data-testid="add-paper-submit">
+                  {dest === 'none' ? 'Open paper' : <><PlusIcon size={14} /> Add paper</>}
                 </Button>
               </div>
             </form>
@@ -227,12 +272,13 @@ export function AddDialog({ open, onClose, workspaceId }: { open: boolean; onClo
 /** The primary Add button; opens the Add window. */
 export function AddButton({ workspaceId, className, label, testId = 'add-open' }: { workspaceId?: string; className?: string; label?: string; testId?: string }) {
   const [open, setOpen] = useState(false)
+  const button = useRef<HTMLButtonElement>(null)
   return (
     <>
-      <Button onClick={() => setOpen(true)} className={className} data-testid={testId}>
+      <Button ref={button} onClick={() => setOpen(true)} className={className} data-testid={testId}>
         <PlusIcon size={15} /> {label ?? (workspaceId ? 'Add paper' : 'Add paper or workspace')}
       </Button>
-      <AddDialog open={open} onClose={() => setOpen(false)} workspaceId={workspaceId} />
+      <AddDialog open={open} onClose={() => setOpen(false)} workspaceId={workspaceId} returnFocus={() => button.current} />
     </>
   )
 }

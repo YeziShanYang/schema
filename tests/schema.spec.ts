@@ -71,12 +71,28 @@ async function setOverviewRead(page: Page, read: boolean) {
   await expect(page.getByTestId('overview-window')).toHaveCount(0)
 }
 
+/**
+ * Home's paper box: a paper that exists opens at once; a new one opens the Add
+ * window with its look-up done, and goes into a new fixture workspace.
+ */
+async function openFromHome(page: Page, id: string) {
+  await page.getByTestId('analyze-input').fill(id)
+  await page.getByTestId('analyze-submit').click()
+  const dialog = page.getByTestId('add-dialog')
+  await expect(page.getByTestId('paper-page').or(dialog)).toBeVisible({ timeout: 15_000 })
+  if (await dialog.isVisible()) {
+    await expect(dialog.getByTestId('add-paper-title')).toBeVisible()
+    await dialog.getByTestId('dest-new').check()
+    await dialog.getByTestId('dest-name').fill(`[fixture] From Home ${Date.now()}`)
+    await dialog.getByTestId('add-paper-submit').click()
+  }
+  await expect(page).toHaveURL(new RegExp(`/p/${id.replace('.', '~')}$`), { timeout: 15_000 })
+}
+
 async function openReadyFixturePaper(page: Page, id = FIXTURE_ID) {
   await calm(page)
   await page.goto('/home')
-  await page.getByTestId('analyze-input').fill(id)
-  await page.getByTestId('analyze-submit').click()
-  await expect(page).toHaveURL(new RegExp(`/p/${id.replace('.', '~')}$`), { timeout: 15_000 })
+  await openFromHome(page, id)
   const paperPage = page.getByTestId('paper-page')
   await expect(paperPage).toHaveAttribute('data-paper-status', /ready|failed/, { timeout: READY_TIMEOUT })
   if ((await paperPage.getAttribute('data-paper-status')) === 'failed') {
@@ -734,6 +750,72 @@ test('Add flow, paper path: look up, suggested workspace name, bad links leave n
   await expect(page.getByTestId('sidebar-workspaces')).toContainText(name)
 })
 
+test("Home's paper box opens an analyzed paper at once and sends a new one through the Add window", async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await openReadyFixturePaper(page)
+  // Analyzed already: it opens directly and uses no slot.
+  const before = await allowanceLeft(page)
+  await page.getByTestId('analyze-input').fill(FIXTURE_ID)
+  await page.getByTestId('analyze-submit').click()
+  await expect(page).toHaveURL(new RegExp(`/p/${FIXTURE_SLUG}$`), { timeout: 15_000 })
+  await expect(page.getByTestId('add-dialog')).toHaveCount(0)
+  expect(await allowanceLeft(page)).toBe(before)
+
+  // New: the Add window opens on its paper path with the link filled in and the look-up done.
+  const id = await newFixtureId(page, '')
+  const link = `https://arxiv.org/abs/${id}`
+  await page.getByTestId('analyze-input').fill(link)
+  await page.getByTestId('analyze-submit').click()
+  const dialog = page.getByTestId('add-dialog')
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByTestId('add-paper-input')).toHaveValue(link)
+  await expect(dialog.getByTestId('add-paper-title')).toContainText(FIXTURE_TITLE)
+  await expect(dialog.getByTestId('add-paper-status')).toContainText(before > 0 ? 'analysis takes 1 to 2 minutes' : "You've reached today's limit")
+  await expect(dialog.getByTestId('dest-existing').or(dialog.getByTestId('dest-new')).first()).toBeChecked()
+  await expect(dialog.getByTestId('dest-none')).toHaveCount(0)
+  // Closing it spends nothing, and focus goes back to the box's button.
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByTestId('analyze-submit')).toBeFocused()
+  expect((await action(page, 'peekPaper', { input: id })).data.status).toBe('new')
+  expect(await allowanceLeft(page)).toBe(before)
+})
+
+test('the Add window preselects the workspace opened last, and an analyzed paper can open without one', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  // Both papers exist; the second is the one to open.
+  await openReadyFixturePaper(page, SECOND_ID)
+  await openReadyFixturePaper(page)
+  // A workspace made now is the one opened last.
+  const made = await action(page, 'analyzePaper', { input: FIXTURE_ID, newWorkspace: { name: `[fixture] Opened last ${Date.now()}` } })
+  expect(made.success).toBe(true)
+  await page.goto('/home')
+  await page.getByTestId('home-add-open').click()
+  const dialog = page.getByTestId('add-dialog')
+  await dialog.getByTestId('add-choice-paper').click()
+  await dialog.getByTestId('add-paper-input').fill(SECOND_ID)
+  await dialog.getByTestId('add-paper-lookup').click()
+  await expect(dialog.getByTestId('add-paper-status')).toContainText('Already analyzed')
+  await expect(dialog.getByTestId('dest-existing')).toBeChecked()
+  await expect(dialog.getByTestId('dest-select')).toHaveValue(made.data.workspaceId)
+  await expect(dialog.getByTestId('dest-new')).toBeVisible()
+
+  // Analyzed, so it can open without being filed anywhere.
+  await dialog.getByTestId('dest-none').check()
+  await expect(dialog.getByTestId('add-paper-submit')).toHaveText('Open paper')
+  await dialog.getByTestId('add-paper-submit').click()
+  await expect(page).toHaveURL(new RegExp(`^[^#?]*/p/${SECOND_SLUG}$`), { timeout: 15_000 })
+  expect(new URL(page.url()).pathname).toBe(`/p/${SECOND_SLUG}`)
+  await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'ready', { timeout: 20_000 })
+  await page.goto(`/w/${made.data.workspaceId}`)
+  await expect(page.getByTestId('workspace-paper')).toHaveCount(1, { timeout: 15_000 })
+  await expect(page.locator(`[data-testid="workspace-paper"][data-arxiv="${SECOND_ID}"]`)).toHaveCount(0)
+})
+
 test('checking a concept in one paper leaves another paper unchecked and shows a hint there', async ({ users }) => {
   test.setTimeout(200_000)
   const [ada] = await users(['Schema ada'])
@@ -1037,8 +1119,7 @@ async function allowanceLeft(page: Page): Promise<number> {
 }
 
 async function analyzeUntilFailed(page: Page, id: string, message: string) {
-  await page.getByTestId('analyze-input').fill(id)
-  await page.getByTestId('analyze-submit').click()
+  await openFromHome(page, id)
   await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'failed', { timeout: READY_TIMEOUT })
   await expect(page.getByTestId('paper-failed')).toContainText(message)
 }
@@ -1089,8 +1170,7 @@ test('the sidebar\'s New papers today comes back on its own after a refunded fai
   test.skip(before === 0, 'Cara and Ada are at the daily cap in this local state')
   await calm(page)
   const sidebar = page.getByTestId('sidebar-allowance')
-  await page.getByTestId('analyze-input').fill(await newFixtureId(page, '77'))
-  await page.getByTestId('analyze-submit').click()
+  await openFromHome(page, await newFixtureId(page, '77'))
   await expect(sidebar).toHaveAttribute('data-remaining', String(before - 1), { timeout: 15_000 })
   await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'failed', { timeout: READY_TIMEOUT })
   // No reload and no refocus: the paper turning failed refreshes the count.
@@ -1130,23 +1210,33 @@ test('at the daily cap the Add window says so up front and lets only analyzed pa
   await expect(submit).toBeEnabled()
 })
 
-test('the daily cap refuses a sixth new paper', async ({ users }) => {
+test('Home\'s paper box goes through the Add window, which stops a sixth new paper at the daily cap', async ({ users }) => {
   test.setTimeout(150_000)
   const [, bob] = await users(['Schema ada', 'Schema bob'])
   const page = bob.page
-  let refused = ''
+  let refused = false
   for (let i = 0; i < 6 && !refused; i++) {
-    await page.goto('/home')
-    const id = await newFixtureId(page, '')
-    await page.getByTestId('analyze-input').fill(id)
+    // The window reads the allowance the sidebar loads.
+    await allowanceLeft(page)
+    await page.getByTestId('analyze-input').fill(await newFixtureId(page, ''))
     await page.getByTestId('analyze-submit').click()
-    const outcome = await Promise.race([
-      page.waitForURL(/\/p\//, { timeout: 15_000 }).then(() => 'ok'),
-      page.getByTestId('analyze-error').waitFor({ timeout: 15_000 }).then(() => 'error'),
-    ])
-    if (outcome === 'error') refused = (await page.getByTestId('analyze-error').textContent()) ?? ''
+    const dialog = page.getByTestId('add-dialog')
+    await expect(dialog.getByTestId('add-paper-preview')).toBeVisible({ timeout: 15_000 })
+    const status = dialog.getByTestId('add-paper-status')
+    if (((await status.textContent()) ?? '').includes("You've reached today's limit")) {
+      refused = true
+      await expect(dialog.getByTestId('add-paper-submit')).toBeDisabled()
+      // A new paper never opens without a workspace.
+      await expect(dialog.getByTestId('dest-none')).toHaveCount(0)
+      break
+    }
+    await expect(status).toContainText('analysis takes 1 to 2 minutes')
+    await dialog.getByTestId('dest-new').check()
+    await dialog.getByTestId('dest-name').fill(`[fixture] Cap ${Date.now()}`)
+    await dialog.getByTestId('add-paper-submit').click()
+    await page.waitForURL(/\/p\//, { timeout: 15_000 })
   }
-  expect(refused).toContain('daily limit')
+  expect(refused).toBe(true)
 })
 
 test('signed-out demo: status changes stay local, links and AI need sign-in', async ({ page }) => {
