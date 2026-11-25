@@ -89,12 +89,12 @@ export function explainSystem(source: 'html' | 'pdf'): string {
 
 You get the paper's main text and the list of concepts it relies on (id, name, why it matters). ${sourceNote(source)}
 
-Write sections: a walkthrough of the paper's main sections in order, 4 to 10 entries. For each: heading (the paper's section number and title), summary (3 to 5 plain sentences on what the section does and why it matters to the argument, stating only what the section itself says), and concept_ids (ids from the concept list that the section uses).
+Write sections: a walkthrough of the paper's main sections in order, 4 to 10 entries. For each: heading (the paper's section number and title), summary (3 to 5 sentences in plain words on what the section does and why it matters to the argument, stating only what the section itself says), and concept_ids (ids from the concept list that the section uses).
 
-Write math in summaries as LaTeX between \\( and \\) (inline) or \\[ and \\] (display), escaped for JSON, and keep the prose plain.
+Write every formula, variable and symbol in a summary as LaTeX between \\( and \\) (inline) or \\[ and \\] (display), never as plain text: write \\(\\sqrt{d_k}\\), not sqrt(d_k), and \\(d_{\\text{model}}\\), not d_model. Inside the JSON string each backslash is escaped ("\\\\(d_k\\\\)"). Keep the prose plain.
 
 Output only valid JSON (escape any double quotes and backslashes inside strings, no trailing commas), no prose and no code fences:
-{"sections": [{"heading": string, "summary": string, "concept_ids": [string]}]}`
+{"sections": [{"heading": string, "summary": "3 to 5 sentences. Math as LaTeX in \\\\( \\\\) or \\\\[ \\\\].", "concept_ids": [string]}]}`
 }
 
 export function explainUser(args: {

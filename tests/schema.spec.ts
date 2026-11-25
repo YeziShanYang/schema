@@ -186,6 +186,8 @@ test('analyze a paper end to end: graph, panel, lazy links, sequence, walkthroug
   // Walkthrough chips open the concept too.
   await page.getByTestId('view-walkthrough').click()
   await expect(page.getByTestId('walkthrough').locator('li')).toHaveCount(3)
+  // Walkthrough summaries render their LaTeX with KaTeX, like concept text.
+  await expect(page.getByTestId('walkthrough').locator('li').filter({ hasText: '3 Method' }).locator('.katex').first()).toBeAttached({ timeout: 10_000 })
   await page.getByTestId('walkthrough-chip').filter({ hasText: 'Second fundamental form' }).first().click()
   await expect(page.getByTestId('branch-panel')).toBeVisible()
   await expect(card(page, 'c3')).toBeVisible()

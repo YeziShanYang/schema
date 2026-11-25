@@ -277,7 +277,7 @@ const concepts = {
 const explain = {
   sections: [
     { heading: '1 Introduction', summary: 'Frames attention as a weighted average and notes that prior work assumes a flat space.', concept_ids: ['c1', 'c2', 'c7'] },
-    { heading: '3 Method', summary: 'Adds a curvature term to each attention score before the softmax.', concept_ids: ['c2', 'c3', 'c6'] },
+    { heading: '3 Method', summary: 'Adds a curvature term \\(\\kappa\\) to each attention score before the softmax.', concept_ids: ['c2', 'c3', 'c6'] },
     { heading: '4 Experiments', summary: 'Reports small consistent gains on three benchmarks.', concept_ids: ['c4', 'c8'] },
   ],
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseArxivAtom } from './arxiv-meta'
 import { findMessage } from './llm'
 import { fixtureHtml, fixtureIntegration, FIXTURE_PAPER_HTML, FIXTURE_PAPER_TEXT } from './fixtures'
-import { conceptCountRange, conceptsSystem, resourcesUser, sourceNote } from './prompts'
+import { conceptCountRange, conceptsSystem, explainSystem, resourcesUser, sourceNote } from './prompts'
 import { parseConcepts } from './run'
 import { preparePaperText } from '../../lib/paper-text'
 import { arxivHtmlToText } from '../../lib/paper-html'
@@ -113,6 +113,17 @@ describe('concepts prompt', () => {
     expect(conceptsSystem('pdf', 50_000)).toContain('12 to 24')
     expect(sourceNote('pdf')).toMatch(/never state one as fact/)
     expect(sourceNote('html')).toMatch(/LaTeX/)
+  })
+})
+
+describe('walkthrough prompt', () => {
+  it('asks for every formula in a summary as LaTeX, in the rule and in the JSON shape', () => {
+    for (const source of ['html', 'pdf'] as const) {
+      const p = explainSystem(source)
+      expect(p).toContain('Write every formula, variable and symbol in a summary as LaTeX between \\( and \\) (inline) or \\[ and \\] (display), never as plain text')
+      expect(p).toContain('not sqrt(d_k)')
+      expect(p).toContain('"summary": "3 to 5 sentences. Math as LaTeX in \\\\( \\\\) or \\\\[ \\\\]."')
+    }
   })
 })
 
