@@ -489,6 +489,16 @@ test('Home and a paper page fit a 390px screen when a paper has a long title', a
     expect(await title.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
   }
   expect(await pageWidth()).toBeLessThanOrEqual(390)
+  // The paper box's placeholder fits its box at this width.
+  const input = page.getByTestId('analyze-input')
+  expect(
+    await input.evaluate((el: HTMLInputElement) => {
+      const cs = getComputedStyle(el)
+      const ctx = document.createElement('canvas').getContext('2d')!
+      ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`
+      return ctx.measureText(el.placeholder).width <= el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)
+    }),
+  ).toBe(true)
 
   // The step strip scrolls inside itself; its screen-reader labels must not widen the page.
   await page.goto(`/p/${LONG_SLUG}`)

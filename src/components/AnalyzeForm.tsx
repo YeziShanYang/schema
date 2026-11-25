@@ -57,7 +57,7 @@ export function AnalyzeForm({
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={placeholder ?? 'arXiv link or id, e.g. 2611.29224'}
+            placeholder={placeholder ?? 'e.g. 2611.29224'}
             aria-label="arXiv link or id"
             data-testid="analyze-input"
           />
