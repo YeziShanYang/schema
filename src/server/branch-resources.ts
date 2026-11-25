@@ -12,16 +12,15 @@
  * `skipped`): general explainers rarely exist for it, and its cards lead with
  * Explain with AI instead. When the pick call finds no fitting result, the
  * topic keeps an empty list; raw search results are used only when the pick
- * call itself fails, and only those whose title shares a content word with
- * the topic.
+ * call itself fails, and only those whose title shares at least two content
+ * words with the topic's name (fallbackTitleFits).
  */
 
 import type { ActionTools } from 'deepspace/worker'
 import type { Env } from '../../worker'
 import type { ConceptData, Envelope, PaperData, TopicData, TopicResource } from '../types'
 import { asString } from '../lib/json'
-import { linkTitle } from '../lib/links'
-import { contentWords } from '../lib/topics'
+import { fallbackTitleFits, linkTitle } from '../lib/links'
 import { createPipelineClient, fixturesAllowed } from './pipeline/client'
 import type { PipelineClient } from './pipeline/client'
 import { callModelJson } from './pipeline/llm'
@@ -66,13 +65,12 @@ interface TopicItem {
 }
 
 /**
- * For when the pick call fails: the top search results whose title shares a
- * content word with the topic's name, as links without a "why" line.
+ * For when the pick call fails: the top search results whose title shares at
+ * least two content words with the topic's name, as links without a "why" line.
  */
 export function fallbackResources(topicName: string, candidates: Candidate[]): TopicResource[] {
-  const words = contentWords(topicName)
   return candidates
-    .filter((c) => [...contentWords(c.title)].some((w) => words.has(w)))
+    .filter((c) => fallbackTitleFits(topicName, c.title))
     .slice(0, 2)
     .map((c) => ({ title: c.title, url: c.url, why: '' }))
 }
