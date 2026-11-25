@@ -5,6 +5,7 @@
  * where it goes: an existing workspace (the one opened last is preselected),
  * a new workspace with a suggested name, or, for a paper that already exists
  * and so costs nothing, no workspace at all. Then open its paper window. A
+ * paper already in the chosen workspace says so and simply opens there. A
  * new workspace is created on the server only after the paper checks out.
  * Home's paper box opens this path with its look-up already done (`initial`).
  *
@@ -94,6 +95,11 @@ export function AddDialog({
   const blocked = !!peek && peek.status === 'new' && !!a && !a.allowed
   // A paper that exists already costs nothing to open, so it can open without being filed anywhere.
   const opensFree = !!peek && peek.status !== 'new'
+  // Already filed in the chosen workspace: say so, and the action is to open it there.
+  const alreadyIn =
+    !!peek?.paperId && dest === 'existing' && !!wsId && workspaces.papersOf(wsId).some((p) => p.paperId === peek.paperId)
+    ? workspaces.byId.get(wsId)?.data.name ?? 'this workspace'
+    : ''
 
   async function lookUp(e: FormEvent) {
     e.preventDefault()
@@ -115,6 +121,11 @@ export function AddDialog({
     if (dest === 'none') {
       onClose()
       navigate(`/p/${arxivSlug(peek.arxivId)}`)
+      return
+    }
+    if (alreadyIn) {
+      onClose()
+      navigate(`/w/${wsId}/p/${arxivSlug(peek.arxivId)}`)
       return
     }
     setBusy(true)
@@ -208,7 +219,7 @@ export function AddDialog({
               <fieldset className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
                 <legend className="label pb-1">Where should it go?</legend>
                 {(hasWorkspaces || workspaceId) && (
-                  <label className={cn('flex cursor-pointer items-center gap-2.5 rounded border p-2.5', dest === 'existing' ? 'border-primary bg-accent-soft' : 'border-border')}>
+                  <label className={cn('flex cursor-pointer flex-wrap items-center gap-x-2.5 gap-y-1 rounded border p-2.5', dest === 'existing' ? 'border-primary bg-accent-soft' : 'border-border')}>
                     <input type="radio" name="dest" checked={dest === 'existing'} onChange={() => pick('existing')} data-testid="dest-existing" />
                     <span className="text-sm">An existing workspace</span>
                     <select
@@ -220,6 +231,9 @@ export function AddDialog({
                     >
                       {workspaces.rows.map((w) => <option key={w.recordId} value={w.recordId}>{w.data.name}</option>)}
                     </select>
+                    {alreadyIn && (
+                      <span className="basis-full pl-[23px] text-xs text-muted-foreground" data-testid="add-paper-already">Already in {alreadyIn}</span>
+                    )}
                   </label>
                 )}
                 <label className={cn('flex cursor-pointer flex-wrap items-center gap-2.5 rounded border p-2.5', dest === 'new' ? 'border-primary bg-accent-soft' : 'border-border')}>
@@ -238,7 +252,7 @@ export function AddDialog({
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => (workspaceId || initial ? onClose() : setStep('choose'))}>Back</Button>
                 <Button type="submit" loading={busy} disabled={blocked || (dest === 'new' ? !name.trim() : dest === 'existing' && !wsId)} data-testid="add-paper-submit">
-                  {dest === 'none' ? 'Open paper' : <><PlusIcon size={14} /> Add paper</>}
+                  {dest === 'none' || alreadyIn ? 'Open paper' : <><PlusIcon size={14} /> Add paper</>}
                 </Button>
               </div>
             </form>

@@ -849,6 +849,20 @@ test('the Add window preselects the workspace opened last, and an analyzed paper
   await page.goto(`/w/${made.data.workspaceId}`)
   await expect(page.getByTestId('workspace-paper')).toHaveCount(1, { timeout: 15_000 })
   await expect(page.locator(`[data-testid="workspace-paper"][data-arxiv="${SECOND_ID}"]`)).toHaveCount(0)
+
+  // A paper already in the preselected workspace says so, and Open is the action.
+  await page.goto('/home')
+  await page.getByTestId('add-open').click()
+  await dialog.getByTestId('add-choice-paper').click()
+  await dialog.getByTestId('add-paper-input').fill(FIXTURE_ID)
+  await dialog.getByTestId('add-paper-lookup').click()
+  await expect(dialog.getByTestId('dest-select')).toHaveValue(made.data.workspaceId)
+  const wsName = await dialog.getByTestId('dest-select').locator('option:checked').textContent()
+  await expect(dialog.getByTestId('add-paper-already')).toHaveText(`Already in ${wsName}`)
+  await expect(dialog.getByTestId('add-paper-submit')).toHaveText('Open paper')
+  await dialog.getByTestId('add-paper-submit').click()
+  await expect(page).toHaveURL(new RegExp(`/w/${made.data.workspaceId}/p/${FIXTURE_SLUG}$`), { timeout: 15_000 })
+  await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'ready', { timeout: 20_000 })
 })
 
 test('checking a concept in one paper leaves another paper unchecked and shows a hint there', async ({ users }) => {
