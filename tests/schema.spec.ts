@@ -1571,6 +1571,12 @@ test('the library shows a failed paper as failed, with Retry and no Mark finishe
   await expect(row.getByTestId('library-failed')).toHaveText('Analysis failed')
   await expect(row.getByTestId('library-known')).toHaveCount(0)
   await expect(row.getByTestId('library-finish')).toHaveCount(0)
+  // Rows are separate grids; the failure sits in the same column as other rows' counts.
+  const counts = page.getByTestId('library-known').first()
+  if (await counts.count()) {
+    const [a, b] = [await row.getByTestId('library-failed').boundingBox(), await counts.boundingBox()]
+    expect(Math.round(a!.x)).toBe(Math.round(b!.x))
+  }
   // Retry goes through the paper window's retry action; this fixture fails again and gives the slot back.
   const retried = page.waitForResponse((r) => r.url().endsWith('/api/actions/retryPaper'))
   await row.getByTestId('library-retry').click()

@@ -110,7 +110,7 @@ function LibraryRow({
   const analyzing = status === 'queued' || status === 'processing'
   const { retry, retrying, error } = useRetryPaper(paper?.recordId)
   return (
-    <li className="grid gap-2 px-4 py-3 md:grid-cols-[minmax(0,1fr)_180px_auto] md:items-center" data-testid="library-row" data-status={r.data.status} data-paper-status={status ?? ''}>
+    <li className="grid gap-2 px-4 py-3 md:grid-cols-[minmax(0,1fr)_180px_7rem] md:items-center" data-testid="library-row" data-status={r.data.status} data-paper-status={status ?? ''}>
       <div className="min-w-0">
         <Link to={`/p/${arxivSlug(r.data.arxivId)}`} className="font-medium hover:text-primary">{r.data.title || r.data.arxivId}</Link>
         <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
