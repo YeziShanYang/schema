@@ -749,6 +749,31 @@ test('the library finishes a paper with the same dialog, and both its buttons up
   await expect(entry).toHaveAttribute('data-status', 'active', { timeout: 15_000 })
 })
 
+test('Remove from workspace in the paper window asks first, then goes back to the workspace', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await openReadyFixturePaper(page)
+  const added = await action(page, 'analyzePaper', { input: FIXTURE_ID, newWorkspace: { name: `[fixture] Remove ${Date.now()}` } })
+  expect(added.success).toBe(true)
+  const paperUrl = `/w/${added.data.workspaceId}/p/${FIXTURE_SLUG}`
+  await page.goto(paperUrl)
+  await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'ready', { timeout: 20_000 })
+
+  const confirm = page.getByRole('dialog', { name: 'Remove this paper from the workspace?' })
+  await page.getByTestId('remove-from-workspace').click()
+  await expect(confirm).toBeVisible()
+  await confirm.getByRole('button', { name: 'Cancel' }).click()
+  await expect(confirm).toHaveCount(0)
+  await expect(page).toHaveURL(new RegExp(`${paperUrl}$`))
+
+  await page.getByTestId('remove-from-workspace').click()
+  await confirm.getByRole('button', { name: 'Remove paper' }).click()
+  await expect(page).toHaveURL(new RegExp(`/w/${added.data.workspaceId}$`), { timeout: 15_000 })
+  await expect(page.getByTestId('workspace-name')).toBeVisible()
+  await expect(page.getByTestId('workspace-paper')).toHaveCount(0)
+})
+
 /**
  * A fixture id nobody has analyzed yet (checked with peekPaper), ending in
  * `suffix`; '' gives a normal paper (not ending in 77 or 99).

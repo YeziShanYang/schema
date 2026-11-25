@@ -11,9 +11,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from 'deepspace'
-import { Button } from '@/components/ui'
+import { Button, ConfirmModal } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { arxivAbsUrl, parseArxivId } from '../../lib/arxiv'
 import { usePaper, useReopenPaper } from '../../hooks/usePaper'
@@ -60,6 +60,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const roadmaps = useRoadmaps()
   const workspaces = useWorkspaces()
   const reopenPaper = useReopenPaper()
+  const navigate = useNavigate()
   const { allowance } = useAllowance()
   const ws = workspaceId ? workspaces.byId.get(workspaceId) : undefined
   // The progress view stands in for the graph until the paper is ready, then cross-fades out over it.
@@ -71,6 +72,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [focusConcept, setFocusConcept] = useState('')
   const [finishOpen, setFinishOpen] = useState(false)
+  const [confirmRemove, setConfirmRemove] = useState(false)
   const [showAuth, setShowAuth] = useState(false)
   // The control that opened the sign-in window, so focus returns there when it closes.
   const authTrigger = useRef<HTMLElement | null>(null)
@@ -348,7 +350,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
             </nav>
           )}
           {ws && isSignedIn && (
-            <Button size="sm" variant="ghost" onClick={async () => { await workspaces.removePaper(ws.recordId, paper.recordId) }} data-testid="remove-from-workspace">
+            <Button size="sm" variant="ghost" onClick={() => setConfirmRemove(true)} data-testid="remove-from-workspace">
               Remove from workspace
             </Button>
           )}
@@ -565,6 +567,21 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
       )}
 
       <FinishDialog paper={paper} open={finishOpen} onClose={() => setFinishOpen(false)} />
+
+      {ws && (
+        <ConfirmModal
+          open={confirmRemove}
+          onClose={() => setConfirmRemove(false)}
+          onConfirm={async () => {
+            await workspaces.removePaper(ws.recordId, paper.recordId)
+            setConfirmRemove(false)
+            navigate(`/w/${ws.recordId}`)
+          }}
+          title="Remove this paper from the workspace?"
+          description={`It leaves ${ws.data.name}. The paper stays in your library, and your checkmarks stay.`}
+          confirmText="Remove paper"
+        />
+      )}
 
       {showAuth && <SignInOverlay onClose={() => setShowAuth(false)} returnFocus={authTrigger.current} />}
     </div>
