@@ -1,7 +1,7 @@
 /**
  * Which quote a concept card shows. The concepts call returns up to two
  * candidate passages per concept; the server takes the first one that:
- * - is verified against the paper text (lib/quotes),
+ * - is verified against the paper text (lib/analysis/quotes),
  * - has at least 8 words outside its math,
  * - contains no "=" (or another definition sign) and no display math,
  * - doesn't end in a lead-in ("is", "the", "as follows", a colon or a comma,
@@ -19,7 +19,7 @@
  * the sentence passes every rule too, its first letter isn't lowercase, and
  * it fits in MAX_QUOTE_CHARS; otherwise the quote is kept as it is.
  * When none passes, the job looks for a sentence that names the concept
- * (lib/quote-fallback); failing that, the concept has no quote and the card
+ * (lib/analysis/quote-fallback); failing that, the concept has no quote and the card
  * hides the block. A quote that matches the paper exactly is stored as the
  * paper's own text (exactQuoteSpan), so its math keeps the paper's LaTeX
  * delimiters.

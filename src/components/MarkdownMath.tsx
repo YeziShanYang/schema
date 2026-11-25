@@ -10,7 +10,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
-import { normalizeMathMarkdown } from '../lib/math'
+import { normalizeMathMarkdown } from '../lib/analysis/math'
 
 export default function MarkdownMath({ text, className }: { text: string; className?: string }) {
   return (

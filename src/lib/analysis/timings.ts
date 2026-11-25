@@ -16,7 +16,7 @@
  * patch from the record it loaded and the page can measure elapsed time.
  */
 
-import type { StageTimings, TimedStage } from '../types'
+import type { StageTimings, TimedStage } from '../../types'
 
 export const TIMED_STAGES: readonly TimedStage[] = ['queued', 'text', 'concepts', 'overview', 'explain', 'verify']
 

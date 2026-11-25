@@ -49,7 +49,7 @@ export const knowledgeSchema: CollectionSchema = {
  * never checks anything in another paper. The concept's name and topic are
  * copied in for hints and for the knowledge page, and so a re-analysis can
  * move the row to the new concept with the same name (see
- * src/lib/knowledge-remap.ts). The `knowledge` collection above now holds the
+ * src/lib/knowledge/knowledge-remap.ts). The `knowledge` collection above now holds the
  * reader's self-declared profile topics.
  */
 export const conceptKnowledgeSchema: CollectionSchema = {

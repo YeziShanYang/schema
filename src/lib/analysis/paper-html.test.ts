@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { arxivHtmlToText, decodeEntities, MIN_HTML_TEXT_CHARS } from './paper-html'
-import { FIXTURE_PAPER_HTML } from '../server/pipeline/fixtures'
+import { FIXTURE_PAPER_HTML } from '../../server/pipeline/fixtures'
 
 const page = (body: string) => `<!DOCTYPE html><html><head><title>t</title><script>var x = "<p>script</p>";</script></head><body><header>chrome</header><article class="ltx_document">${body}</article><footer>foot</footer></body></html>`
 const math = (alt: string, display: 'inline' | 'block' = 'inline') =>

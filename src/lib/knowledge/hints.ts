@@ -8,7 +8,7 @@
  * A checked concept elsewhere wins over the profile, since it names a paper.
  * Topic keys are compared as stored: the strict reuse rule is applied when
  * the analyze job assigns topics. Names use normalizeConceptName, the same
- * folding the re-analysis remap uses (src/lib/topics.ts).
+ * folding the re-analysis remap uses (src/lib/knowledge/topics.ts).
  */
 
 import { normalizeConceptName } from './topics'

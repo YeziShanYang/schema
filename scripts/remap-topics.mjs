@@ -3,7 +3,7 @@
  * (pipelineVersion below 2). A concept whose name shares no content word with
  * its topic's name ("BLEU score" on "Evaluation metrics") moves to a topic
  * named for the concept, created if missing, using the same rule as the
- * analyze job (planTopicMoves in src/lib/topic-remap.ts). Then the paper's
+ * analyze job (planTopicMoves in src/lib/knowledge/topic-remap.ts). Then the paper's
  * topicKeys are recomputed. Prints the plan; --apply writes it. Safe to re-run.
  *
  *   node scripts/remap-topics.mjs [app] [--apply]
@@ -13,7 +13,7 @@
  * change what anyone has checked; the topic only decides shared links and hints.
  */
 import { conceptsOf, invoke, query } from './agent.mjs'
-import { planTopicMoves } from '../src/lib/topic-remap.ts'
+import { planTopicMoves } from '../src/lib/knowledge/topic-remap.ts'
 
 const app = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'schema'
 const apply = process.argv.includes('--apply')

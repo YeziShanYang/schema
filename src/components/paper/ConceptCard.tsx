@@ -4,7 +4,7 @@
  * not checked here can carry a muted note: checked in another paper, or in
  * the reader's profile. The topic line is left out when the topic has the
  * concept's own name, and the plain role ("Where it fits") when it mostly
- * restates the why-needed line (lib/plain-role). Works with the real rows or
+ * restates the why-needed line (lib/analysis/plain-role). Works with the real rows or
  * the signed-out demo adapter.
  */
 
@@ -17,10 +17,10 @@ import type { ConceptData, ConceptDepth, KnowledgeStatus, PaperData, TopicData }
 import type { ReaderKnowledgeApi } from '../../hooks/useDemoKnowledge'
 import { actions } from '../../lib/actions-client'
 import { arxivSlug } from '../../lib/arxiv'
-import { hintText, type ConceptHint } from '../../lib/hints'
-import { linkTitle } from '../../lib/links'
-import { normalizeConceptName } from '../../lib/topics'
-import { roleRestatesWhy } from '../../lib/plain-role'
+import { hintText, type ConceptHint } from '../../lib/knowledge/hints'
+import { linkTitle } from '../../lib/knowledge/links'
+import { normalizeConceptName } from '../../lib/knowledge/topics'
+import { roleRestatesWhy } from '../../lib/analysis/plain-role'
 import { ConceptName, MathText } from '../MathText'
 import { KnownToggle } from '../StatusControl'
 import { Chip } from '../blueprint'

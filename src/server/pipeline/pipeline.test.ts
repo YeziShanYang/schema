@@ -4,11 +4,11 @@ import { findMessage } from './llm'
 import { fixtureHtml, fixtureIntegration, FIXTURE_PAPER_HTML, FIXTURE_PAPER_TEXT } from './fixtures'
 import { conceptCountRange, conceptsSystem, explainSystem, resourcesUser, sourceNote } from './prompts'
 import { parseConcepts } from './run'
-import { preparePaperText } from '../../lib/paper-text'
-import { arxivHtmlToText } from '../../lib/paper-html'
-import { indexPaperText, normalizeForMatch } from '../../lib/quotes'
-import { pickQuote, quotePickOrder } from '../../lib/quote-rules'
-import { findNamedQuote, nameTerms, quoteSearch } from '../../lib/quote-fallback'
+import { preparePaperText } from '../../lib/analysis/paper-text'
+import { arxivHtmlToText } from '../../lib/analysis/paper-html'
+import { indexPaperText, normalizeForMatch } from '../../lib/analysis/quotes'
+import { pickQuote, quotePickOrder } from '../../lib/analysis/quote-rules'
+import { findNamedQuote, nameTerms, quoteSearch } from '../../lib/analysis/quote-fallback'
 
 const ATOM = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
@@ -137,7 +137,7 @@ describe('walkthrough prompt', () => {
 
 describe('indexPaperText', () => {
   it('normalizes exactly like normalizeForMatch on both fixture texts', async () => {
-    const { indexPaperText } = await import('../../lib/quotes')
+    const { indexPaperText } = await import('../../lib/analysis/quotes')
     for (const raw of [arxivHtmlToText(FIXTURE_PAPER_HTML), FIXTURE_PAPER_TEXT, 'ﬁnal exam-\nple, café Ünïcode']) {
       expect(indexPaperText(raw).norm).toBe(normalizeForMatch(raw))
     }

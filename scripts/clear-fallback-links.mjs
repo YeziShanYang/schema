@@ -3,7 +3,7 @@
  * call failed, branch loads used to store raw search results whose title
  * shared one content word with the topic's name, with no "why" line. The
  * rule now asks for two shared content words (fallbackTitleFits in
- * src/lib/links.ts). This finds topics holding a link with no "why" line
+ * src/lib/knowledge/links.ts). This finds topics holding a link with no "why" line
  * that fails that rule, and resets them (no links, status "none") so the
  * next branch load searches and picks again. Links the model picked (with a
  * "why" line) never count against a topic. Prints the plan; --apply writes
@@ -15,7 +15,7 @@
  * a reader loads links for a branch that uses it.
  */
 import { invoke, query } from './agent.mjs'
-import { failingFallbackLinks } from '../src/lib/links.ts'
+import { failingFallbackLinks } from '../src/lib/knowledge/links.ts'
 
 const app = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'schema'
 const apply = process.argv.includes('--apply')

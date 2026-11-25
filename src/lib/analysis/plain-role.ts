@@ -11,7 +11,7 @@
  * so those stay.
  */
 
-import { contentWords } from './topics'
+import { contentWords } from '../knowledge/topics'
 
 /** A role is hidden when the share of its content words found in why-needed is above this. */
 export const ROLE_RESTATES_ABOVE = 0.5

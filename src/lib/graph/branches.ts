@@ -4,9 +4,9 @@
  * progress (known / total) for each branch from the knowledge profile.
  */
 
-import type { Branch, KnowledgeStatus } from '../types'
-import { asString } from './json'
-import { normalizeTopicKey } from './topics'
+import type { Branch, KnowledgeStatus } from '../../types'
+import { asString } from '../json'
+import { normalizeTopicKey } from '../knowledge/topics'
 
 export const MAX_BRANCHES = 6
 export const OTHER_BRANCH: Branch = { key: 'other', name: 'Other concepts', description: 'Concepts that did not fit a branch.' }

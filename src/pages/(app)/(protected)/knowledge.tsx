@@ -19,7 +19,7 @@ import { ConceptName } from '../../../components/MathText'
 import { useConceptKnowledge, useProfile, useRoadmaps, useTopics } from '../../../hooks/useReader'
 import { actions } from '../../../lib/actions-client'
 import { arxivSlug } from '../../../lib/arxiv'
-import { STARTER_TOPICS } from '../../../lib/topics'
+import { STARTER_TOPICS } from '../../../lib/knowledge/topics'
 import type { ConceptKnowledgeData, KnowledgeData, PaperData, TopicLevel } from '../../../types'
 import { plural } from '@/lib/utils'
 

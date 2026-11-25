@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mergeSingletonBranches } from './branch-merge'
 import { OTHER_BRANCH } from './branches'
-import type { Branch } from '../types'
+import type { Branch } from '../../types'
 
 const b = (key: string): Branch => ({ key, name: key, description: '' })
 

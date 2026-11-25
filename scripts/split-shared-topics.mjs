@@ -1,7 +1,7 @@
 /**
  * Re-keys concepts that share a topic within one paper, for papers analyzed
  * before the analyze job enforced one topic per concept. Applies the same
- * rule as the job (splitSharedTopics in src/lib/topics.ts): the concept whose
+ * rule as the job (splitSharedTopics in src/lib/knowledge/topics.ts): the concept whose
  * name best matches the topic keeps it, and each other concept moves to a
  * topic named after itself, created if missing. Then the paper's topicKeys
  * are recomputed. Prints the plan; --apply writes it. Safe to re-run.
@@ -12,7 +12,7 @@
  * re-keyed concept starts unmarked.
  */
 import { conceptsOf, invoke, query } from './agent.mjs'
-import { splitSharedTopics } from '../src/lib/topics.ts'
+import { splitSharedTopics } from '../src/lib/knowledge/topics.ts'
 
 const app = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'schema'
 const apply = process.argv.includes('--apply')

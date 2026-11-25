@@ -17,7 +17,7 @@
  * caller looks it up by the concept's record id.
  */
 
-import type { KnowledgeStatus } from '../types'
+import type { KnowledgeStatus } from '../../types'
 
 export interface SeqBranch {
   key: string

@@ -7,7 +7,7 @@
  * as does a foundation-level topic the paper builds from other concepts.
  */
 
-import type { ConceptDepth, TopicLevel } from '../types'
+import type { ConceptDepth, TopicLevel } from '../../types'
 
 export function foundationDepth(depth: ConceptDepth, dependsOn: readonly string[], topicLevel: TopicLevel | undefined): ConceptDepth {
   return depth === 'deep' && dependsOn.length === 0 && topicLevel === 'foundation' ? 'working' : depth

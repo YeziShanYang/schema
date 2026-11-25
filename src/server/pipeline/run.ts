@@ -30,23 +30,23 @@ import type { Env } from '../../../worker'
 import type { ConceptDepth, ConceptKnowledgeData, Envelope, PaperData, TextSource, TimedStage, TopicData } from '../../types'
 import { PIPELINE_VERSION } from '../../types'
 import { arxivPdfUrl, arxivSlug } from '../../lib/arxiv'
-import { preparePaperText } from '../../lib/paper-text'
-import { arxivHtmlToText, arxivHtmlUrl, MIN_HTML_TEXT_CHARS } from '../../lib/paper-html'
-import { indexPaperText } from '../../lib/quotes'
-import { pickQuote, quotePickOrder } from '../../lib/quote-rules'
-import { findNamedQuote, nameTerms, quoteSearch } from '../../lib/quote-fallback'
-import { hasMath } from '../../lib/math'
-import { cleanGraph } from '../../lib/graph'
-import { foundationDepth } from '../../lib/depth'
+import { preparePaperText } from '../../lib/analysis/paper-text'
+import { arxivHtmlToText, arxivHtmlUrl, MIN_HTML_TEXT_CHARS } from '../../lib/analysis/paper-html'
+import { indexPaperText } from '../../lib/analysis/quotes'
+import { pickQuote, quotePickOrder } from '../../lib/analysis/quote-rules'
+import { findNamedQuote, nameTerms, quoteSearch } from '../../lib/analysis/quote-fallback'
+import { hasMath } from '../../lib/analysis/math'
+import { cleanGraph } from '../../lib/graph/graph'
+import { foundationDepth } from '../../lib/analysis/depth'
 import { asString, asStringArray } from '../../lib/json'
-import { STARTER_TOPICS } from '../../lib/topics'
-import { planKnowledgeRemap } from '../../lib/knowledge-remap'
-import { closeTimings, enterStage } from '../../lib/timings'
+import { STARTER_TOPICS } from '../../lib/knowledge/topics'
+import { planKnowledgeRemap } from '../../lib/knowledge/knowledge-remap'
+import { closeTimings, enterStage } from '../../lib/analysis/timings'
 import { assignTopics, promptTopics } from './assign-topics'
 import { generateOverview, type OverviewConcept } from '../overview'
-import { cleanBranches } from '../../lib/branches'
-import { mergeSingletonBranches } from '../../lib/branch-merge'
-import { fixBranchPlacement } from '../../lib/branch-placement'
+import { cleanBranches } from '../../lib/graph/branches'
+import { mergeSingletonBranches } from '../../lib/graph/branch-merge'
+import { fixBranchPlacement } from '../../lib/graph/branch-placement'
 import { createPipelineClient, fixturesAllowed, ownerContext } from './client'
 import { refundAnalyze } from '../usage'
 import type { PipelineClient } from './client'
@@ -687,7 +687,7 @@ async function stepVerify(state: AnalyzeState, s: StepCtx) {
 /**
  * Moves readers' checkmarks from an earlier analysis of this paper to the new
  * concepts with the same normalized name; a row with no match is kept and
- * marked stale (see lib/knowledge-remap.ts).
+ * marked stale (see lib/knowledge/knowledge-remap.ts).
  */
 async function stepRemap(state: AnalyzeState, { ctx, paper }: StepCtx) {
   const rows = (await ctx.records.query('concept_knowledge', { where: { paperId: paper.recordId }, limit: 1000 })) as Envelope<ConceptKnowledgeData>[]

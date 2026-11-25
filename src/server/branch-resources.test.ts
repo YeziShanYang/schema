@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { fallbackResources, findResources, skipsLinks } from './branch-resources'
 import type { PipelineClient } from './pipeline/client'
-import { failingFallbackLinks, fallbackTitleFits } from '../lib/links'
+import { failingFallbackLinks, fallbackTitleFits } from '../lib/knowledge/links'
 
 const candidates = [
   { title: 'A number puzzle for kids', url: 'https://blog.example/puzzle', snippet: '' },

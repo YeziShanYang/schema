@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { branchOrder, recommendedSequence, stepLabel, type SeqConcept } from './sequence'
-import type { KnowledgeStatus } from '../types'
+import type { KnowledgeStatus } from '../../types'
 
 const branches = [
   { key: 'attn', name: 'Attention' },

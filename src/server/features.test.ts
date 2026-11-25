@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { branchProgress, cleanBranches, OTHER_BRANCH, paperProgress } from '../lib/branches'
+import { branchProgress, cleanBranches, OTHER_BRANCH, paperProgress } from '../lib/graph/branches'
 import { candidateSuggestions, paperStatus, withFinished, withoutPaper, withPaper, withStatus } from '../lib/workspace'
 import { extractCandidates, needsLoad, LOADING_STALE_MS } from './branch-resources'
 import { candidatesFromResults, searchQueryFor } from './recommend'

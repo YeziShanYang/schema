@@ -1,13 +1,13 @@
 /**
  * Text with inline \( \) and display \[ \] math, plus $…$ and $$…$$ when no
- * space follows the opening $, so prices stay text (see src/lib/math.ts).
+ * space follows the opening $, so prices stay text (see src/lib/analysis/math.ts).
  * Plain text renders as is. KaTeX loads only when a string contains math,
  * and the raw source shows until it has loaded.
  */
 
 import { useEffect, useMemo, useState } from 'react'
 import type katexType from 'katex'
-import { nameMath, parseMath } from '../lib/math'
+import { nameMath, parseMath } from '../lib/analysis/math'
 import { loadKatex, renderMath } from '../lib/katex-loader'
 
 export function MathText({ text, className }: { text: string; className?: string }) {

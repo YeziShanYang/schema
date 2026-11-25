@@ -21,7 +21,7 @@ import { useAllowance } from '../../../../../hooks/useAllowance'
 import { useConceptKnowledge, useRoadmaps } from '../../../../../hooks/useReader'
 import { actions } from '../../../../../lib/actions-client'
 import { arxivSlug } from '../../../../../lib/arxiv'
-import { recommendedSequence } from '../../../../../lib/sequence'
+import { recommendedSequence } from '../../../../../lib/graph/sequence'
 import type { ConceptData } from '../../../../../types'
 
 export default function WorkspacePage() {

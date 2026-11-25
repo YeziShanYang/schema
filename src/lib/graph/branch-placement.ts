@@ -1,6 +1,6 @@
 /**
  * Moves concepts the model filed in a branch that makes the branches'
- * dependencies circular, so the recommended sequence (lib/sequence) can put
+ * dependencies circular, so the recommended sequence (lib/graph/sequence) can put
  * every branch after the branches it builds on instead of falling back to
  * the model's order. It runs on the cleaned graph after mergeSingletonBranches,
  * and only when the branches form a cycle. Two kinds of move, repeated until
@@ -15,7 +15,7 @@
  * order is the order of `branches` (the model's, with "Other concepts" last).
  */
 
-import type { Branch } from '../types'
+import type { Branch } from '../../types'
 import { branchOrder } from './sequence'
 
 export type PlacementRule = 'foundation-to-earlier-user' | 'to-latest-prerequisite'

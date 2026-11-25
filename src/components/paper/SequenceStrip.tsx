@@ -11,7 +11,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
-import { stepLabel, type SequenceStep, type StepState } from '../../lib/sequence'
+import { stepLabel, type SequenceStep, type StepState } from '../../lib/graph/sequence'
 import { ArrowRightIcon, CheckIcon } from '../icons'
 
 function Step({

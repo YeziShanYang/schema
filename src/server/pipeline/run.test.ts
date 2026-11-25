@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Job, JobContext } from 'deepspace/worker'
 import type { Env } from '../../../worker'
 import type { PaperData } from '../../types'
-import { TIMED_STAGES, lastStartedStage, openStage, queuedTimings, stageDurations } from '../../lib/timings'
+import { TIMED_STAGES, lastStartedStage, openStage, queuedTimings, stageDurations } from '../../lib/analysis/timings'
 import { FIXTURE_META, fixtureIntegration } from './fixtures'
 import { MAX_SECTIONS, runAnalyzeTick, type AnalyzeState } from './run'
 

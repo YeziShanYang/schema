@@ -30,7 +30,7 @@
 import { pickQuote, MAX_QUOTE_CHARS } from './quote-rules'
 import type { PaperIndex } from './quotes'
 import { indexSentences, type Sentence } from './sentences'
-import { contentWords, normalizeConceptName } from './topics'
+import { contentWords, normalizeConceptName } from '../knowledge/topics'
 
 export type NameTermKind = 'name' | 'abbreviation' | 'short'
 

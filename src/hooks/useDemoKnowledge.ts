@@ -8,7 +8,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useAuth } from 'deepspace'
 import type { KnowledgeStatus } from '../types'
-import { buildHintIndex, conceptHint, type ConceptHint } from '../lib/hints'
+import { buildHintIndex, conceptHint, type ConceptHint } from '../lib/knowledge/hints'
 import { useConceptKnowledge, useProfile, type ConceptKnowledgeApi, type ConceptRef } from './useReader'
 
 export interface ReaderKnowledgeApi {

@@ -3,7 +3,7 @@
  * reader can tick on day one.
  */
 
-import type { TopicLevel } from '../types'
+import type { TopicLevel } from '../../types'
 
 /** Lowercase slug: letters, digits and single hyphens, at most 60 chars. */
 export function normalizeTopicKey(raw: string): string {

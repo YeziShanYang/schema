@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { contentWords, nameMatch, normalizeConceptName, sharesContentWord, splitSharedTopics } from './topics'
+import { contentWords, nameMatch, normalizeConceptName, normalizeTopicKey, sharesContentWord, splitSharedTopics, STARTER_TOPICS } from './topics'
 
 const names: Record<string, string> = {
   'attention-mechanism': 'Attention mechanism',
@@ -121,7 +121,7 @@ describe('normalizeConceptName', () => {
 
 describe('assignTopics (analyze job)', () => {
   it('gives every concept in a paper its own topic and creates the split topics', async () => {
-    const { assignTopics } = await import('../server/pipeline/assign-topics')
+    const { assignTopics } = await import('../../server/pipeline/assign-topics')
     const existing = new Map([
       ['attention-mechanism', { name: 'Attention mechanism', level: 'core' as const }],
       ['multi-head-attention', { name: 'Multi-head attention', level: 'specialized' as const }],
@@ -157,7 +157,7 @@ describe('assignTopics (analyze job)', () => {
   })
 
   it('accepts a reuse only when the names share a content word, otherwise names a topic for the concept', async () => {
-    const { assignTopics } = await import('../server/pipeline/assign-topics')
+    const { assignTopics } = await import('../../server/pipeline/assign-topics')
     const existing = new Map([
       ['word-embeddings', { name: 'Word embeddings', level: 'core' as const, description: 'Dense vector representations of tokens.' }],
       ['evaluation-metrics', { name: 'Evaluation metrics (accuracy, precision, recall)', level: 'foundation' as const, description: 'Measuring classifier quality.' }],
@@ -182,7 +182,7 @@ describe('assignTopics (analyze job)', () => {
   })
 
   it('lists foundation and core topics first in the prompt, with short descriptions, at most 150', async () => {
-    const { promptTopics, MAX_TOPICS_IN_PROMPT } = await import('../server/pipeline/assign-topics')
+    const { promptTopics, MAX_TOPICS_IN_PROMPT } = await import('../../server/pipeline/assign-topics')
     const many = Array.from({ length: 200 }, (_, i) => ({
       key: `t${i}`,
       name: `Topic ${i}`,
@@ -198,5 +198,20 @@ describe('assignTopics (analyze job)', () => {
     // Within a level, starter topics come first.
     expect(many.find((m) => m.key === list[0].key)!.origin).toBe('starter')
     expect(list[0].description.length).toBeLessThanOrEqual(80)
+  })
+})
+
+describe('normalizeTopicKey', () => {
+  it('slugifies names', () => {
+    expect(normalizeTopicKey('Softmax Function')).toBe('softmax-function')
+    expect(normalizeTopicKey('  Bayes’ theorem ')).toBe('bayes-theorem')
+    expect(normalizeTopicKey('Q&A models')).toBe('q-and-a-models')
+    expect(normalizeTopicKey('Évaluation (metrics)')).toBe('evaluation-metrics')
+    expect(normalizeTopicKey('a'.repeat(80)).length).toBeLessThanOrEqual(60)
+  })
+  it('gives every starter topic a unique key', () => {
+    const keys = STARTER_TOPICS.map((t) => t.key)
+    expect(new Set(keys).size).toBe(keys.length)
+    expect(keys.every((k) => k.length > 0)).toBe(true)
   })
 })

@@ -4,14 +4,14 @@
  * `reanalyze_paper` agent tool both check), and it uses no daily slot. This
  * resets the paper record and enqueues the job; the job clears the old
  * concepts and sections, analyzes the paper again, and moves readers'
- * checkmarks to the new concepts by name (lib/knowledge-remap). Topics,
+ * checkmarks to the new concepts by name (lib/knowledge/knowledge-remap). Topics,
  * profile topics, roadmaps and workspaces are kept.
  */
 
 import { enqueueJob } from 'deepspace/worker'
 import type { Env } from '../../worker'
 import type { Envelope, PaperData } from '../types'
-import { queuedTimings } from '../lib/timings'
+import { queuedTimings } from '../lib/analysis/timings'
 
 /** Every continue counts as a JobRoom attempt; this leaves room for all ticks plus crash recovery. */
 export const ANALYZE_MAX_ATTEMPTS = 60

@@ -34,7 +34,7 @@ export interface PaperData {
   overview?: PaperOverview | null
   /** Set while ensureOverview is generating one, so two readers don't both pay. */
   overviewLoadingAt?: number
-  /** When the latest run entered and left each stage (see lib/timings); missing for papers analyzed before timings existed. */
+  /** When the latest run entered and left each stage (see lib/analysis/timings); missing for papers analyzed before timings existed. */
   timings?: StageTimings
   /** Steps the latest run retried after a transient error. */
   retries?: number
@@ -144,7 +144,7 @@ export interface ConceptData {
   explanationPendingAt?: number
   /** Under 20 plain words on why this concept matters for this paper. */
   plainRole?: string
-  /** `quote` with its formulas as LaTeX, shown instead of it; set only when its words match `quote` (see lib/quote-display). */
+  /** `quote` with its formulas as LaTeX, shown instead of it; set only when its words match `quote` (see lib/analysis/quote-display). */
   quoteDisplay?: string
 }
 

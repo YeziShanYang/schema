@@ -6,7 +6,7 @@
  * its own branch. Runs after cleanBranches, on the cleaned graph.
  */
 
-import type { Branch } from '../types'
+import type { Branch } from '../../types'
 import { OTHER_BRANCH } from './branches'
 
 export interface BranchMerge {

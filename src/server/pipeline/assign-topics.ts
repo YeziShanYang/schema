@@ -2,14 +2,14 @@
  * Maps a paper's concepts to topic keys. The model proposes a topic per
  * concept (an existing key or a new topic). A reuse of an existing topic is
  * accepted only when the concept's name and the topic's name share a content
- * word (sharesContentWord in lib/topics); otherwise the concept gets a topic
+ * word (sharesContentWord in lib/knowledge/topics); otherwise the concept gets a topic
  * of its own, named for it. New topics are created as proposed, and concepts
  * that share a topic within the paper are split so every concept has its own
  * (see splitSharedTopics).
  */
 
 import { asString } from '../../lib/json'
-import { normalizeLevel, normalizeTopicKey, sharesContentWord, splitSharedTopics } from '../../lib/topics'
+import { normalizeLevel, normalizeTopicKey, sharesContentWord, splitSharedTopics } from '../../lib/knowledge/topics'
 import type { TopicData, TopicLevel } from '../../types'
 
 export interface TopicProposal {
