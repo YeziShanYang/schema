@@ -8,6 +8,32 @@ The frontend uses the Blueprint theme (IBM Plex, dot-grid canvas) in light and d
 
 Data access is in the hooks in `src/hooks` and the modules in `src/lib`, and views can be redesigned without touching the backend.
 
+## Repository layout
+
+Two files are good places to start reading: `src/server/pipeline/run.ts` runs the analyze job step by step, and `src/components/paper/PaperWindow.tsx` draws the paper page.
+
+- `src/` is the app.
+  - `src/actions/` has the server actions (`analyzePaper`, `loadBranchResources` and the others), called at `POST /api/actions/:name`.
+  - `src/ai/` defines the agent tools served over HTTP and MCP, among them the owner's `reanalyze_paper`, and the routes of the in-app assistant.
+  - `src/components/` holds the React components. The paper page's parts are in `paper/`, the floating graph and branch panel in `graph/`, and shared primitives in `ui/`.
+  - `src/data/` is the bundled snapshot of the demo paper that the landing page shows.
+  - `src/hooks/` holds the React hooks that give the views their records.
+  - `src/lib/` holds the logic the views and the Worker import, with no React in it. General helpers such as arXiv id parsing, the daily cap and the server-action client sit at its root.
+    - `src/lib/analysis/` has the paper text and content rules: HTML-to-text conversion, quote checks and fallbacks, math parsing, the depth rule, when a plain role shows, and the stage timings of an analysis.
+    - `src/lib/graph/` cleans the concept graph and its branches (merging, placement, progress) and computes the recommended sequence.
+    - `src/lib/knowledge/` holds the topic vocabulary, explainer link titles, the hints on unchecked concepts, and the remaps that move concepts to new topics and checkmarks to new concepts.
+  - `src/pages/` holds the routes and their layouts, one file per route (file-based routing).
+  - `src/schemas/` defines the collections and their permissions, and `src/schemas.ts` lists them for the SDK.
+  - `src/server/` runs only in the Worker. `pipeline/` is the analyze job, and the other files hold the routes `worker.ts` registers and the work behind explainer links, explanations, overviews, recommendations, re-analysis and usage caps.
+  - The files at the top of `src/` include the modules the SDK and the build look for by name (`main.tsx`, `jobs.ts`, `cron.ts`, `schemas.ts` and others), the record types in `types.ts`, and the theme.
+- `tests/` has the Playwright specs (`*.spec.ts`) that `npx deepspace test run` runs. Unit tests sit next to their source. Two folders hold checks that `test run` leaves out:
+  - `tests/live/` checks the deployed app with real, billed integration calls.
+  - `tests/screens/` captures screenshots of every screen and of the progress view for visual review.
+- In `scripts/`, `agent.mjs` calls the deployed app's agent tools through the CLI as the owner, and `export-demo-snapshot.mjs` writes `src/data/demo-snapshot.json`. `scripts/migrations/` holds one-time data migrations for papers analyzed under older rules.
+- `public/` is served as it is: the favicon, `robots.txt` and `_headers`.
+
+At the repository root, `worker.ts` assembles the Worker's routes and Durable Objects, `prerender.ts` prerenders the landing page at build time, and `wrangler.toml` and the Vite, Vitest and ESLint configs set up deploys, builds, unit tests and lint.
+
 ## Interface
 
 The sidebar starts with Add and links to Home, Library and Knowledge, and the Knowledge link shows how many concepts the reader has checked. Workspaces and recent papers follow. A page header carries only its title, because the highlighted sidebar link already names the page. Below 768px the sidebar opens from a menu button, so Home's header keeps its own Add button.
@@ -98,7 +124,7 @@ npx deepspace deploy
 
 The Playwright suite needs two test accounts (`npx deepspace test accounts create`). In local test runs (`ALLOW_DEBUG_ROUTES=true`), papers with ids starting `0000.` and workspaces named `[fixture] ...` get canned arXiv HTML, CloudConvert, Claude, Exa and arXiv responses from `src/server/pipeline/fixtures.ts`. Fixture ids ending in 66, 77 or 99 have no HTML and take the PDF path, and ids ending in 55 answer each call after four seconds, which keeps every stage on screen long enough to watch the progress view. Ids ending in 44 get a title too long for one line on a phone, for the 390px layout checks, and ids ending in 33 get five branches with long names, for the step strip at 1440px. The file's header lists which server rule each fixture concept exercises. Everything else, including the actions, the job, the record rooms and permissions, runs for real.
 
-`tests/live` holds a check against the deployed app with real integration calls. It is not part of `test run` and costs credits:
+`tests/live` holds checks against the deployed app with real integration calls. They are not part of `test run` and cost credits:
 
 ```bash
 LIVE_PAPER=2611.29224 npx playwright test -c tests/live/playwright.live.config.ts
