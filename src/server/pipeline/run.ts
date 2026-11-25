@@ -445,9 +445,10 @@ async function stepConcepts(state: AnalyzeState, s: StepCtx) {
   const quoteOf: Record<string, string> = {}
   const pickOrder = quotePickOrder(kept)
   for (const c of pickOrder) {
-    const { quote, rejected: badQuotes, extendedFrom } = pickQuote(c.quotes, paperIndex, usedQuotes)
+    const { quote, rejected: badQuotes, extendedFrom, wholeSentenceFrom } = pickQuote(c.quotes, paperIndex, usedQuotes)
     if (badQuotes.length) console.info(`[analyze] ${paper.data.arxivId}: ${c.id} quotes rejected: ${badQuotes.map((b) => b.problem).join(', ')}`)
     if (extendedFrom) console.info(`[analyze] ${paper.data.arxivId}: ${c.id} quote carried on to the end of its sentence`)
+    if (wholeSentenceFrom) console.info(`[analyze] ${paper.data.arxivId}: ${c.id} quote carried back to the start of its sentence`)
     quoteOf[c.id] = quote
   }
   // A concept whose candidates all failed gets the first sentence that names it and passes the same rules.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { firstSentence, paperSentences, sentenceEnd } from './sentences'
+import { firstSentence, indexSentences, paperSentences, sentenceAt, sentenceEnd } from './sentences'
+import { indexPaperText } from './quotes'
 
 describe('sentence boundaries', () => {
   it('ends a sentence at a period before a capital, and at a line break', () => {
@@ -26,5 +27,16 @@ describe('sentence boundaries', () => {
       'The optimal guessing factor is the value of a linear program.',
     )
     expect(firstSentence('')).toBe('')
+  })
+
+  it('finds the sentence that holds an offset, and none in the space between sentences', () => {
+    const raw = 'The first one ends here. The second one\n\ngoes on another line.'
+    const index = indexPaperText(raw)
+    const list = indexSentences(index)
+    expect(indexSentences(index)).toBe(list)
+    expect(sentenceAt(list, raw.indexOf('one ends'))?.text).toBe('The first one ends here.')
+    expect(sentenceAt(list, raw.indexOf('second'))?.text).toBe('The second one')
+    expect(sentenceAt(list, raw.indexOf('another'))?.start).toBe(raw.indexOf('goes'))
+    expect(sentenceAt(list, raw.indexOf('\n') + 1)).toBeNull()
   })
 })

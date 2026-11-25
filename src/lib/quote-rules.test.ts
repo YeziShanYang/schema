@@ -155,7 +155,8 @@ describe('quotes cut before their point', () => {
   })
 
   it('keeps a quote that only leaves out a citation, or stops at a clause boundary', () => {
-    const efference = 'forward models that use motor command signals, i.e., corollary discharge or efference copy, to predict the sensory consequences of the agent’s actions'
+    const efference =
+      'In biological systems, these challenges are addressed by forward models that use motor command signals, i.e., corollary discharge or efference copy, to predict the sensory consequences of the agent’s actions'
     expect(pick(efference, 'sensing')).toEqual({ quote: efference, rejected: [] })
     const inattention = 'Entropy and mutual information appear in models of rational inattention'
     expect(pick(inattention, 'markets')).toEqual({ quote: inattention, rejected: [] })
@@ -179,5 +180,49 @@ describe('quotes cut before their point', () => {
     expect(quoteProblem(q, papers.receipts, new Set())).toBe('clipped')
     expect(quoteProblem(q, papers.receipts.norm, new Set())).toBeNull()
     expect(clippedAt('a quote ends here (Fig. 4D). Next.', 'a quote ends here'.length, 'a quote ends here')).toBe(false)
+  })
+})
+
+/** Quotes that start partway into their sentence, from the stored text of 2507.17311, 2611.29886, 2610.08144 and 1706.03762. */
+describe('quotes that start mid-sentence', () => {
+  const earthlink =
+    'EarthLink initiated a complete research workflow, identifying and screening potential precursors before systematically testing them with a suite of regression models (e.g., multiple linear regression, random forest and gradient boosting) and automated parameter tuning. ' +
+    'It concluded that the 0.5 skill target was not reachable but identified a novel combination of predictors achieving a forecast skill (TCC) of 0.46, a notable improvement over the baseline (Fig. 5b).'
+  const sci =
+    'In particular, we highlight that the problem of resolving ambiguities in mathematical NL text, which is necessary in order to provide semantically faithful translation, is arbitrarily high up in the Solvability Complexity Index (SCI) hierarchy/arithmetical hierarchy (the SCI \\(=\\infty\\)). Hence the problem is hard.'
+  const index = indexPaperText(earthlink)
+
+  it('replaces the quote with its whole sentence when the sentence passes every rule', () => {
+    const regression = 'suite of regression models (e.g., multiple linear regression, random forest and gradient boosting) and automated parameter tuning'
+    expect(pickQuote([regression], index, new Set())).toEqual({
+      quote: earthlink.slice(0, earthlink.indexOf(' It concluded')),
+      rejected: [],
+      wholeSentenceFrom: regression,
+    })
+    // A quote that stops short of the sentence end is carried to the end as well.
+    const tcc = 'identified a novel combination of predictors achieving a forecast skill (TCC) of 0.46'
+    expect(pickQuote([tcc], index, new Set()).quote).toBe(earthlink.slice(earthlink.indexOf('It concluded')))
+  })
+
+  it('keeps the quote as it is when the whole sentence breaks a rule or runs too long', () => {
+    const half = 'the problem of resolving ambiguities in mathematical NL text, which is necessary in order to provide semantically faithful translation'
+    // The sentence holds "\(=\infty\)".
+    expect(pickQuote([half], indexPaperText(sci), new Set())).toEqual({ quote: half, rejected: [] })
+    const long = `${'Before it, the paper sets out a long list of conditions that the reader has to keep in mind, '.repeat(6)}we use learned embeddings to convert the input tokens to vectors.`
+    expect(pickQuote(['we use learned embeddings to convert the input tokens to vectors.'], indexPaperText(long), new Set()).quote).toBe(
+      'we use learned embeddings to convert the input tokens to vectors.',
+    )
+  })
+
+  it('keeps the quote when the whole sentence holds another concept\'s quote', () => {
+    const used = new Set([normalizeForMatch('EarthLink initiated a complete research workflow, identifying and screening potential precursors')])
+    const regression = 'suite of regression models (e.g., multiple linear regression, random forest and gradient boosting) and automated parameter tuning'
+    expect(pickQuote([regression], index, used).quote).toBe(regression)
+  })
+
+  it('does not reach back to a line that starts in lowercase, where PDF text broke a sentence', () => {
+    const pdf = 'At each step the model is\nauto-regressive [10], consuming the previously generated symbols as additional input when generating the next.'
+    const q = 'consuming the previously generated symbols as additional input when generating the next.'
+    expect(pickQuote([q], indexPaperText(pdf), new Set())).toEqual({ quote: q, rejected: [] })
   })
 })

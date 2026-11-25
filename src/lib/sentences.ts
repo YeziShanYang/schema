@@ -1,6 +1,7 @@
 /**
  * Sentence boundaries in stored paper text, for the quote rules: where the
- * sentence a quote stops inside ends, and which sentences name a concept.
+ * sentence a quote starts or stops inside begins and ends, and which
+ * sentences name a concept.
  *
  * A sentence ends at ".", "!" or "?" (with any closing quote or bracket)
  * followed by white space and a word that doesn't start in lowercase, or at
@@ -8,6 +9,8 @@
  * after a common abbreviation ("et al.", "Fig.", "e.g.") or a one-letter
  * initial doesn't end a sentence.
  */
+
+import type { PaperIndex } from './quotes'
 
 export interface Sentence {
   start: number
@@ -71,6 +74,32 @@ export function paperSentences(raw: string): Sentence[] {
     i = Math.max(end, i + 1)
   }
   return out
+}
+
+const sentencesByIndex = new WeakMap<PaperIndex, Sentence[]>()
+
+/** The sentences of an indexed paper, split once per index. */
+export function indexSentences(index: PaperIndex): Sentence[] {
+  let list = sentencesByIndex.get(index)
+  if (!list) {
+    list = paperSentences(index.raw)
+    sentencesByIndex.set(index, list)
+  }
+  return list
+}
+
+/** The sentence that contains raw offset `at`, or null when `at` falls in the white space between two. */
+export function sentenceAt(sentences: Sentence[], at: number): Sentence | null {
+  let lo = 0
+  let hi = sentences.length - 1
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    const s = sentences[mid]
+    if (at < s.start) hi = mid - 1
+    else if (at >= s.end) lo = mid + 1
+    else return s
+  }
+  return null
 }
 
 /** The first sentence of a short text, such as a concept's why-needed line. */

@@ -14,6 +14,10 @@
  *   extended to the end of the paper's sentence when the longer quote passes
  *   every rule; a quote that stops inside a bracket is extended the same way,
  * - and isn't used by another concept in the same paper.
+ * A quote that passes but starts partway into the paper's sentence ("suite
+ * of regression models (e.g., ...)") is replaced by that whole sentence when
+ * the sentence passes every rule too, its first letter isn't lowercase, and
+ * it fits in MAX_QUOTE_CHARS; otherwise the quote is kept as it is.
  * When none passes, the job looks for a sentence that names the concept
  * (lib/quote-fallback); failing that, the concept has no quote and the card
  * hides the block. A quote that matches the paper exactly is stored as the
@@ -22,7 +26,7 @@
  */
 
 import { exactQuoteRange, isQuoteVerified, normalizeForMatch, spanText, type PaperIndex, type QuoteRange } from './quotes'
-import { sentenceEnd } from './sentences'
+import { indexSentences, sentenceAt, sentenceEnd } from './sentences'
 
 export const MIN_QUOTE_WORDS = 8
 /** Longest quote a card shows: the cap on a model's candidate, and on a quote extended to its sentence end. */
@@ -182,11 +186,28 @@ function toSentenceEnd(index: PaperIndex, range: QuoteRange): string | null {
   return text.length <= MAX_QUOTE_CHARS ? text : null
 }
 
+/**
+ * The whole sentence a quote starts partway into, from its start to the end
+ * of the sentence the quote stops in, or null when the quote already starts
+ * its sentence, the sentence's first letter is lowercase (a line break
+ * inside a sentence of PDF text, not a sentence start), or it runs too long.
+ */
+function wholeSentence(index: PaperIndex, range: QuoteRange): string | null {
+  const sentence = sentenceAt(indexSentences(index), range.start)
+  if (!sentence || !index.raw.slice(sentence.start, range.start).trim()) return null
+  if (/^[^\p{L}\p{N}]*\p{Ll}/u.test(sentence.text)) return null
+  const end = range.end <= sentence.end ? sentence.end : sentenceEnd(index.raw, range.end)
+  const text = spanText(index, { start: sentence.start, end })
+  return text.length <= MAX_QUOTE_CHARS ? text : null
+}
+
 export interface QuotePick {
   quote: string
   rejected: { quote: string; problem: QuoteProblem }[]
   /** Set when the quote was a candidate that stopped short and was carried on to its sentence end: the candidate as given. */
   extendedFrom?: string
+  /** Set when the candidate started partway into its sentence and the quote is that whole sentence: the candidate as given. */
+  wholeSentenceFrom?: string
 }
 
 /**
@@ -216,8 +237,18 @@ export function pickQuote(candidates: string[], paper: PaperIndex | string, used
       rejected.push({ quote: c, problem })
       continue
     }
+    let wholeSentenceFrom: string | undefined
+    const passing = index ? exactQuoteRange(candidate, index) : null
+    const whole = index && passing ? wholeSentence(index, passing) : null
+    if (whole && whole !== candidate && quoteProblem(whole, paper, used) === null) {
+      wholeSentenceFrom = c
+      candidate = whole
+    }
     used.add(normalizeForMatch(candidate))
-    return extendedFrom ? { quote: candidate, rejected, extendedFrom } : { quote: candidate, rejected }
+    const pick: QuotePick = { quote: candidate, rejected }
+    if (extendedFrom) pick.extendedFrom = extendedFrom
+    if (wholeSentenceFrom) pick.wholeSentenceFrom = wholeSentenceFrom
+    return pick
   }
   return { quote: '', rejected }
 }
