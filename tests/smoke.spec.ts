@@ -216,6 +216,48 @@ test.describe('Theme', () => {
     await ctx.close()
   })
 
+  test('a pick in one tab reaches the other open tabs without transitions, and the browser bar color follows', async ({ browser }) => {
+    const ctx = await browser.newContext({ colorScheme: 'light', reducedMotion: 'reduce' })
+    const a = await ctx.newPage()
+    const b = await ctx.newPage()
+    for (const p of [a, b]) {
+      await p.goto('/')
+      await expect(p.getByTestId('static-landing')).toBeVisible()
+    }
+    // The theme-color meta the browser uses for the current system scheme.
+    const barColor = (p: typeof a) =>
+      p.evaluate(() => [...document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')].find((m) => matchMedia(m.media).matches)?.content)
+    expect(await barColor(a)).toBe('#FFFFFF')
+    // Record whether tab B swaps classes with transitions off.
+    await b.evaluate(() => {
+      const w = window as unknown as { swaps: string[] }
+      w.swaps = []
+      new MutationObserver(() => w.swaps.push(document.documentElement.className)).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    })
+
+    await a.getByTestId('theme-toggle').click()
+    await expect.poll(async () => (await paint(b)).dark).toBe(true)
+    const swaps = await b.evaluate(() => (window as unknown as { swaps: string[] }).swaps)
+    expect(swaps.some((c) => c.includes('dark') && c.includes('no-transitions'))).toBe(true)
+    await expect.poll(() => b.evaluate(() => document.documentElement.classList.contains('no-transitions'))).toBe(false)
+    await expect(b.getByTestId('theme-toggle')).toHaveAccessibleName('Switch to light theme')
+    expect(await barColor(a)).toBe('#161C27')
+    expect(await barColor(b)).toBe('#161C27')
+
+    // And back the other way.
+    await b.getByTestId('theme-toggle').click()
+    await expect.poll(async () => (await paint(a)).dark).toBe(false)
+    expect(await barColor(a)).toBe('#FFFFFF')
+
+    // A stored pick wins over the system scheme's meta from the head script on.
+    await a.emulateMedia({ colorScheme: 'dark' })
+    await a.reload()
+    await expect(a.getByTestId('static-landing')).toBeVisible()
+    expect((await paint(a)).dark).toBe(false)
+    expect(await barColor(a)).toBe('#FFFFFF')
+    await ctx.close()
+  })
+
   test('the signed-out top bar has the toggle beside Sign in', async ({ browser }) => {
     const ctx = await browser.newContext({ colorScheme: 'light' })
     const page = await ctx.newPage()

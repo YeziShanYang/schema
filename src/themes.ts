@@ -3,8 +3,8 @@
  * (light tokens in styles.css, dark ones in themes.css). Dark mode is the
  * `dark` class on <html>. The inline script in index.html applies the
  * reader's stored choice, or else the system setting, before first paint;
- * this module keeps it in step afterwards. It must agree with that script
- * on MODE_KEY and its values.
+ * this module keeps it in step afterwards, across open tabs too. It must
+ * agree with that script on MODE_KEY, its values and THEME_COLOR.
  */
 
 export const THEMES = [
@@ -67,7 +67,24 @@ export function subscribeMode(onChange: () => void): () => void {
   return () => listeners.delete(onChange)
 }
 
+/**
+ * The phone browser bar's color for each mode: the top bars' card color.
+ * index.html carries one theme-color meta per system scheme with these values.
+ */
+export const THEME_COLOR: Record<Mode, string> = { light: '#FFFFFF', dark: '#161C27' }
+
+/** Point every theme-color meta at the mode on screen, so a picked mode wins over the system scheme's meta. */
+function syncThemeColor(mode: Mode) {
+  for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) meta.content = THEME_COLOR[mode]
+}
+
+function systemMode(): Mode {
+  return typeof window.matchMedia === 'function' && window.matchMedia(DARK_QUERY).matches ? 'dark' : 'light'
+}
+
 function show(mode: Mode) {
+  // Synced even when the mode is already on screen: a pick that matches the system scheme still has to win once the system changes.
+  syncThemeColor(mode)
   if (currentMode() === mode) return
   withoutTransitions(() => document.documentElement.classList.toggle('dark', mode === 'dark'))
   for (const l of listeners) l()
@@ -83,9 +100,18 @@ export function chooseMode(mode: Mode) {
   show(mode)
 }
 
-/** Until the reader picks, follow the system setting when it changes. Call once at startup. */
+/**
+ * Until the reader picks, follow the system setting when it changes. A pick
+ * made in another tab of this browser arrives as a `storage` event, and this
+ * tab follows it (or the system setting, if the choice was cleared). Call
+ * once at startup.
+ */
 export function followSystemMode() {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+  if (typeof window === 'undefined') return
+  window.addEventListener('storage', (e) => {
+    if (e.key === MODE_KEY || e.key === null) show(storedMode() ?? systemMode())
+  })
+  if (typeof window.matchMedia !== 'function') return
   window.matchMedia(DARK_QUERY).addEventListener('change', (e) => {
     if (!storedMode()) show(e.matches ? 'dark' : 'light')
   })

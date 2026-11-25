@@ -4,6 +4,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- The phone browser bar takes the top bars' card color, per system scheme. A stored pick
+         repaints both below and in src/themes.ts (THEME_COLOR). -->
+    <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#161C27" media="(prefers-color-scheme: dark)" />
     <!-- Dark mode before first paint, on every page including the prerendered landing: the reader's
          stored choice, or else the system setting. No network, no globals. Keep the key and values
          in step with src/themes.ts. -->
@@ -11,10 +15,15 @@
       (function () {
         var mode = null
         try { mode = localStorage.getItem('schema:theme') } catch (e) {}
-        if (mode !== 'light' && mode !== 'dark') {
+        var picked = mode === 'light' || mode === 'dark'
+        if (!picked) {
           mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
         }
         if (mode === 'dark') document.documentElement.classList.add('dark')
+        if (picked) {
+          var metas = document.querySelectorAll('meta[name="theme-color"]')
+          for (var i = 0; i < metas.length; i++) metas[i].content = mode === 'dark' ? '#161C27' : '#FFFFFF'
+        }
       })()
     </script>
     <link rel="icon" href="/favicon.ico" />
