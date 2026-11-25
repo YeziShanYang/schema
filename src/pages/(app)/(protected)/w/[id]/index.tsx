@@ -188,7 +188,9 @@ export default function WorkspacePage() {
             {nextUp && <span className="text-muted-foreground">, next up <b className="font-semibold text-foreground"><ConceptName name={nextUp.name} /></b></span>}
           </span>
         ) : (
-          <span className="text-muted-foreground">Pick a paper to start.</span>
+          <span className="text-muted-foreground">
+            {g.candidates.length > 0 ? 'Add one of the recommended papers below, or paste a link.' : 'Pick a paper to start.'}
+          </span>
         )}
         <span className="flex items-center gap-3">
           {error && <span role="alert" className="text-destructive" data-testid="workspace-error">{error}</span>}

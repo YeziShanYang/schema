@@ -523,6 +523,7 @@ test('Add flow, workspace path: starter papers appear as candidates, added paper
 
   // Starter recommendations run once on creation; the fixture ranking keeps two real papers.
   await expect(page.getByTestId('suggestion')).toHaveCount(2, { timeout: 15_000 })
+  await expect(page.getByTestId('workspace-continue')).toContainText('Add one of the recommended papers below, or paste a link.')
   await page.getByTestId('pick-suggestion').first().click()
   await expect(page.getByTestId('workspace-paper')).toHaveCount(1, { timeout: 15_000 })
   await page.getByTestId('pick-suggestion').first().click()
