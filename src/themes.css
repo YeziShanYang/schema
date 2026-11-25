@@ -7,9 +7,9 @@
  *
  * Each dark value keeps its light token's hue and changes its lightness.
  * Contrast against the dark card (oklch 0.225): foreground 14.3:1, muted
- * text 6.9:1, primary as link text 6.8:1, dark ink on a primary button
- * 7.4:1 (5.3:1 on its hover fill), known green 8.1:1, input edges 3.4:1,
- * the focus ring 8.3:1 solid and 3.1:1 as the 50% halo.
+ * text 6.9:1, faint text 5.3:1, primary as link text 6.8:1, dark ink on a
+ * primary button 7.4:1 (5.3:1 on its hover fill), known green 8.1:1, input
+ * edges 3.4:1, the focus ring 8.3:1 solid and 4.8:1 as the 70% halo.
  */
 :root {
   color-scheme: light;
@@ -39,7 +39,7 @@
   --color-ring: oklch(0.78 0.13 264.5);
 
   --color-surface-2: oklch(0.205 0.022 262);
-  --color-faint: oklch(0.53 0.028 258);
+  --color-faint: oklch(0.65 0.028 258);
   --color-accent-soft: oklch(0.31 0.075 266);
   --color-known: oklch(0.75 0.125 169);
   --color-known-foreground: oklch(0.185 0.03 264.5);
@@ -75,13 +75,13 @@
   --color-card: var(--paper);
   --color-foreground: #0F172A;
   --color-muted-foreground: #556070;
-  --color-faint: #94A0B2;
+  --color-faint: #667282;
   --color-border: color-mix(in oklab, #0F172A 14%, var(--paper));
   --color-surface-2: color-mix(in oklab, #0F172A 3%, var(--paper));
   --color-primary: #1F4FD8;
   --color-accent-soft: color-mix(in oklab, #1F4FD8 14%, var(--paper));
-  --color-known: #0F8A6B;
-  --color-learning: #B26B00;
+  --color-known: #007A5C;
+  --color-learning: #A36200;
 }
 
 /* The landing's dashed links start on the paper and run out over the dark

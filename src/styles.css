@@ -32,15 +32,15 @@
   --color-destructive: #B42318;
   --color-destructive-foreground: #FFFFFF;
   --color-border: #D6DDE7;          /* line */
-  --color-input: #C4CEDB;           /* form-control edge, 3:1 against white */
+  --color-input: #868F9C;           /* form-control and checkbox edge: 3.3:1 on card, 3:1 on background */
   --color-ring: #1F4FD8;
 
   --color-surface-2: #F8FAFC;
-  --color-faint: #94A0B2;
+  --color-faint: #667282;           /* quiet text: 4.9:1 on card, 4.5:1 on background; muted stays darker */
   --color-accent-soft: #E7EDFC;
-  --color-known: #0F8A6B;
+  --color-known: #007A5C;           /* also text: 5.3:1 on card, 4.5:1 on the Finished chip */
   --color-known-foreground: #FFFFFF;
-  --color-learning: #B26B00;
+  --color-learning: #A36200;        /* also text: 4.9:1 on card, 4.5:1 on background */
   --color-link: #A9B8CC;
   --color-dot: #D3DBE6;
   --color-scrim: #0F172A;           /* backdrops, used with an alpha (bg-scrim/38) */
@@ -55,9 +55,9 @@
   --radius-xl: 6px;
   --radius-2xl: 8px;
 
-  --color-success: #0F8A6B;
+  --color-success: #007A5C;
   --color-success-foreground: #FFFFFF;
-  --color-warning: #B26B00;
+  --color-warning: #A36200;
   --color-warning-foreground: #FFFFFF;
   --color-info: #1F4FD8;
   --color-info-foreground: #FFFFFF;

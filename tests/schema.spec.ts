@@ -1082,6 +1082,91 @@ test('the theme toggle sits beside the account row and keeps its choice across a
   await page.evaluate(() => localStorage.removeItem('schema:theme'))
 })
 
+/** WCAG 2 contrast between token colors as the page resolves them, alpha-composited over `on`. */
+async function tokenContrast(page: Page, pairs: [fg: string, bg: string][]): Promise<number[]> {
+  return page.evaluate((pairs) => {
+    const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!
+    const probe = document.createElement('div')
+    document.body.appendChild(probe)
+    // A CSS color (oklch, color-mix, var()) painted on a canvas over `under`, read back as sRGB.
+    const rgb = (css: string, under = '#808080') => {
+      probe.style.color = css
+      const resolved = getComputedStyle(probe).color
+      ctx.globalCompositeOperation = 'copy'
+      ctx.fillStyle = under
+      ctx.fillRect(0, 0, 1, 1)
+      ctx.globalCompositeOperation = 'source-over'
+      ctx.fillStyle = resolved
+      ctx.fillRect(0, 0, 1, 1)
+      const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data
+      return `rgb(${r}, ${g}, ${b})`
+    }
+    const lum = (c: string) => {
+      const [r, g, b] = c.match(/\d+/g)!.map((v) => {
+        const x = Number(v) / 255
+        return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4
+      })
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    }
+    const out = pairs.map(([fg, bg]) => {
+      const back = rgb(bg)
+      const front = rgb(fg, back)
+      const [a, b] = [lum(front), lum(back)]
+      return Math.round(((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)) * 100) / 100
+    })
+    probe.remove()
+    return out
+  }, pairs)
+}
+
+test('text, edge and focus tokens meet 4.5:1 and 3:1 in light and dark, and buttons show the 70% halo', async ({ users }) => {
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await calm(page)
+  await page.goto('/home')
+  await expect(page.getByTestId('home-page')).toBeVisible()
+  const surfaces = ['var(--color-card)', 'var(--color-surface-2)', 'var(--color-background)']
+  const text = ['var(--color-known)', 'var(--color-success)', 'var(--color-learning)', 'var(--color-warning)', 'var(--color-faint)', 'var(--color-muted-foreground)']
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' })
+    await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains('dark'))).toBe(scheme === 'dark')
+    const textRatios = await tokenContrast(page, text.flatMap((t) => surfaces.map((s) => [t, s] as [string, string])))
+    for (const r of textRatios) expect(r).toBeGreaterThanOrEqual(4.5)
+    // The Finished chip sets green text on a 12% green tint.
+    const [chip] = await tokenContrast(page, [['var(--color-known)', 'color-mix(in oklab, var(--color-known) 12%, var(--color-card))']])
+    expect(chip).toBeGreaterThanOrEqual(4.5)
+    // Form-control and checkbox edges, and the focus halo at 70%.
+    const edges = await tokenContrast(page, surfaces.flatMap((s) => [['var(--color-input)', s], ['color-mix(in oklab, var(--color-ring) 70%, transparent)', s]] as [string, string][]))
+    for (const r of edges) expect(r).toBeGreaterThanOrEqual(3)
+    // Faint stays a visible step lighter than muted.
+    const [faintStep] = await tokenContrast(page, [['var(--color-faint)', 'var(--color-muted-foreground)']])
+    expect(faintStep).toBeGreaterThan(1.2)
+  }
+  // A keyboard-focused button draws the ring token at 70%.
+  await page.getByTestId('analyze-input').focus()
+  await page.keyboard.press('Tab')
+  const submit = page.getByTestId('analyze-submit')
+  await expect(submit).toBeFocused()
+  // The halo eases in over 150ms, so wait for it to settle.
+  await expect.poll(() => submit.evaluate((el) => getComputedStyle(el).boxShadow)).toMatch(/\/ 0\.7\) 0px 0px 0px 3px|, 0\.7\) 0px 0px 0px 3px/)
+  // The concept checkbox's unchecked edge is the input token in both themes.
+  await page.goto(`/p/${FIXTURE_SLUG}`)
+  await openBranch(page, 'foundations')
+  const box = card(page, 'c5').getByTestId('status-known')
+  if ((await box.getAttribute('aria-checked')) === 'false') {
+    const [edge, input] = await box.evaluate((el) => {
+      const probe = document.createElement('div')
+      probe.style.color = 'var(--color-input)'
+      document.body.appendChild(probe)
+      const out = [getComputedStyle(el).borderTopColor, getComputedStyle(probe).color]
+      probe.remove()
+      return out
+    })
+    expect(edge).toBe(input)
+  }
+  await page.keyboard.press('Escape')
+})
+
 test('Uncheck all on the knowledge page asks first and unchecks only that paper', async ({ users }) => {
   test.setTimeout(200_000)
   const [ada] = await users(['Schema ada'])
