@@ -422,6 +422,8 @@ test('known or not known, saved per reader with a green outline; the paper is sh
   await ada.page.goto('/knowledge')
   const row = ada.page.locator(`[data-testid="checked-concept"][data-concept-id="${conceptId}"]`)
   await expect(row).toContainText('Softmax over scores')
+  // The source line reads just that: no stray "0" from the row's stale flag.
+  await expect(row.locator('p').nth(1)).toHaveText('Checked by you')
   await expect(ada.page.getByTestId('checked-paper').filter({ has: row })).toContainText(FIXTURE_TITLE)
   await ada.page.getByTestId('checked-search').fill('softmax')
   await expect(row).toBeVisible()

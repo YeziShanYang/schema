@@ -149,7 +149,8 @@ export function ConceptCard({ concept, paper, topic, prerequisites, onOpenConcep
         <p className="mb-2 mt-1.5 text-[13px] leading-[1.45] text-muted-foreground"><MathText text={c.whyNeeded} /></p>
         {topic?.description && <p className="mb-2 text-xs text-faint">Topic: {topic.name}. {topic.description}</p>}
 
-        {c.quote && c.quoteVerified && (
+        {/* quoteVerified is stored as 0 or 1, and a bare 0 would render as text. */}
+        {c.quote && !!c.quoteVerified && (
           <blockquote className="mb-2.5 rounded-r border-l-2 border-border bg-surface-2 px-2.5 py-2 text-[12.5px] text-muted-foreground">
             {/* quote stays verbatim for verification; quoteDisplay is the same sentence with its math as LaTeX. */}
             “{c.quoteDisplay ? <MathText text={c.quoteDisplay} /> : c.quote}”

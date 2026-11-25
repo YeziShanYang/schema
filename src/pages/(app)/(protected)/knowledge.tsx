@@ -161,7 +161,8 @@ export default function KnowledgePage() {
                               <p className="font-medium leading-snug"><ConceptName name={r.data.conceptName || 'Unnamed concept'} /></p>
                               <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-faint">
                                 <span>{SOURCE[r.data.source] ?? SOURCE.self}</span>
-                                {r.data.stale && <Chip>From an earlier analysis</Chip>}
+                                {/* stale is stored as 0 or 1, and a bare 0 would render as text. */}
+                                {!!r.data.stale && <Chip>From an earlier analysis</Chip>}
                               </p>
                             </div>
                             <StatusControl
