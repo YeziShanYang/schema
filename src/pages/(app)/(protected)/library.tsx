@@ -2,7 +2,8 @@
  * Library: every paper the reader has opened, with progress and last opened,
  * filtered by in progress or finished; finished papers can be read again.
  * Finishing and reading again go through the same hooks and dialog as the
- * paper window, so the paper's workspace entries follow.
+ * paper window, so the paper's workspace entries follow, and Read again
+ * offers to uncheck what finishing checked.
  */
 
 import { useMemo, useState } from 'react'
@@ -12,8 +13,7 @@ import type { RecordData } from 'deepspace'
 import { Button } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { Chip, Meter, PageHeader } from '../../../components/blueprint'
-import { FinishDialog } from '../../../components/paper/FinishDialog'
-import { useReopenPaper } from '../../../hooks/usePaper'
+import { FinishDialog, ReadAgainButton } from '../../../components/paper/FinishDialog'
 import { checkedPerPaper, useConceptKnowledge, useRoadmaps } from '../../../hooks/useReader'
 import { arxivSlug } from '../../../lib/arxiv'
 import type { PaperData } from '../../../types'
@@ -35,7 +35,6 @@ export default function LibraryPage() {
   // Counts show once the papers (their concept counts) and the reader's checkmarks are in; until then "…", not "0 / 0".
   const countsReady = papers.status === 'ready' && knowledge.status === 'ready'
   const [filter, setFilter] = useState<Filter>('all')
-  const reopenPaper = useReopenPaper()
   const [finishing, setFinishing] = useState<RecordData<PaperData> | null>(null)
   const rows = roadmaps.rows.filter((r) => filter === 'all' || r.data.status === filter)
 
@@ -84,7 +83,7 @@ export default function LibraryPage() {
                   </div>
                   <div>
                     {r.data.status === 'finished' ? (
-                      <Button size="sm" variant="outline" onClick={() => reopenPaper(r.data.paperId)} data-testid="library-read-again">Read again</Button>
+                      <ReadAgainButton paperId={r.data.paperId} size="sm" variant="outline" testId="library-read-again" />
                     ) : (
                       <Button size="sm" variant="ghost" disabled={!paper} onClick={() => setFinishing(paper ?? null)} data-testid="library-finish">Mark finished</Button>
                     )}

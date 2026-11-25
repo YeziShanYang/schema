@@ -19,7 +19,7 @@ import { useAuth } from 'deepspace'
 import { Button, ConfirmModal } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { arxivAbsUrl, parseArxivId } from '../../lib/arxiv'
-import { usePaper, useReopenPaper } from '../../hooks/usePaper'
+import { usePaper } from '../../hooks/usePaper'
 import { useReaderKnowledge } from '../../hooks/useDemoKnowledge'
 import { useRoadmaps } from '../../hooks/useReader'
 import { useOverview } from '../../hooks/useOverview'
@@ -33,7 +33,7 @@ import { FloatingGraph } from '../graph/FloatingGraph'
 import { BranchNode, CenterCard } from '../graph/nodes'
 import { BranchPanel } from '../graph/BranchPanel'
 import { ConceptCard } from './ConceptCard'
-import { FinishDialog } from './FinishDialog'
+import { FinishDialog, ReadAgainButton } from './FinishDialog'
 import { OverviewWindow, type OverviewConcept } from './OverviewWindow'
 import { SequenceStrip } from './SequenceStrip'
 import { ConceptName, MathText } from '../MathText'
@@ -63,7 +63,6 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const p = usePaper(arxivId, knowledge)
   const roadmaps = useRoadmaps()
   const workspaces = useWorkspaces()
-  const reopenPaper = useReopenPaper()
   const navigate = useNavigate()
   const { allowance } = useAllowance()
   const ws = workspaceId ? workspaces.byId.get(workspaceId) : undefined
@@ -328,7 +327,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const finishControls = finished ? (
     <span className="flex items-center gap-2">
       <Chip tone="known"><span data-testid="paper-finished">Finished</span></Chip>
-      {isSignedIn && <Button size="sm" variant="ghost" onClick={() => reopenPaper(paper.recordId)} data-testid="read-again">Read again</Button>}
+      {isSignedIn && <ReadAgainButton paperId={paper.recordId} size="sm" variant="ghost" testId="read-again" />}
     </span>
   ) : isSignedIn && d.status === 'ready' ? (
     <Button size="sm" variant="outline" onClick={() => setFinishOpen(true)} data-testid="finish-toggle">Mark finished</Button>

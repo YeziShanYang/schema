@@ -157,7 +157,9 @@ export function CenterCard({
       onClick={
         onOpen
           ? (e) => {
-              if (!(e.target as HTMLElement).closest('button, a, input, label, select, textarea')) onOpen()
+              // React events bubble out of portals, so a click in a dialog opened from the card (Read again) is ignored.
+              const target = e.target as HTMLElement
+              if (e.currentTarget.contains(target) && !target.closest('button, a, input, label, select, textarea')) onOpen()
             }
           : undefined
       }

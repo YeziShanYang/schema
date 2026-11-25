@@ -89,6 +89,15 @@ async function openFromHome(page: Page, id: string) {
   await expect(page).toHaveURL(new RegExp(`/p/${id.replace('.', '~')}$`), { timeout: 15_000 })
 }
 
+/** Read again; when finishing checked concepts, it asks first, and this keeps them. */
+async function readAgain(page: Page, testId: 'read-again' | 'library-read-again', row = page.locator('body')) {
+  await row.getByTestId(testId).click()
+  const confirm = page.getByTestId('read-again-confirm')
+  const reopened = testId === 'read-again' ? page.getByTestId('finish-toggle') : row.locator(`[data-testid="library-finish"]`)
+  await expect(confirm.or(reopened)).toBeVisible({ timeout: 15_000 })
+  if (await confirm.isVisible()) await confirm.click()
+}
+
 async function openReadyFixturePaper(page: Page, id = FIXTURE_ID) {
   await calm(page)
   await page.goto('/home')
@@ -705,7 +714,7 @@ test('Add flow, workspace path: starter papers appear as candidates, added paper
   await expect(page).toHaveURL(new RegExp(`/w/[^/]+/p/${FIXTURE_SLUG}$`), { timeout: 15_000 })
   await expect(page.getByTestId('paper-back')).toContainText(name)
 
-  if (await page.getByTestId('read-again').isVisible()) await page.getByTestId('read-again').click()
+  if (await page.getByTestId('read-again').isVisible()) await readAgain(page, 'read-again')
   await page.getByTestId('finish-toggle').click()
   await page.getByTestId('finish-confirm').click()
   await expect(page.getByTestId('paper-finished')).toBeVisible({ timeout: 15_000 })
@@ -1033,7 +1042,7 @@ test('finishing a paper can check its remaining concepts; Read again reopens it'
   const [ada] = await users(['Schema ada'])
   const page = ada.page
   await openReadyFixturePaper(page)
-  if (await page.getByTestId('read-again').isVisible()) await page.getByTestId('read-again').click()
+  if (await page.getByTestId('read-again').isVisible()) await readAgain(page, 'read-again')
   await page.getByTestId('finish-toggle').click()
   await page.getByTestId('finish-confirm').click()
   await expect(page.getByTestId('paper-finished')).toBeVisible({ timeout: 15_000 })
@@ -1047,7 +1056,13 @@ test('finishing a paper can check its remaining concepts; Read again reopens it'
   await page.getByRole('button', { name: 'Finished', exact: true }).click()
   const row = page.locator('[data-testid="library-row"][data-status="finished"]').filter({ hasText: `arXiv ${FIXTURE_ID}` })
   await expect(row).toBeVisible()
+  // Finishing checked the rest, so Read again asks whether to uncheck them, unticked by default.
   await row.getByTestId('library-read-again').click()
+  const ask = page.getByRole('dialog', { name: 'Read this paper again?' })
+  await expect(ask).toBeVisible()
+  await expect(ask.getByRole('checkbox', { name: /^Also uncheck the \d+ concepts? checked when you finished$/ })).not.toBeChecked()
+  await ask.getByTestId('read-again-confirm').click()
+  await expect(ask).toHaveCount(0)
   await page.getByRole('button', { name: 'In progress', exact: true }).click()
   await expect(page.locator('[data-testid="library-row"][data-status="reading"]').filter({ hasText: `arXiv ${FIXTURE_ID}` })).toBeVisible()
 })
@@ -1060,6 +1075,54 @@ test('each library filter has its own empty text', async ({ users }) => {
   await expect(page.getByTestId('library-page')).toBeVisible()
   await page.getByRole('button', { name: 'Finished', exact: true }).click()
   await expect(page.getByTestId('library-empty')).toHaveText('No finished papers yet. Papers you mark finished are listed here.')
+})
+
+test('Read again asks whether to uncheck what finishing checked, and reopens at once when finishing checked nothing', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await openReadyFixturePaper(page)
+  if (await page.getByTestId('read-again').isVisible()) await readAgain(page, 'read-again')
+  // c1 checked by the reader, c5 left for finishing to check.
+  await openBranch(page, 'foundations')
+  await resetStatus(page, 'c1')
+  await ensureKnown(page, 'c1')
+  await resetStatus(page, 'c5')
+  await page.keyboard.press('Escape')
+  await page.getByTestId('finish-toggle').click()
+  await page.getByTestId('finish-confirm').click()
+  await expect(page.getByTestId('paper-finished')).toBeVisible({ timeout: 15_000 })
+  await openBranch(page, 'foundations')
+  await expect(card(page, 'c5')).toHaveAttribute('data-status', 'known', { timeout: 15_000 })
+  await page.keyboard.press('Escape')
+
+  // Read again asks, with the box unticked. Cancel leaves the paper finished.
+  const ask = page.getByRole('dialog', { name: 'Read this paper again?' })
+  const box = ask.getByRole('checkbox', { name: /^Also uncheck the \d+ concepts? checked when you finished$/ })
+  await page.getByTestId('read-again').click()
+  await expect(box).not.toBeChecked()
+  await ask.getByRole('button', { name: 'Cancel' }).click()
+  await expect(ask).toHaveCount(0)
+  await expect(page.getByTestId('paper-finished')).toBeVisible()
+
+  await page.getByTestId('read-again').click()
+  await box.check()
+  await ask.getByTestId('read-again-confirm').click()
+  await expect(page.getByTestId('finish-toggle')).toBeVisible({ timeout: 15_000 })
+  // Only what finishing checked is unchecked: c5 goes, c1 stays.
+  await openBranch(page, 'foundations')
+  await expect(card(page, 'c5')).toHaveAttribute('data-status', 'unknown', { timeout: 15_000 })
+  await expect(card(page, 'c1')).toHaveAttribute('data-status', 'known')
+  await page.keyboard.press('Escape')
+
+  // Finished without checking the rest, there is nothing to uncheck, so Read again acts at once.
+  await page.getByTestId('finish-toggle').click()
+  await page.getByRole('checkbox', { name: 'Also check the remaining concepts in this paper' }).uncheck()
+  await page.getByTestId('finish-confirm').click()
+  await expect(page.getByTestId('paper-finished')).toBeVisible({ timeout: 15_000 })
+  await page.getByTestId('read-again').click()
+  await expect(page.getByTestId('finish-toggle')).toBeVisible({ timeout: 15_000 })
+  await expect(ask).toHaveCount(0)
 })
 
 test('the library shows a placeholder, never 0 / 0, while its counts load', async ({ users }) => {
@@ -1122,7 +1185,7 @@ test('the library finishes a paper with the same dialog, and both its buttons up
   const [ada] = await users(['Schema ada'])
   const page = ada.page
   await openReadyFixturePaper(page)
-  if (await page.getByTestId('read-again').isVisible()) await page.getByTestId('read-again').click()
+  if (await page.getByTestId('read-again').isVisible()) await readAgain(page, 'read-again')
   await expect(page.getByTestId('finish-toggle')).toBeVisible()
   // A cached paper is free to add, so a fresh workspace holds it.
   const added = await action(page, 'analyzePaper', { input: FIXTURE_ID, newWorkspace: { name: `[fixture] Library ${Date.now()}` } })
@@ -1150,7 +1213,7 @@ test('the library finishes a paper with the same dialog, and both its buttons up
 
   // Read again in the library reopens the workspace entry as well.
   await page.goto('/library')
-  await row.getByTestId('library-read-again').click()
+  await readAgain(page, 'library-read-again', row)
   await expect(row).toHaveAttribute('data-status', 'reading', { timeout: 15_000 })
   await page.goto(`/w/${added.data.workspaceId}`)
   await expect(entry).toHaveAttribute('data-status', 'active', { timeout: 15_000 })
