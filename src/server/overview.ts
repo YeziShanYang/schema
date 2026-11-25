@@ -11,6 +11,7 @@ import { appFiles } from 'deepspace/worker'
 import type { Env } from '../../worker'
 import type { Envelope, PaperData, PaperOverview, StoryItem } from '../types'
 import { asString, asStringArray } from '../lib/json'
+import { firstSentence } from '../lib/sentences'
 import { callModelJson } from './pipeline/llm'
 import type { PipelineClient } from './pipeline/client'
 import { overviewSystem, overviewUser } from './pipeline/prompts'
@@ -40,7 +41,9 @@ export interface ParsedOverview {
 /**
  * Keeps what the model returned that fits: unknown concept keys are dropped,
  * the story is capped at 8 items, and concepts no story item uses are listed
- * as "also needed" in concept order. Throws when nothing usable came back.
+ * as "also needed" in concept order. Every concept gets a plain role: one the
+ * model left out is the first sentence of the concept's why-needed line.
+ * Throws when nothing usable came back.
  */
 export function parseOverview(json: Record<string, unknown>, concepts: OverviewConcept[], now = Date.now()): ParsedOverview {
   const known = new Set(concepts.map((c) => c.key))
@@ -70,6 +73,10 @@ export function parseOverview(json: Record<string, unknown>, concepts: OverviewC
     if (!known.has(key)) continue
     const role = asString(o.plain_role, MAX_ROLE_CHARS)
     if (role && !roles[key]) roles[key] = role
+  }
+  // A concept the model gave no role gets the first sentence of its why-needed line, which verify then checks like any role.
+  for (const c of concepts) {
+    if (!roles[c.key] && c.whyNeeded) roles[c.key] = firstSentence(c.whyNeeded)
   }
   return { overview: { plain, story, alsoNeeded, generatedAt: now }, roles }
 }

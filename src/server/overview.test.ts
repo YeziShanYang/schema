@@ -33,6 +33,22 @@ describe('parseOverview', () => {
     expect(overview.alsoNeeded).toEqual(['c5', 'c6', 'c7', 'c9', 'c8'])
   })
 
+  it('gives a concept the model left without a role the first sentence of its why-needed line', () => {
+    const lp: OverviewConcept = {
+      key: 'c3',
+      name: 'Linear programming and duality',
+      whyNeeded: 'The optimal guessing factor is the value of a linear program, and the matching lower bounds come from its dual. More follows.',
+      section: '2',
+      order: 0,
+    }
+    const story = [{ text: 'One.', concept_keys: ['c3'] }, { text: 'Two.', concept_keys: [] }]
+    const { roles } = parseOverview({ plain: 'Summary.', story, roles: [{ key: 'c1', plain_role: 'Kept as written.' }] }, [...concepts, lp])
+    expect(roles.c3).toBe('The optimal guessing factor is the value of a linear program, and the matching lower bounds come from its dual.')
+    expect(roles.c1).toBe('Kept as written.')
+    // A concept with no why-needed line stays without a role.
+    expect(roles.c2).toBeUndefined()
+  })
+
   it('refuses an overview without a summary or with fewer than two story items', () => {
     expect(() => parseOverview({ plain: '', story: [{ text: 'a' }, { text: 'b' }] }, concepts)).toThrow()
     expect(() => parseOverview({ plain: 'Summary.', story: [{ text: 'only one' }] }, concepts)).toThrow()
