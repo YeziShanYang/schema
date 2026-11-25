@@ -400,7 +400,7 @@ export function fixtureIntegration(endpoint: string, body: Record<string, unknow
     if (hint === 'concepts') return message(JSON.stringify(arxivId.endsWith('33') ? fiveBranchConcepts : concepts))
     if (hint === 'explain') return message(JSON.stringify(explain))
     if (hint === 'recommend') {
-      return message(JSON.stringify({ picks: [{ n: 1, reason: 'A broad survey to start with.' }, { n: 2, reason: 'Builds geometric intuition.' }, { n: 9, reason: 'Invented result number that must be ignored.' }] }))
+      return message(JSON.stringify({ picks: [{ n: 1, reason: 'A broad survey to start with.' }, { n: 2, reason: 'Builds geometric intuition for the curved spaces the fixture paper works in, starting from vectors and distances and moving to tangent planes and curvature, with worked pictures at each step, so a reader without differential geometry can follow why bending the attention scores to match the data changes what the model attends to. A long reason, so the graph has a tall card to place.' }, { n: 9, reason: 'Invented result number that must be ignored.' }] }))
     }
     if (hint === 'overview') return message(JSON.stringify(overview))
     if (hint === 'verify') return message(JSON.stringify(verify))

@@ -1,6 +1,8 @@
 /**
  * A floating node graph: one center card with nodes placed around it on an
- * ellipse, joined by dashed elbow links. Ported from design/theme-trials.html.
+ * ellipse, joined by dashed elbow links. Placement is in lib/graph/layout:
+ * cards are measured so they stay inside the canvas and clear of the center
+ * card, and the canvas grows when they can't fit.
  *
  * Motion runs in one requestAnimationFrame loop that writes transforms
  * directly (no React render per frame):
@@ -18,6 +20,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import { graphLayout } from '@/lib/graph/layout'
 
 export interface GraphNode {
   key: string
@@ -87,7 +90,7 @@ export function FloatingGraph({
   const containerRef = useRef<HTMLDivElement>(null)
   const centerRef = useRef<HTMLDivElement>(null)
   const states = useRef(new Map<string, NodeState>())
-  const geo = useRef({ w: 0, h: 0, cx: 0, cy: 0, ccx: 0, ccy: 0, cvx: 0, cvy: 0, gs: 1, gsc: 1, gv: 0, placed: false })
+  const geo = useRef({ w: 0, h: 0, cx: 0, cy: 0, ccx: 0, ccy: 0, cvx: 0, cvy: 0, gs: 1, gsc: 1, gv: 0, placed: false, baseMin: -1 })
   const reducedRef = useRef(reduced)
   reducedRef.current = reduced
   const [mode, setMode] = useState<'stack' | 'graph'>('stack')
@@ -132,24 +135,37 @@ export function FloatingGraph({
   const layout = useCallback(() => {
     const el = containerRef.current
     if (!el) return
+    const g = geo.current
+    // The height the page gives the canvas (its class's min-height), read before any inline min-height is set.
+    if (g.baseMin < 0) g.baseMin = parseFloat(getComputedStyle(el).minHeight) || 0
     const w = el.clientWidth
     const h = el.clientHeight
-    const g = geo.current
     g.w = w
     g.h = h
-    const n = keysSig ? keysSig.split('|').length : 0
-    g.cx = w * 0.5
-    g.cy = h * 0.5
-    // Shrink the graph in tight space, and keep nodes clear of the center card.
+    // Shrink the graph in tight space.
     g.gs = Math.max(0.72, Math.min(1, w / 1000))
-    const rx = Math.max(Math.min(w * 0.36, 440), 290 * g.gs)
-    const ry = Math.max(Math.min(h * 0.36, 260), 150)
     const list = keysSig ? keysSig.split('|') : []
+    const sizeOf = (box: Element | null | undefined) => {
+      const b = box as HTMLElement | null | undefined
+      return { w: b?.offsetWidth ?? 0, h: b?.offsetHeight ?? 0 }
+    }
+    const placed = graphLayout({
+      w,
+      h,
+      scale: g.gs,
+      center: sizeOf(centerRef.current?.firstElementChild),
+      nodes: list.map((key) => sizeOf(stateFor(key).el?.firstElementChild)),
+    })
+    // Cards that can't fit grow the canvas, so the page scrolls to them instead of cutting them off. The write
+    // waits a frame: resizing an observed element inside a ResizeObserver callback reports a loop error.
+    const minHeight = placed.minHeight > g.baseMin ? `${placed.minHeight}px` : ''
+    if (el.style.minHeight !== minHeight) requestAnimationFrame(() => (el.style.minHeight = minHeight))
+    g.cx = placed.cx
+    g.cy = placed.cy
     list.forEach((key, i) => {
       const s = stateFor(key)
-      const a = -Math.PI / 2 + (i / Math.max(1, n)) * Math.PI * 2 + 0.35
-      s.bx = g.cx + Math.cos(a) * rx
-      s.by = g.cy + Math.sin(a) * ry
+      s.bx = placed.points[i].x
+      s.by = placed.points[i].y
       if (!g.placed || reducedRef.current || (s.x === 0 && s.y === 0)) {
         s.x = s.bx
         s.y = s.by
@@ -166,6 +182,26 @@ export function FloatingGraph({
     g.placed = true
     render()
   }, [keysSig, render, stateFor])
+
+  // Cards change size as their content loads (a recommendation's reason, a link count), so they re-run the layout too.
+  useEffect(() => {
+    if (mode !== 'graph') return
+    let frame = 0
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => layout())
+    })
+    const center = centerRef.current?.firstElementChild
+    if (center) ro.observe(center)
+    for (const key of keysSig ? keysSig.split('|') : []) {
+      const box = stateFor(key).el?.firstElementChild
+      if (box) ro.observe(box)
+    }
+    return () => {
+      cancelAnimationFrame(frame)
+      ro.disconnect()
+    }
+  }, [mode, keysSig, layout, stateFor])
 
   // Measure before paint so wide screens never flash the stacked list.
   useLayoutEffect(() => {

@@ -20,7 +20,7 @@ Two files are good places to start reading: `src/server/pipeline/run.ts` runs th
   - `src/hooks/` holds the React hooks that give the views their records.
   - `src/lib/` holds the logic the views and the Worker import, with no React in it. General helpers such as arXiv id parsing, the daily cap and the server-action client sit at its root.
     - `src/lib/analysis/` has the paper text and content rules: HTML-to-text conversion, quote checks and fallbacks, math parsing, the depth rule, when a plain role shows, and the stage timings of an analysis.
-    - `src/lib/graph/` cleans the concept graph and its branches (merging, placement, progress) and computes the recommended sequence.
+    - `src/lib/graph/` cleans the concept graph and its branches (merging, placement, progress), computes the recommended sequence, and places the cards of the floating graph so they stay on screen.
     - `src/lib/knowledge/` holds the topic vocabulary, explainer link titles, the hints on unchecked concepts, and the remaps that move concepts to new topics and checkmarks to new concepts.
   - `src/pages/` holds the routes and their layouts, one file per route (file-based routing).
   - `src/schemas/` defines the collections and their permissions, and `src/schemas.ts` lists them for the SDK.

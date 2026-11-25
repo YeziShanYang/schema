@@ -110,6 +110,22 @@ async function openReadyFixturePaper(page: Page, id = FIXTURE_ID) {
   await expect(paperPage).toHaveAttribute('data-paper-status', 'ready', { timeout: READY_TIMEOUT })
 }
 
+/** Cards of a FloatingGraph that leave its canvas, or cover its center card (by index). */
+async function graphFits(page: Page, testId: string) {
+  return page.getByTestId(testId).evaluate((graph) => {
+    const box = graph.getBoundingClientRect()
+    const centerBox = graph.querySelector(':scope > div.origin-top-left:not(.graph-node) > *')!.getBoundingClientRect()
+    const outside: number[] = []
+    const onCenter: number[] = []
+    graph.querySelectorAll('.graph-node > *').forEach((node, i) => {
+      const r = node.getBoundingClientRect()
+      if (r.top < box.top - 1 || r.bottom > box.bottom + 1 || r.left < box.left - 1 || r.right > box.right + 1) outside.push(i)
+      if (r.left < centerBox.right && centerBox.left < r.right && r.top < centerBox.bottom && centerBox.top < r.bottom) onCenter.push(i)
+    })
+    return { outside, onCenter }
+  })
+}
+
 function card(page: Page, key: string) {
   return page.locator(`[data-testid="concept-card"][data-concept-key="${key}"]`)
 }
@@ -766,6 +782,8 @@ test('Add flow, workspace path: starter papers appear as candidates, added paper
 
   // Starter recommendations run once on creation; the fixture ranking keeps two real papers.
   await expect(page.getByTestId('suggestion')).toHaveCount(2, { timeout: 15_000 })
+  // The second one has a long reason, and the graph still keeps its card inside the canvas and clear of the center card.
+  await expect.poll(() => graphFits(page, 'workspace-graph'), { timeout: 10_000 }).toEqual({ outside: [], onCenter: [] })
   await expect(page.getByTestId('workspace-continue')).toContainText('Add one of the recommended papers below, or paste a link.')
   await page.getByTestId('pick-suggestion').first().click()
   await expect(page.getByTestId('workspace-paper')).toHaveCount(1, { timeout: 15_000 })
