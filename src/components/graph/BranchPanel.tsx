@@ -149,7 +149,7 @@ export function BranchPanel({
       >
         <div className="border-b border-border px-5 pb-3.5 pt-4 md:px-6">
           <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               {back}
               {eyebrow && <div className="label">{eyebrow}</div>}
               <h2 id={`${testId}-title`} className="mt-1 text-[21px] font-semibold leading-tight">{title}</h2>

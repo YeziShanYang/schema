@@ -551,6 +551,8 @@ test('a Learn first chip leaves one way back, and the card a jump lands on is ou
   await card(page, 'c2').getByTestId('learn-first-chip').filter({ hasText: 'Softmax over scores' }).click()
   await expect(title).toHaveText('Foundations')
   await expect(back).toHaveText('← Back to Attention as a weighted average')
+  // The way back has the header's width, so a short title does not cut it.
+  expect(await back.locator('span').first().evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
   await back.click()
   await expect(title).toHaveText('Attention')
   await expect(card(page, 'c2')).toBeInViewport()
