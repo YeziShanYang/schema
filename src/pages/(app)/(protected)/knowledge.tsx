@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useQuery } from 'deepspace'
 import type { RecordData } from 'deepspace'
 import { Input } from '@/components/ui'
@@ -88,6 +88,18 @@ export default function KnowledgePage() {
     ? topics.filter((t) => !inProfile(t.data.key) && t.data.name.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 20)
     : []
   const setProfile = (topicKey: string) => (next: 'known' | 'learning' | null) => (next === null ? profile.clear(topicKey) : profile.set(topicKey))
+
+  // A link to #starter (the first-run prompt) scrolls there once, after everything above it has loaded, since the
+  // section is rendered only then and a client-side navigation doesn't jump to hashes.
+  const location = useLocation()
+  const scrolledFor = useRef('')
+  const loaded = concepts.status === 'ready' && profile.status === 'ready' && topicsStatus === 'ready'
+  const startersShown = starters.length > 0
+  useEffect(() => {
+    if (location.hash !== '#starter' || !loaded || !startersShown || scrolledFor.current === location.key) return
+    scrolledFor.current = location.key
+    document.getElementById('starter')?.scrollIntoView({ block: 'start' })
+  }, [location.hash, location.key, loaded, startersShown])
 
   function profileList(items: RecordData<KnowledgeData>[]) {
     const byLevel = LEVELS.map((level) => ({ level, items: items.filter((r) => (byKey.get(r.data.topicKey)?.data.level ?? 'core') === level) })).filter((g) => g.items.length)
@@ -210,7 +222,7 @@ export default function KnowledgePage() {
           </div>
 
           {starters.length > 0 && (
-            <div data-testid="starter-topics" id="starter">
+            <div data-testid="starter-topics" id="starter" className="scroll-mt-16">
               <div className="label pb-1">Common starting points</div>
               <p className="pb-2 text-sm text-muted-foreground">Tick what you already know. Papers will point these out on the concepts that use them.</p>
               <ul className="flex flex-wrap gap-2">

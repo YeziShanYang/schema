@@ -681,6 +681,28 @@ test('first-run prompt shows for an empty knowledge profile and can be dismissed
   await expect(page.getByTestId('first-run')).toHaveCount(0)
 })
 
+test('the first-run link scrolls to the starter topics once they have loaded', async ({ users }) => {
+  const [, bob] = await users(['Schema ada', 'Schema bob'])
+  const page = bob.page
+  await calm(page)
+  // A short phone screen, so the starter topics sit below the fold.
+  await page.setViewportSize({ width: 390, height: 520 })
+  await page.goto('/home')
+  await page.evaluate(() => localStorage.removeItem('schema:first-run-dismissed'))
+  await page.reload()
+  await page.getByTestId('first-run').getByRole('link', { name: 'knowledge page' }).click()
+  await expect(page).toHaveURL(/\/knowledge#starter$/)
+  const starters = page.getByTestId('starter-topics')
+  await expect(starters).toBeVisible({ timeout: 15_000 })
+  // The section's top lands at the top of the screen, below the 48px header.
+  await expect.poll(() => starters.evaluate((el) => Math.round(el.getBoundingClientRect().top)), { timeout: 10_000 }).toBeLessThan(100)
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+  expect(await starters.evaluate((el) => el.getBoundingClientRect().top)).toBeGreaterThanOrEqual(48)
+  // The page keeps its order: checked concepts, then the profile, then the starters.
+  const order = await page.locator('[data-testid="checked-concepts"], [data-testid="profile"], [data-testid="starter-topics"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')))
+  expect(order).toEqual(['checked-concepts', 'profile', 'starter-topics'])
+})
+
 test('finishing a paper can check its remaining concepts; Read again reopens it', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada] = await users(['Schema ada'])
