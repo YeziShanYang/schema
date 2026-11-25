@@ -16,12 +16,15 @@
  *    rank correlation"), and a two-word name without its generic head noun
  *    ("Hessian" for "Hessian matrix", a content word of four or more
  *    letters). A shorter form is never another concept's name.
- * Matching ignores case (except in abbreviations), plurals and hyphens, and
- * looks at a sentence's prose only, not its math. A card shows the sentence
- * on its own, so two kinds are skipped: one with two or more citations
- * ("(Mehta, 2004; ...)", "[12]"), which is usually related work mentioning
- * the idea in passing, and one that opens by referring to the sentence
- * before it ("This explains ...", "It ...", "Thus ...").
+ * Matching ignores case (except in abbreviations), plurals, hyphens and the
+ * difference between straight and curly quote marks ("Hilbert's" matches
+ * "Hilbert’s"), and looks at a sentence's prose only, not its math. A card
+ * shows the sentence on its own, so three kinds are skipped: a line that
+ * doesn't end like a sentence (a table row, heading, title or keyword list),
+ * one with two or more citations ("(Mehta, 2004; ...)", "[12]"), which is
+ * usually related work mentioning the idea in passing, and one that opens by
+ * referring to the sentence before it ("This explains ...", "These results
+ * ...", "To this end, ...", "It ...", "Thus ...").
  */
 
 import { pickQuote, MAX_QUOTE_CHARS } from './quote-rules'
@@ -72,6 +75,11 @@ function wordPattern(word: string): string {
   return w
 }
 
+/** A pattern in which a straight or curly apostrophe matches either, and so does a straight or curly double quote. */
+function anyQuoteMark(pattern: string): string {
+  return pattern.replace(/['‘’ʼ]/g, "['‘’ʼ]").replace(/["“”]/g, '["“”]')
+}
+
 function termRegex(text: string, kind: NameTermKind): RegExp {
   const body =
     kind === 'abbreviation'
@@ -81,7 +89,7 @@ function termRegex(text: string, kind: NameTermKind): RegExp {
           .filter(Boolean)
           .map(wordPattern)
           .join('[\\s\\-‐‑–]+')
-  return new RegExp(`(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, kind === 'abbreviation' ? 'u' : 'iu')
+  return new RegExp(`(?<![\\p{L}\\p{N}])${anyQuoteMark(body)}(?![\\p{L}\\p{N}])`, kind === 'abbreviation' ? 'u' : 'iu')
 }
 
 const words = (s: string) => s.split(/\s+/).filter(Boolean)
@@ -166,14 +174,30 @@ export function quoteSearch(index: PaperIndex): QuoteSearch {
   return { index, sentences: paperSentences(index.raw).map((s) => ({ ...s, prose: stripMath(s.text) })) }
 }
 
-/** Openings that lean on the sentence before: a pronoun subject or a connective. */
+/** Nouns for the document itself: "This paper ..." and "In this section ..." don't lean on the sentence before. */
+const DOCUMENT_NOUNS = '(?:paper|work|article|section|subsection|chapter|study|letter|note|thesis|manuscript|report|survey|appendix|review|tutorial)s?'
+/** A demonstrative and the word after it, unless that word or the next one names the document ("This new paper"). */
+const DEMONSTRATIVE = `(?:this|these|that|those)\\s+(?!(?:\\S+\\s+)?${DOCUMENT_NOUNS}\\b)\\S`
+
+/** First words a demonstrative can follow and still open the sentence ("To this end", "Once this translation is done"). */
+const OPENING_WORDS =
+  '(?:to|for|in|on|at|by|with|from|under|as|of|once|when|after|before|since|because|if|while|although|though|given|unless|until|whereas)'
+
+/**
+ * Openings that lean on the sentence before: a pronoun subject, a connective,
+ * or a demonstrative that opens the sentence or follows its first word ("This
+ * consists of ...", "These results ...", "To this end, ...", "For this
+ * reason, ...", "Once this translation is done, ...").
+ */
 const REFERS_BACK = new RegExp(
   '^(?:(?:it|they|such|hence|thus|therefore|then|consequently|accordingly)\\b' +
-    '|(?:this|these|that|those)\\s+(?:is|are|was|were|has|have|had|can|could|will|would|may|might|must|should|does|do|explains|shows|' +
-    'gives|yields|means|implies|makes|allows|lets|requires|ensures|leads|suggests|proves|establishes|confirms|demonstrates|follows|' +
-    'holds|reduces|turns|becomes)\\b)',
+    `|${DEMONSTRATIVE}` +
+    `|${OPENING_WORDS}\\s+(?:such\\s+\\S|${DEMONSTRATIVE}))`,
   'i',
 )
+
+/** A sentence's closing punctuation, with any closing quote or bracket after it. */
+const SENTENCE_END = /[.!?]["'”’)\]]*$/
 
 export function refersBack(prose: string): boolean {
   return REFERS_BACK.test(prose.trim())
@@ -193,7 +217,7 @@ export function citationCount(prose: string): number {
 export function findNamedQuote(terms: NameTerm[], search: QuoteSearch, used: Set<string>): NamedQuote | null {
   for (const term of terms) {
     for (const s of search.sentences) {
-      if (s.text.length > MAX_QUOTE_CHARS || !term.re.test(s.prose) || citationCount(s.prose) >= 2 || refersBack(s.prose)) continue
+      if (s.text.length > MAX_QUOTE_CHARS || !term.re.test(s.prose) || !SENTENCE_END.test(s.text) || citationCount(s.prose) >= 2 || refersBack(s.prose)) continue
       const { quote } = pickQuote([s.text], search.index, used)
       if (quote) return { quote, term: term.text, kind: term.kind }
     }
