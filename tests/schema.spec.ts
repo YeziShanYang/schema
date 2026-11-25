@@ -324,8 +324,6 @@ test('overview: opens on its own once, is step 0 until read, the read mark persi
   await expect(card(page, 'c9').getByTestId('concept-role')).toHaveCount(0)
   await card(page, 'c3').getByTestId('see-in-overview').click()
   await expect(win).toBeVisible()
-  // Move the pointer off the window so a hover does not replace the requested highlight.
-  await page.mouse.move(2, 2)
   await expect(panel).toHaveCount(0)
   await expect(win.locator('[data-testid="overview-map"] [data-testid="overview-chip"][data-concept-key="c3"]')).toHaveAttribute('data-hot', 'true')
   await expect(win.locator('[data-testid="overview-step"][data-item-id="s4"]')).toHaveAttribute('data-hot', 'true')
@@ -339,6 +337,32 @@ test('overview: opens on its own once, is step 0 until read, the read mark persi
   await page.keyboard.press('Escape')
   await expect(panel).toHaveCount(0)
   await expect(page.locator('[data-testid="branch"][data-branch-key="geometry"]')).toBeFocused()
+})
+
+test('See in overview keeps the requested highlight while the pointer stays still, and hover takes over once it moves', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await openReadyFixturePaper(page)
+  const win = page.getByTestId('overview-window')
+  const hotChips = () => win.locator('[data-testid="overview-chip"][data-hot="true"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-concept-key')))
+  const hotSteps = () => win.locator('[data-testid="overview-step"][data-hot="true"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-item-id')))
+  // c5 (Gradient descent) is in "Also needed"; the window opens with story chips and sentences under the still pointer.
+  await openBranch(page, 'foundations')
+  await card(page, 'c5').getByTestId('see-in-overview').click()
+  await expect(win).toBeVisible()
+  // The chip scrolls into view after the window enters, which sends pointer-enter to whatever lands under the pointer.
+  await page.waitForTimeout(900)
+  expect(await hotChips()).toEqual(['c5'])
+  expect(await hotSteps()).toEqual([])
+  // A real move hands the highlight to whatever the pointer is over.
+  await win.locator('[data-testid="overview-step"][data-item-id="s1"]').hover()
+  await expect.poll(hotSteps).toEqual(['s1'])
+  await page.keyboard.press('Escape')
+  await expect(win).toHaveCount(0)
+  await expect(page.getByTestId('branch-panel')).toBeVisible()
+  await page.keyboard.press('Escape')
 })
 
 test('Start in the overview counts as reading it, and the box can still be unticked', async ({ users }) => {

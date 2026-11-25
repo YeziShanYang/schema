@@ -11,7 +11,7 @@
  * (400ms) and appear without drawing under reduced motion.
  */
 
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import { cn } from '@/lib/utils'
 import { Button, Checkbox, Label } from '@/components/ui'
 import { BranchPanel } from '../graph/BranchPanel'
@@ -29,6 +29,11 @@ export interface OverviewConcept {
 
 /** The sentence or chip under a mouse pointer or keyboard focus. Touch skips hover, so a tap never leaves a highlight stuck on. */
 type Hot = { kind: 'item'; id: string } | { kind: 'chip'; key: string } | null
+
+function sameHot(a: Hot, b: Hot): boolean {
+  if (!a || !b) return a === b
+  return a.kind === 'chip' ? b.kind === 'chip' && a.key === b.key : b.kind === 'item' && a.id === b.id
+}
 
 interface ChipPos {
   key: string
@@ -187,6 +192,36 @@ export function OverviewWindow({
     }
   }, [open])
 
+  // A window opening under a still pointer gets pointer-enter on whatever lands
+  // there (Chrome sends it after the chip scrolls into view), which would
+  // replace the requested highlight. Hover counts only once the pointer has
+  // really moved since the window opened or the focus changed. The listener
+  // captures on window, so it arms before the chip's own handler runs.
+  const pointerAt = useRef<{ x: number; y: number } | null>(null)
+  const hoverFrom = useRef<{ x: number; y: number } | null>(null)
+  const hoverArmed = useRef(false)
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      pointerAt.current = { x: e.clientX, y: e.clientY }
+      const from = hoverFrom.current
+      if (!hoverArmed.current && (!from || Math.abs(e.clientX - from.x) + Math.abs(e.clientY - from.y) > 2)) hoverArmed.current = true
+    }
+    window.addEventListener('pointermove', onMove, { capture: true, passive: true })
+    return () => window.removeEventListener('pointermove', onMove, { capture: true })
+  }, [])
+  useEffect(() => {
+    if (!open) return
+    hoverArmed.current = false
+    hoverFrom.current = pointerAt.current
+    setHot(null)
+  }, [open, focusKey])
+  const hover = (next: Exclude<Hot, null>) => (e: ReactPointerEvent) => {
+    if (e.pointerType === 'touch' || !hoverArmed.current) return
+    // A chip inside a sentence (the stacked layout) handles its own hover.
+    if (next.kind === 'item' && (e.target as Element).closest('[data-testid="overview-chip"]')) return
+    setHot((h) => (sameHot(h, next) ? h : next))
+  }
+
   const story = overview.story
   const items = useMemo(() => story.map((s) => ({ ...s, conceptKeys: s.conceptKeys.filter((k) => concepts.has(k)) })), [story, concepts])
   // Concepts the story uses, in the order they first appear.
@@ -257,7 +292,8 @@ export function OverviewWindow({
         }}
         type="button"
         onClick={() => onOpenConcept(key)}
-        onPointerEnter={(e) => e.pointerType !== 'touch' && setHot({ kind: 'chip', key })}
+        onPointerEnter={hover({ kind: 'chip', key })}
+        onPointerMove={hover({ kind: 'chip', key })}
         onPointerLeave={(e) => e.pointerType !== 'touch' && setHot(null)}
         onFocus={() => setHot({ kind: 'chip', key })}
         onBlur={() => setHot(null)}
@@ -350,7 +386,8 @@ export function OverviewWindow({
                   ref={(el) => {
                     itemRefs.current.set(s.id, el)
                   }}
-                  onPointerEnter={(e) => e.pointerType !== 'touch' && setHot({ kind: 'item', id: s.id })}
+                  onPointerEnter={hover({ kind: 'item', id: s.id })}
+                  onPointerMove={hover({ kind: 'item', id: s.id })}
                   onPointerLeave={(e) => e.pointerType !== 'touch' && setHot(null)}
                   onFocusCapture={() => setHot({ kind: 'item', id: s.id })}
                   onBlurCapture={() => setHot(null)}
