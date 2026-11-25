@@ -8,7 +8,7 @@ import { chromiumLaunchOptions } from 'deepspace/testing'
  * Not part of `test run`.
  *
  *   LOCAL_BASE_URL=http://127.0.0.1:5173 SHOTS_DIR=/tmp/shots \
- *     npx playwright test -c tests/live/playwright.progress-screens.config.ts
+ *     npx playwright test -c tests/screens/playwright.progress-screens.config.ts
  */
 export default defineConfig({
   testDir: '.',

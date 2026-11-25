@@ -5,7 +5,7 @@ import { chromiumLaunchOptions } from 'deepspace/testing'
  * Screenshots of every screen at 1440 and 390 widths, once normally and once
  * with Chrome's --force-prefers-reduced-motion. Not part of `test run`.
  *
- *   SHOTS_DIR=/tmp/shots npx playwright test -c tests/live/playwright.screens.config.ts
+ *   SHOTS_DIR=/tmp/shots npx playwright test -c tests/screens/playwright.screens.config.ts
  */
 const base = chromiumLaunchOptions()
 export default defineConfig({
