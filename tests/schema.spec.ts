@@ -314,6 +314,43 @@ test('overview: opens on its own once, is step 0 until read, the read mark persi
   await expect(page.locator('[data-testid="branch"][data-branch-key="geometry"]')).toBeFocused()
 })
 
+test('Start in the overview counts as reading it, and the box can still be unticked', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await openReadyFixturePaper(page)
+  // An unchecked tier-0 concept, so the overview has a concept to start with.
+  await openBranch(page, 'foundations')
+  await resetStatus(page, 'c1')
+  await page.keyboard.press('Escape')
+  await setOverviewRead(page, false)
+
+  await page.getByTestId('sequence-overview').click()
+  const win = page.getByTestId('overview-window')
+  await expect(win).toBeVisible()
+  await expect(page.getByTestId('overview-read')).not.toBeChecked()
+  const start = win.getByTestId('overview-start')
+  await expect(start).toHaveText(/^Start: /)
+  const name = ((await start.textContent()) ?? '').replace(/^Start: /, '')
+  await start.click()
+  await expect(win).toHaveCount(0)
+  await expect(page.getByTestId('paper-page')).toHaveAttribute('data-overview', 'read')
+  await expect(page.getByTestId('sequence-overview')).toHaveAttribute('data-state', 'done')
+  // It opened the branch at the concept it named.
+  await expect(page.locator('[data-testid="branch-panel"] [data-testid="concept-card"][data-next-up="true"]')).toContainText(name)
+  await page.keyboard.press('Escape')
+
+  // The mark is saved like the checkbox's, and the box can be unticked.
+  await page.reload()
+  expect(await overviewState(page)).toBe('read')
+  await page.getByTestId('sequence-overview').click()
+  await expect(page.getByTestId('overview-read')).toBeChecked()
+  await page.getByTestId('overview-read').click()
+  await expect(page.getByTestId('paper-page')).toHaveAttribute('data-overview', 'unread')
+  await page.keyboard.press('Escape')
+  await expect(win).toHaveCount(0)
+})
+
 test('the step strip is one row at 1440 and puts Next up on its own row at 390', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada] = await users(['Schema ada'])

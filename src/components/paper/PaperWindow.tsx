@@ -620,7 +620,12 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
           read={ov.read}
           onReadChange={(v) => void ov.setRead(v)}
           nextUpName={seq.nextUp?.name ?? null}
-          onStart={() => (seq.nextUp ? leaveOverviewFor(seq.nextUp.branchKey, seq.nextUp.key) : setOverviewOpen(false))}
+          onStart={() => {
+            if (!seq.nextUp) return closeOverview()
+            // Starting counts as having read the overview, as ticking the box does.
+            if (!ov.read) void ov.setRead(true)
+            leaveOverviewFor(seq.nextUp.branchKey, seq.nextUp.key)
+          }}
           onOpenConcept={(key) => {
             const c = p.conceptByKey.get(key)
             if (c) leaveOverviewFor(c.data.branchKey, key)
