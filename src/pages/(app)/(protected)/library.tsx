@@ -20,6 +20,12 @@ import type { PaperData } from '../../../types'
 
 type Filter = 'all' | 'reading' | 'finished'
 
+const EMPTY: Record<Filter, string> = {
+  all: 'No papers here yet. Papers you open are saved here automatically.',
+  reading: 'No papers in progress. A paper you open is listed here until you mark it finished.',
+  finished: 'No finished papers yet. Papers you mark finished are listed here.',
+}
+
 export default function LibraryPage() {
   const roadmaps = useRoadmaps()
   const knowledge = useConceptKnowledge()
@@ -50,7 +56,7 @@ export default function LibraryPage() {
         </div>
 
         {rows.length === 0 ? (
-          <p className="surface p-5 text-sm text-muted-foreground">No papers here yet. Papers you open are saved here automatically.</p>
+          <p className="surface p-5 text-sm text-muted-foreground" data-testid="library-empty">{EMPTY[filter]}</p>
         ) : (
           <ul className="surface divide-y divide-border">
             {rows.map((r) => {

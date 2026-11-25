@@ -696,6 +696,16 @@ test('finishing a paper can check its remaining concepts; Read again reopens it'
   await expect(page.locator('[data-testid="library-row"][data-status="reading"]').filter({ hasText: `arXiv ${FIXTURE_ID}` })).toBeVisible()
 })
 
+test('each library filter has its own empty text', async ({ users }) => {
+  // Bob only opens papers in these specs and never finishes one.
+  const [, bob] = await users(['Schema ada', 'Schema bob'])
+  const page = bob.page
+  await page.goto('/library')
+  await expect(page.getByTestId('library-page')).toBeVisible()
+  await page.getByRole('button', { name: 'Finished', exact: true }).click()
+  await expect(page.getByTestId('library-empty')).toHaveText('No finished papers yet. Papers you mark finished are listed here.')
+})
+
 /** Calls a server action as the signed-in reader of `page`. */
 async function action(page: Page, name: string, params: Record<string, unknown>) {
   return page.evaluate(
