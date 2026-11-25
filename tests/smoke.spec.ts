@@ -87,8 +87,10 @@ test.describe('Smoke tests', () => {
       expect(phrase.length).toBeGreaterThan(0)
       expect((c.quoteDisplay || c.quote).includes(phrase), `"${phrase}" is in the quote of ${key}`).toBe(true)
     }
-    // A phrase taken from a quoteDisplay renders its math with KaTeX.
-    await expect(page.locator('[data-testid="hero-phrase"] .katex').first()).toBeAttached({ timeout: 10_000 })
+    // Math in a phrase (copied from a quoteDisplay) or in the introduction renders with KaTeX.
+    const phraseMath = await phrases.evaluateAll((els) => els.some((e) => (e.getAttribute('data-phrase') ?? '').includes('\\(')))
+    if (phraseMath) await expect(page.locator('[data-testid="hero-phrase"] .katex').first()).toBeAttached({ timeout: 10_000 })
+    if (snap.paper.firstPage!.introduction.includes('\\(')) await expect(page.getByTestId('hero-art').locator('p .katex').first()).toBeAttached({ timeout: 10_000 })
 
     // The branch panel shows quoteDisplay through MathText too.
     const withMath = snap.branches.find((b) => b.concepts.some((c) => c.quote && c.quoteDisplay))!

@@ -11,11 +11,19 @@ describe('heroPicks', () => {
     for (const p of picks) expect((p.concept.quoteDisplay || p.concept.quote).includes(p.phrase)).toBe(true)
   })
 
-  it('takes a math phrase from quoteDisplay, not the verbatim quote', () => {
-    const math = heroPicks(demoSnapshot).find((p) => p.phrase.includes('\\('))
-    expect(math).toBeDefined()
-    expect(math!.concept.quote.includes(math!.phrase)).toBe(false)
-    expect(math!.concept.quoteDisplay?.includes(math!.phrase)).toBe(true)
+  it('finds a phrase in quoteDisplay when the verbatim quote differs', () => {
+    // A quote from PDF text keeps its formulas as extracted; quoteDisplay holds the LaTeX a phrase is copied from.
+    const first = HERO_PICKS[0]
+    const snap: DemoSnapshot = {
+      ...demoSnapshot,
+      branches: demoSnapshot.branches.map((b) => ({
+        ...b,
+        concepts: b.concepts.map((c) =>
+          c.name === first.name ? { ...c, quote: 'The sentence as extracted from the PDF.', quoteDisplay: `The sentence with ${first.phrase} in it.` } : c,
+        ),
+      })),
+    }
+    expect(heroPicks(snap).map((p) => p.concept.name)).toContain(first.name)
   })
 
   it('survives a re-analysis that renumbers the concept keys', () => {

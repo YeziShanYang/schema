@@ -2,11 +2,11 @@
  * Landing hero illustration: the demo paper's first page, drawn in CSS and
  * SVG and set in a LaTeX-like serif, with five phrases highlighted and linked
  * to the concepts they use. Every word on it comes from the bundled snapshot:
- * the title, authors, arXiv stamp, abstract, introduction and Figure 1
- * caption, and for each pick a phrase copied verbatim from the concept's
- * quote (or its LaTeX quoteDisplay, shown with MathText) plus the concept's
- * name. The body text and the figure are blurred into texture; the
- * highlighted phrases stay sharp.
+ * the title, authors, arXiv stamp, abstract, introduction (its LaTeX shown
+ * with MathText) and Figure 1 caption, and for each pick a phrase copied
+ * verbatim from the concept's quote (or its LaTeX quoteDisplay, shown with
+ * MathText) plus the concept's name. The body text and the figure are
+ * blurred into texture; the highlighted phrases stay sharp.
  *
  * Layout is a fixed 600-unit-wide frame in `--u` units (see .hero-art in
  * styles.css), so the dashed links are plain SVG paths in the same
@@ -30,11 +30,11 @@ const PAPER_FONT = 'https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,
 
 /** Concepts shown, by name, each with a phrase copied from its quote. Top to bottom. */
 export const HERO_PICKS: readonly { name: string; phrase: string }[] = [
-  { name: 'Self-attention', phrase: 'positions of a single sequence' },
-  { name: 'BLEU score', phrase: 'more than 2.0 BLEU' },
+  { name: 'Attention mechanism', phrase: 'weighted sum of the values' },
+  { name: 'BLEU score', phrase: 'by over 2 BLEU' },
+  { name: 'Softmax function', phrase: 'next-token probabilities' },
   { name: 'Multi-head attention', phrase: 'jointly attend' },
-  { name: 'Softmax function', phrase: 'large values of \\(d_k\\)' },
-  { name: 'Positional encoding', phrase: 'position of the tokens' },
+  { name: 'Positional encoding', phrase: 'order of the sequence' },
 ]
 
 // ---- Geometry, in frame units. Sheet coordinates are offset by SHEET_TOP.
@@ -183,11 +183,11 @@ export function HeroSheet({ snap, className }: { snap: DemoSnapshot; className?:
         {introLeft && (
           <>
             <span className="hero-heading" style={box(LEFT_COL.left, LEFT_TEXT_TOP - 15, COL_W, 12)}>1&ensp;Introduction</span>
-            <p className="hero-body hero-blur" style={box(LEFT_COL.left, LEFT_TEXT_TOP, COL_W, SHEET_H - LEFT_TEXT_TOP)}>{introLeft}</p>
+            <p className="hero-body hero-blur" style={box(LEFT_COL.left, LEFT_TEXT_TOP, COL_W, SHEET_H - LEFT_TEXT_TOP)}><MathText text={introLeft} /></p>
           </>
         )}
         {introRight && (
-          <p className="hero-body hero-blur" style={box(RIGHT_COL.left, COLS_TOP, COL_W, SHEET_H - COLS_TOP)}>{introRight}</p>
+          <p className="hero-body hero-blur" style={box(RIGHT_COL.left, COLS_TOP, COL_W, SHEET_H - COLS_TOP)}><MathText text={introRight} /></p>
         )}
         {picks.map((p) => (
           <Mark key={p.concept.key} pick={p} />

@@ -29,18 +29,22 @@ const topics = Object.fromEntries(
 )
 
 /**
- * Verbatim pieces of the paper's first page from the stored PDF text: the
- * arXiv stamp, the introduction (lines joined) and Figure 1's caption.
+ * Verbatim pieces of the paper's first page from the stored text: the arXiv
+ * stamp, the introduction (lines joined) and Figure 1's caption. The PDF text
+ * puts a section's number and title on separate lines and carries arXiv's
+ * margin stamp. The HTML text puts them on one line and has no stamp, so the
+ * stamp is then built from the paper's id, version and category.
  * Null when the text file can't be read; the landing then draws less.
  */
-function firstPage(text) {
+function firstPage(text, meta) {
   if (!text) return null
   const flat = (s) => s.replace(/\s+/g, ' ').trim()
-  const start = text.search(/\n1\s*\n+\s*Introduction\s*\n/)
-  const end = text.search(/\n2\s*\n+\s*Background\s*\n/)
+  const start = text.search(/\n1\s+Introduction\s*\n/)
+  const end = text.search(/\n2\s+Background\s*\n/)
   const introduction = start >= 0 && end > start ? flat(text.slice(start, end).replace(/^\s*1\s+Introduction\s*/, '')) : ''
+  const category = meta.primaryCategory ? ` [${meta.primaryCategory}]` : ''
   return {
-    stamp: text.match(/^arXiv:\S+[^\n]*$/m)?.[0].trim() ?? '',
+    stamp: text.match(/^arXiv:\S+[^\n]*$/m)?.[0].trim() ?? `arXiv:${meta.arxivId}${meta.version ?? ''}${category}`,
     introduction,
     figureCaption: text.match(/Figure 1: [^\n]+/)?.[0].trim() ?? '',
   }
@@ -56,7 +60,7 @@ const snapshot = {
     year: (paper.data.publishedAt ?? '').slice(0, 4),
     mainContribution: paper.data.mainContribution,
     abstract: paper.data.abstract ?? '',
-    firstPage: firstPage(paper.data.textKey ? appFileText(app, paper.data.textKey) : ''),
+    firstPage: firstPage(paper.data.textKey ? appFileText(app, paper.data.textKey) : '', paper.data),
     overview: paper.data.overview ?? null,
   },
   branches: (paper.data.branches ?? []).map((b) => ({
