@@ -29,7 +29,7 @@
 
 import { pickQuote, MAX_QUOTE_CHARS } from './quote-rules'
 import type { PaperIndex } from './quotes'
-import { paperSentences, type Sentence } from './sentences'
+import { indexSentences, type Sentence } from './sentences'
 import { contentWords, normalizeConceptName } from './topics'
 
 export type NameTermKind = 'name' | 'abbreviation' | 'short'
@@ -171,7 +171,7 @@ export function nameTerms(name: string, topicName: string, otherNames: string[] 
 
 /** The paper's sentences with their prose (math removed), for repeated searches. */
 export function quoteSearch(index: PaperIndex): QuoteSearch {
-  return { index, sentences: paperSentences(index.raw).map((s) => ({ ...s, prose: stripMath(s.text) })) }
+  return { index, sentences: indexSentences(index).map((s) => ({ ...s, prose: stripMath(s.text) })) }
 }
 
 /** Nouns for the document itself: "This paper ..." and "In this section ..." don't lean on the sentence before. */
