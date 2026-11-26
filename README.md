@@ -1,31 +1,28 @@
 # Schema
 
-See every idea a research paper relies on, and learn the ones you're missing.
-
-Live at https://schema.app.space. The [demo paper](https://schema.app.space/p/1706~03762) opens a real analysis of *Attention Is All You Need* without signing in.
+Now live at https://schema.app.space!
 
 ## The problem
 
-A research paper is written for readers who already work in its field. *Attention Is All You Need*, the paper that introduced the Transformer, is 15 pages long. To follow it, a reader needs softmax, word embeddings, recurrent networks, residual connections, layer normalization, BLEU scores and the Adam optimizer, and the paper takes most of them as known. Each of those terms leads to an article that assumes a few more.
+Research papers are written for people who already have comprehensive domain knowledge. For beginners looking to get into the field, they are daunting: full of jargon and difficult to read. Example: *Attention Is All You Need*, the paper that introduced the Transformer, is 15 pages long. To follow it, readers need knowledge of softmax, word embeddings, recurrent networks, residual connections, layer normalization, BLEU scores and the Adam optimizer among other highly technical concepts. Each of those terms leads to another paper that assumes a few more.
 
-A student in their first machine learning course, an engineer reading the paper behind a tool they use, or a researcher coming from a neighbouring field has no map of what a given paper requires. They can't tell which of those terms this paper depends on, or which to learn first. They end up spending hours on background that may not be what the paper needed, or reading to the end without following the argument.
+A student in their first machine learning course, an engineer reading a paper behind a tool they use, or a researcher coming from a neighboring field has no idea where to begin. They can't tell which terms this paper depends on, or which to learn first. They end up spending hours on background that may or may not be what the paper needs, or reading to the end without following the argument.
 
-Summaries and chat assistants help with part of this. A summary says what the paper found, but the reader still can't follow the steps that got there. A chat assistant explains whatever it's asked about, so the reader has to already know what to ask and in what order. And when the reader moves on to the next paper in the same field, the assistant doesn't know what they learned from the last one.
+Summaries and chat assistants only help with part of this. A summary says what the paper found, but the reader still can't follow the steps that got there. A chat assistant explains whatever it's asked about, so the reader has to already know what to ask and in what order. And when the reader moves on to the next paper in the same field, the assistant doesn't know or keep track of what they learned from the last one.
 
 ## What Schema does
 
-Schema reads the paper first and gives the reader that map. Paste an arXiv link, and within one to two minutes Schema lists the concepts the paper relies on, usually 16 to 18 of them, from the foundations a newcomer needs up to the paper's own ideas. It groups them into three to six branches and orders them so prerequisites come first.
+Schema reads the paper first and gives the reader that map. Paste an arXiv link, and within one to two minutes Schema lists all of the concepts the paper relies on, from the foundations a newcomer needs up to the paper's own ideas. It groups them into branches and orders them so prerequisites come first. Here's how it works:
 
-- The paper page shows the branches as cards floating around the paper, numbered in the recommended order. A step strip and a Next up button point to the first unchecked concept whose prerequisites are all checked.
-- Each concept card says why the paper needs the concept and quotes the passage where the paper uses it. Every quote is checked against the paper's text before it is shown, and formulas render as math.
-- Opening a branch loads explainer links found on the web for its concepts. Any concept can also get an AI explanation with a worked example, written from the paper's text around that concept.
-- An overview tells the paper's story in plain language and says where each concept fits in it. A second model call checks the overview against the paper and drops or rewrites what the paper doesn't support.
-- A walkthrough goes through the paper section by section.
+- Right off the bat, an overview explains the paper intuitively in plain language and says where each concept fits in it. Another walkthrough goes through the paper section by section if that's how you learn better.
+- Branches are displayed as cards numbered in the recommended order. A step strip and a Next up button point to the first unchecked concept whose prerequisites are all checked, so you always know where to go next.
+- Each concept card says why the paper needs the concept and quotes the passage where the paper uses it. Every quote is checked against the paper's text before it is shown. (+ math support!)
+- Opening a branch loads explainer links found on the web for its concepts. Any concept can also get an AI explanation with a worked example, written from the paper's text around that concept (beta).
 - The reader checks off what they already know. Checkmarks belong to one paper, but when a later paper uses the same idea, its card says "You checked this in …". The Knowledge page lists every checked concept by paper, and marking a paper finished can check its remaining concepts.
-- Workspaces group papers by subject, such as a course. A new workspace suggests three starter papers, and later suggestions also look at what the reader has checked. The Library lists every paper the reader has opened, in progress or finished.
+- To organize your papers, Workspaces group them by subject, class or topic (ex. CS 229, Climate Science). If you just want to get into a new topic, a new workspace suggests three starter papers, and later suggestions also look at what the reader has checked. The Library lists every paper the reader has opened, in progress or finished.
 - Each paper is analyzed once for everyone. The next reader who opens it gets the roadmap at once and at no cost, and paper pages can be read and shared without an account.
 
-Schema works with arXiv papers only. Each account can start five new analyses per rolling 24 hours, and opening a paper someone already analyzed doesn't count toward that.
+Schema works with arXiv papers only. Each account can start five new analyses per rolling 24 hours, and opening a paper someone already analyzed is free!
 
 ## How it works
 
@@ -40,7 +37,7 @@ Schema is a [DeepSpace](https://docs.deep.space) app. It runs as one Cloudflare 
 - The owner can re-run an analysis with the `reanalyze_paper` agent tool (`src/ai/`) through `npx deepspace agent invoke`.
 - `npx deepspace test run` runs the Playwright and unit suites against a local runtime with two test accounts.
 
-### From link to roadmap
+## Technical details below!
 
 | Step | Runs in | Outside calls | Stored in |
 | --- | --- | --- | --- |
