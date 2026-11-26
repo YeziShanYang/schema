@@ -2,8 +2,9 @@
  * Per-reader state hooks: the reader's checked concepts (one row per
  * concept), their profile topics (one row per topic), and one roadmap row per
  * paper they opened, saved or filed (history, reading state and the Library
- * save state; useLibrary builds the Library from it). All three collections
- * are own-only, so these queries return just the signed-in reader's rows.
+ * save state, from which useLibrary builds the Library). All three
+ * collections are own-only, so these queries return just the signed-in
+ * reader's rows.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -324,7 +325,7 @@ export function useRoadmaps(): RoadmapsApi {
       const savedAt = status === 'reading' ? savedAtOnReopen(existing?.data.savedAt, now) : null
       const patch = { status, finishedAt: status === 'finished' ? now : 0, ...(savedAt !== null ? { savedAt } : {}) }
       if (existing) await putConfirmed(existing.recordId, patch)
-      // A paper finished from the Library may have no row yet (it is only in a workspace); finishing is not an open.
+      // A paper finished from the Library may have no row yet (it is only in a workspace). Finishing is not an open.
       else if (typeof paper !== 'string') await upsert(paper, patch)
     },
     [putConfirmed, upsert],

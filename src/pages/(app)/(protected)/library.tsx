@@ -1,7 +1,8 @@
 /**
  * Library: the papers in the reader's Library (src/lib/membership.ts: in a
- * workspace, saved, or started and never removed; opening a paper alone never
- * adds it), with progress, the workspaces each paper is in and last opened.
+ * workspace, saved, or started and never removed), with progress, the
+ * workspaces each paper is in and last opened. Opening a paper alone never
+ * adds it.
  * Filtered by in progress or finished, by a topic from the reader's own
  * papers and by a workspace (or "Not in a workspace"), and sorted by last
  * opened or grouped by workspace. The sort, the topic, the workspace and the
@@ -117,7 +118,7 @@ export default function LibraryPage() {
         : null,
     [sort, constellation, rows, workspaceRows, papersOf],
   )
-  // Membership needs the roadmaps, the workspaces and the checkmarks; a topic needs the papers' topic keys.
+  // Membership needs the roadmaps, the workspaces and the checkmarks. A topic needs the papers' topic keys.
   // The constellation draws topics, so it waits for the papers too. Each waits only for its first load: a
   // reconnect sets the queries back to loading with their last records, and the page keeps showing those
   // (so a selection in the constellation survives it).
@@ -485,7 +486,7 @@ function FilterPicker({
 /**
  * One paper: title and meta, the workspaces it is in (links, or "No
  * workspace") with the placement control, the known meter, then the action.
- * From 1280px they sit on one line; between 768 and 1280 the workspaces go
+ * From 1280px they sit on one line. Between 768 and 1280 the workspaces go
  * under the title, and below 768 everything stacks. A failed analysis is
  * not a readable paper: it shows the failure and Retry (the paper window's
  * retry path) in place of the counts and Mark finished. A paper being

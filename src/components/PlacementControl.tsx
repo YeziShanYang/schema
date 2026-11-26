@@ -16,7 +16,7 @@
  * Checkboxes show the new state at once and hold it until the records agree
  * (or the write fails). While a write is in flight its checkbox is read-only,
  * which keeps focus on it. The popover closes on Esc and returns focus to its
- * button; the confirm returns focus there too.
+ * button, and so does the confirm.
  */
 
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
