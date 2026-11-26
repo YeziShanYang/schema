@@ -254,7 +254,8 @@ function TopicPicker({
     <Popover open={open} onOpenChange={openChange}>
       <PopoverTrigger
         render={
-          <Button ref={triggerRef} size="sm" variant="outline" aria-label="Filter by topic" data-testid="library-topic-open">
+          // As tall and as round as the segmented controls beside it.
+          <Button ref={triggerRef} variant="outline" className="h-[38px] rounded-[7px] px-3" aria-label="Filter by topic" data-testid="library-topic-open">
             Topic <ChevronDownIcon size={14} weight={2} />
           </Button>
         }
