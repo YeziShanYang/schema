@@ -2,14 +2,15 @@
  * Workspace view: a floating graph of the workspace's papers around the
  * workspace name, with recommended papers as dashed candidate nodes that can
  * be added. A bar at the top says where to continue. Data comes from
- * useWorkspaceGraph; clicking a paper opens its paper window.
+ * useWorkspaceGraph; clicking a paper opens its paper window. Removing the
+ * workspace keeps its papers in the Library (useLibrary removeWorkspace).
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from 'deepspace'
 import { Button, ConfirmModal } from '@/components/ui'
-import { AddButton } from '../../../../../components/AddDialog'
+import { AddButton, type FirstRecommendation } from '../../../../../components/AddDialog'
 import { FirstRunPrompt } from '../../../../../components/FirstRunPrompt'
 import { InlineEdit } from '../../../../../components/blueprint'
 import { SparkIcon } from '../../../../../components/icons'
@@ -18,6 +19,7 @@ import { FloatingGraph } from '../../../../../components/graph/FloatingGraph'
 import { CandidateNode, CenterCard, PaperNode } from '../../../../../components/graph/nodes'
 import { useWorkspaceGraph } from '../../../../../hooks/useWorkspaceGraph'
 import { useAllowance } from '../../../../../hooks/useAllowance'
+import { useLibrary } from '../../../../../hooks/useLibrary'
 import { useConceptKnowledge, useRoadmaps } from '../../../../../hooks/useReader'
 import { actions } from '../../../../../lib/actions-client'
 import { arxivSlug } from '../../../../../lib/arxiv'
@@ -30,6 +32,7 @@ export default function WorkspacePage() {
   const g = useWorkspaceGraph(id)
   const ws = g.workspace
   const roadmaps = useRoadmaps()
+  const library = useLibrary()
   const knowledge = useConceptKnowledge()
   const { allowance } = useAllowance()
   const [busy, setBusy] = useState(false)
@@ -46,18 +49,19 @@ export default function WorkspacePage() {
     void touch(id)
   }, [ready, ws, id, touch])
 
-  // A workspace created from the Add window asks for starter papers once.
+  // A workspace created from the Add window asks for recommendations once: starter papers when it is empty,
+  // and `next` picks that follow on from its papers when the window added some from the Library.
   const starterRan = useRef(false)
   useEffect(() => {
-    const wantsStarter = (location.state as { starter?: boolean } | null)?.starter
-    if (!wantsStarter || starterRan.current || !ws) return
+    const mode = (location.state as { recommend?: FirstRecommendation } | null)?.recommend
+    if (!mode || starterRan.current || !ws) return
     starterRan.current = true
     navigate(location.pathname, { replace: true, state: null })
-    if (g.papers.length > 0 || (ws.data.suggestions?.length ?? 0) > 0) return
+    if ((ws.data.suggestions?.length ?? 0) > 0 || (mode === 'starter' && g.papers.length > 0)) return
     void (async () => {
       setBusy(true)
       setError('')
-      const r = await actions.recommendPapers(id, 'starter')
+      const r = await actions.recommendPapers(id, mode)
       setBusy(false)
       if (!r.success) setError(r.error)
     })()
@@ -207,12 +211,12 @@ export default function WorkspacePage() {
         open={confirmRemove}
         onClose={() => setConfirmRemove(false)}
         onConfirm={async () => {
-          await g.workspaces.remove(id)
+          await library.removeWorkspace(id)
           setConfirmRemove(false)
           navigate('/home')
         }}
         title="Remove this workspace?"
-        description="Its paper list and recommendations are removed. Your knowledge profile and the papers themselves stay."
+        description="Its recommendations are removed. Its papers stay in your Library, and your checkmarks and knowledge profile stay."
         confirmText="Remove workspace"
       />
     </div>
