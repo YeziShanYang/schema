@@ -145,11 +145,11 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
       <nav aria-label="Recent papers" className="flex shrink-0 flex-col">
         <div className="label px-2 pb-1.5 pt-3">Recent papers</div>
-        {roadmaps.rows.length === 0 ? (
+        {roadmaps.opened.length === 0 ? (
           <p className="px-2 text-[13px] text-faint">Papers you open show up here.</p>
         ) : (
           <ul className="flex flex-col" data-testid="sidebar-recent">
-            {roadmaps.rows.slice(0, 8).map((r) => (
+            {roadmaps.opened.slice(0, 8).map((r) => (
               <li key={r.recordId}>
                 <NavLink
                   to={`/p/${arxivSlug(r.data.arxivId)}`}

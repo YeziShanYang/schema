@@ -23,7 +23,7 @@ export default function HomePage() {
   const recentReady = useQuery<PaperData>('papers', { where: { status: 'ready' }, orderBy: 'updatedAt', orderDir: 'desc', limit: 10 })
 
   const lastWorkspace = workspaces.rows[0]
-  const lastPaper = roadmaps.rows[0]
+  const lastPaper = roadmaps.opened[0]
 
   return (
     <div className="min-h-full" data-testid="home-page">

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  checkedPerPaperAll,
   coverage,
   hasStarted,
   inLibrary,
@@ -51,6 +52,17 @@ describe('hasStarted', () => {
   it('does not count opening the paper', () => {
     expect(hasStarted({ status: 'reading', overviewReadAt: 0 }, 0)).toBe(false)
     expect(hasStarted(undefined, 0)).toBe(false)
+  })
+})
+
+describe('checkedPerPaperAll', () => {
+  it('counts known checkmarks per paper, stale ones included', () => {
+    const rows = [
+      { data: { paperId: 'p1', status: 'known' } },
+      { data: { paperId: 'p1', status: 'known', stale: true } },
+      { data: { paperId: 'p2', status: 'learning' } },
+    ]
+    expect([...checkedPerPaperAll(rows)]).toEqual([['p1', 2]])
   })
 })
 

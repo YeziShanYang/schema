@@ -14,6 +14,8 @@ import { paperStatus } from '../lib/workspace'
 export interface WorkspacesApi {
   ready: boolean
   status: 'loading' | 'ready' | 'error'
+  /** The query of the papers in workspaces (workspace_papers). */
+  papersStatus: 'loading' | 'ready' | 'error'
   /** Most recently opened first. */
   rows: RecordData<WorkspaceData>[]
   byId: Map<string, RecordData<WorkspaceData>>
@@ -26,6 +28,8 @@ export interface WorkspacesApi {
   markFinished: (id: string, paperId: string) => Promise<void>
   setPaperStatus: (id: string, paperId: string, status: 'active' | 'finished') => Promise<void>
   removePaper: (id: string, paperId: string) => Promise<void>
+  /** Adds an existing paper (no analysis is started); a paper already in the workspace is left as it is. */
+  addPaper: (id: string, paper: { paperId: string; arxivId: string; title: string }, status?: 'active' | 'finished') => Promise<void>
   markOpened: (id: string, paperId: string) => Promise<void>
 }
 
@@ -154,6 +158,19 @@ export function useWorkspaces(): WorkspacesApi {
     [byId, m, pm, paperRows],
   )
 
+  const addPaper = useCallback<WorkspacesApi['addPaper']>(
+    async (id, paper, status = 'active') => {
+      if (!userId || papersOf(id).some((p) => p.paperId === paper.paperId)) return
+      try {
+        await pm.createConfirmed({ userId, workspaceId: id, paperId: paper.paperId, arxivId: paper.arxivId, title: paper.title, status, addedAt: Date.now() })
+      } catch (e) {
+        // uniqueOn: another tab or the server added it a moment ago.
+        if (!/duplicate|unique/i.test(e instanceof Error ? e.message : String(e))) throw e
+      }
+    },
+    [papersOf, pm, userId],
+  )
+
   const markOpened = useCallback(
     async (id: string, paperId: string) => {
       const ws = byId.get(id)
@@ -166,6 +183,7 @@ export function useWorkspaces(): WorkspacesApi {
   return {
     ready: allReady,
     status,
+    papersStatus: papersQ.status,
     rows,
     byId,
     papersOf,
@@ -176,6 +194,7 @@ export function useWorkspaces(): WorkspacesApi {
     markFinished,
     setPaperStatus,
     removePaper,
+    addPaper,
     markOpened,
   }
 }

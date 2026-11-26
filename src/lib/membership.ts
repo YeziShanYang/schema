@@ -27,6 +27,17 @@ export function hasStarted(row: { status?: string; overviewReadAt?: number | nul
   return checkedConcepts > 0 || !!row?.overviewReadAt || row?.status === 'finished'
 }
 
+/**
+ * The reader's checked concepts per paper id, for hasStarted. Stale rows (a
+ * re-analysis found no matching concept) count too: the reader still did
+ * work on that paper.
+ */
+export function checkedPerPaperAll(rows: readonly { data: { paperId: string; status?: string } }[]): Map<string, number> {
+  const m = new Map<string, number>()
+  for (const r of rows) if (r.data.status === 'known') m.set(r.data.paperId, (m.get(r.data.paperId) ?? 0) + 1)
+  return m
+}
+
 /** In a workspace, or saved, or started and never decided. */
 export function inLibrary({ savedAt, workspaceCount, started }: { savedAt: number | null | undefined; workspaceCount: number; started: boolean }): boolean {
   if (workspaceCount > 0) return true

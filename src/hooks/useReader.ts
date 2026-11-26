@@ -1,14 +1,16 @@
 /**
  * Per-reader state hooks: the reader's checked concepts (one row per
- * concept), their profile topics (one row per topic), and the papers they
- * have opened (one roadmap row per paper). All three collections are
- * own-only, so these queries return just the signed-in reader's rows.
+ * concept), their profile topics (one row per topic), and one roadmap row per
+ * paper they opened, saved or filed (history, reading state and the Library
+ * save state; useLibrary builds the Library from it). All three collections
+ * are own-only, so these queries return just the signed-in reader's rows.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth, useMutations, useQuery } from 'deepspace'
 import type { RecordData } from 'deepspace'
 import type { ConceptKnowledgeData, ConceptKnowledgeSource, KnowledgeData, KnowledgeSource, KnowledgeStatus, RoadmapData, RoadmapStatus, TopicData } from '../types'
+import { savedAtOnReopen } from '../lib/membership'
 
 export function useTopics() {
   const { records, status } = useQuery<TopicData>('topics', { limit: 5000 })
@@ -221,68 +223,123 @@ export function checkedPerPaper(rows: RecordData<ConceptKnowledgeData>[]): Map<s
   return m
 }
 
+/** What a roadmaps row records about its paper. */
+export interface PaperRef {
+  paperId: string
+  arxivId: string
+  title: string
+}
+
 export interface RoadmapsApi {
+  /** Writes can go out: the rows have loaded and the connection is up. */
   ready: boolean
-  /** Most recently opened first. */
+  /** The rows' query. A reconnect sets it back to loading while the last rows stay. */
+  status: 'loading' | 'ready' | 'error'
+  /** Every row, most recently opened first. Rows of papers saved or filed but never opened have lastOpenedAt 0. */
   rows: RecordData<RoadmapData>[]
+  /** The history of opened papers (Recent papers, Continue): rows with a lastOpenedAt, most recent first. */
+  opened: RecordData<RoadmapData>[]
   byPaper: Map<string, RecordData<RoadmapData>>
-  touch: (paper: { paperId: string; arxivId: string; title: string }) => Promise<void>
-  setStatus: (paperId: string, status: RoadmapStatus) => Promise<void>
+  /** Records an open. It never changes the Library save state. */
+  touch: (paper: PaperRef) => Promise<void>
+  /**
+   * Finished or reading. Given the paper (not just its id), it creates the
+   * row when there is none. Reading again also saves an undecided paper, so
+   * it stays in the Library (lib/membership).
+   */
+  setStatus: (paper: PaperRef | string, status: RoadmapStatus) => Promise<void>
   /** Records that the reader has read the paper's overview (overviewReadAt), or clears it. */
-  setOverviewRead: (paper: { paperId: string; arxivId: string; title: string }, read: boolean) => Promise<void>
+  setOverviewRead: (paper: PaperRef, read: boolean) => Promise<void>
+  /** Writes the Library save state (lib/membership), creating the row when the paper has none. */
+  setSavedAt: (paper: PaperRef, savedAt: number) => Promise<void>
 }
 
 const TOUCH_INTERVAL_MS = 60_000
+/** How long a write that lost a create race waits for the other writer's row to arrive. */
+const ROW_WAIT_MS = 5_000
 
 export function useRoadmaps(): RoadmapsApi {
   const { userId, isSignedIn } = useAuth()
   const { records, status } = useQuery<RoadmapData>('roadmaps', { limit: 1000 })
-  const { ready, create, put } = useMutations<RoadmapData>('roadmaps')
+  const { ready, createConfirmed, putConfirmed } = useMutations<RoadmapData>('roadmaps')
 
   const rows = useMemo(
     () => (isSignedIn ? [...records].sort((a, b) => (b.data.lastOpenedAt ?? 0) - (a.data.lastOpenedAt ?? 0)) : []),
     [records, isSignedIn],
   )
+  const opened = useMemo(() => rows.filter((r) => (r.data.lastOpenedAt ?? 0) > 0), [rows])
   const byPaper = useMemo(() => {
     const m = new Map<string, RecordData<RoadmapData>>()
     for (const r of rows) m.set(r.data.paperId, r)
     return m
   }, [rows])
+  const byPaperRef = useRef(byPaper)
+  byPaperRef.current = byPaper
 
-  const touch = useCallback<RoadmapsApi['touch']>(
-    async ({ paperId, arxivId, title }) => {
+  /**
+   * Updates the paper's row, or creates it with `patch` on top of the
+   * defaults. The server (adding the paper to a workspace) or another tab can
+   * create the row first, and uniqueOn then refuses this create; the write
+   * then waits for that row to arrive and updates it.
+   */
+  const upsert = useCallback(
+    async (paper: PaperRef, patch: Partial<RoadmapData>) => {
       if (!userId) return
-      const now = Date.now()
-      const existing = byPaper.get(paperId)
-      if (existing) {
-        if (now - (existing.data.lastOpenedAt ?? 0) < TOUCH_INTERVAL_MS && existing.data.title === title) return
-        await put(existing.recordId, { lastOpenedAt: now, title })
-      } else {
-        await create({ userId, paperId, arxivId, title, status: 'reading', lastOpenedAt: now, finishedAt: 0 })
+      const existing = byPaperRef.current.get(paper.paperId)
+      if (existing) return putConfirmed(existing.recordId, patch)
+      try {
+        await createConfirmed({ userId, paperId: paper.paperId, arxivId: paper.arxivId, title: paper.title, status: 'reading', lastOpenedAt: 0, finishedAt: 0, ...patch })
+      } catch (e) {
+        for (let waited = 0; waited < ROW_WAIT_MS; waited += 100) {
+          const row = byPaperRef.current.get(paper.paperId)
+          if (row) return putConfirmed(row.recordId, patch)
+          await new Promise((r) => setTimeout(r, 100))
+        }
+        throw e
       }
     },
-    [byPaper, create, put, userId],
+    [createConfirmed, putConfirmed, userId],
+  )
+
+  const touch = useCallback<RoadmapsApi['touch']>(
+    async (paper) => {
+      const existing = byPaperRef.current.get(paper.paperId)
+      const now = Date.now()
+      if (existing && now - (existing.data.lastOpenedAt ?? 0) < TOUCH_INTERVAL_MS && existing.data.title === paper.title) return
+      try {
+        await upsert(paper, { lastOpenedAt: now, title: paper.title })
+      } catch (e) {
+        // History only: a lost write leaves Recent papers one open behind, and nothing else depends on it.
+        console.warn(`[roadmaps] recording the open of ${paper.arxivId} failed: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    },
+    [upsert],
   )
 
   const setStatus = useCallback<RoadmapsApi['setStatus']>(
-    async (paperId, status) => {
-      const existing = byPaper.get(paperId)
-      if (!existing) return
-      await put(existing.recordId, { status, finishedAt: status === 'finished' ? Date.now() : 0 })
+    async (paper, status) => {
+      const paperId = typeof paper === 'string' ? paper : paper.paperId
+      const existing = byPaperRef.current.get(paperId)
+      const now = Date.now()
+      const savedAt = status === 'reading' ? savedAtOnReopen(existing?.data.savedAt, now) : null
+      const patch = { status, finishedAt: status === 'finished' ? now : 0, ...(savedAt !== null ? { savedAt } : {}) }
+      if (existing) await putConfirmed(existing.recordId, patch)
+      // A paper finished from the Library may have no row yet (it is only in a workspace); finishing is not an open.
+      else if (typeof paper !== 'string') await upsert(paper, patch)
     },
-    [byPaper, put],
+    [putConfirmed, upsert],
   )
 
   const setOverviewRead = useCallback<RoadmapsApi['setOverviewRead']>(
-    async ({ paperId, arxivId, title }, read) => {
-      if (!userId) return
+    async (paper, read) => {
       const overviewReadAt = read ? Date.now() : 0
-      const existing = byPaper.get(paperId)
-      if (existing) await put(existing.recordId, { overviewReadAt })
-      else await create({ userId, paperId, arxivId, title, status: 'reading', lastOpenedAt: Date.now(), finishedAt: 0, overviewReadAt })
+      // Marking the overview read on a paper with no row yet happens on its page, so the new row counts as an open.
+      await upsert(paper, byPaperRef.current.has(paper.paperId) ? { overviewReadAt } : { overviewReadAt, lastOpenedAt: Date.now() })
     },
-    [byPaper, create, put, userId],
+    [upsert],
   )
 
-  return { ready: ready && !!userId && status === 'ready', rows, byPaper, touch, setStatus, setOverviewRead }
+  const setSavedAt = useCallback<RoadmapsApi['setSavedAt']>((paper, savedAt) => upsert(paper, { savedAt }), [upsert])
+
+  return { ready: ready && !!userId && status === 'ready', status, rows, opened, byPaper, touch, setStatus, setOverviewRead, setSavedAt }
 }
