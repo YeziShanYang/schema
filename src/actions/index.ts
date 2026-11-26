@@ -19,6 +19,7 @@ import { generateExplanation } from '../server/explain-concept'
 import { loadBranch } from '../server/branch-resources'
 import { paperSlot, releaseUsage, reserveUsage, setUsageRef, USAGE_CAPS, usageState, usedRecently } from '../server/usage'
 import { enqueueAnalyze, isOwner, startReanalysis, STUCK_AFTER_MS, toMsTime } from '../server/reanalyze'
+import { saveFiledPaper } from '../server/library'
 
 const SEED_BATCH = 20
 
@@ -44,6 +45,8 @@ async function ownedWorkspace(tools: ActionTools, userId: string, workspaceId: s
 /**
  * Add a paper to a workspace: one row per paper, so parallel adds never drop
  * each other. A paper already in the workspace keeps its row and status.
+ * The paper is also saved in the reader's Library unless it is saved already
+ * (saveFiledPaper), so taking it out of its last workspace leaves it there.
  */
 async function addToWorkspace(
   tools: ActionTools,
@@ -60,6 +63,12 @@ async function addToWorkspace(
     addedAt: Date.now(),
   })
   if (!r.success && !/duplicate|unique/i.test(r.error)) throw new Error(r.error)
+  try {
+    await saveFiledPaper(tools, ws.data.userId, paper)
+  } catch (e) {
+    // The paper is in the workspace either way, which keeps it in the Library.
+    console.warn(`[addToWorkspace] saving ${paper.arxivId} in the Library failed: ${e instanceof Error ? e.message : String(e)}`)
+  }
   await tools.update('workspaces', ws.recordId, { currentPaperId: paper.paperId })
 }
 
