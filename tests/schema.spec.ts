@@ -1811,12 +1811,13 @@ async function freshReadyPaper(pages: Page[]): Promise<string | null> {
 
 test('opening an analyzed paper leaves it out of the Library but lists it in Recent papers; checking a concept adds it', async ({ users }) => {
   test.setTimeout(200_000)
-  // Cara or Ada (whoever has a slot) analyzes a paper Bob has never seen, so his state for it starts empty.
-  const [ada, bob, cara] = await users(['Schema ada', 'Schema bob', 'Schema cara'])
-  const id = await freshReadyPaper([cara.page, ada.page])
-  test.skip(!id, 'Cara and Ada are at the daily cap in this local state')
+  // Bob analyzes a paper Dana has never seen, so her state for it starts empty. The daily-cap spec uses up
+  // Bob's papers anyway, so this leaves Cara's and Ada's slots to the failure specs; they stand in when he is out.
+  const [ada, bob, cara, dana] = await users(['Schema ada', 'Schema bob', 'Schema cara', 'Schema dana'])
+  const id = await freshReadyPaper([bob.page, cara.page, ada.page])
+  test.skip(!id, 'Bob, Cara and Ada are at the daily cap in this local state')
   const slug = id!.replace('.', '~')
-  const page = bob.page
+  const page = dana.page
   await calm(page)
   await openPaperPage(page, id!)
   await expect(page.getByTestId('placement-open')).toHaveText('Save')
