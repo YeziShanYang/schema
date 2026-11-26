@@ -1384,13 +1384,15 @@ test('the library groups papers by workspace and filters them by topic; both sta
   // Ada makes sure the papers exist (free when the earlier specs analyzed them). Only the five-branch fixture
   // (ids ending in 33) has the topic "Accuracy metric (fixture)" (c10 in fiveBranchConcepts).
   for (const id of [FIXTURE_ID, FIVE_ID, LONG_ID]) await openReadyFixturePaper(ada.page, id)
-  // Bob opens all three from their own pages, so none is filed by opening it. He never files LONG_ID anywhere.
+  // Bob opens all three from their own pages. Opening alone puts none of them in his Library, so he saves
+  // LONG_ID, which he never files in a workspace. The other two go into workspaces below.
   for (const id of [FIXTURE_ID, FIVE_ID, LONG_ID]) {
     const slug = id.replace('.', '~')
     await page.goto(`/p/${slug}`)
     await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'ready', { timeout: 20_000 })
     await expect(page.getByTestId('sidebar-recent').locator(`a[href="/p/${slug}"]`)).toBeVisible({ timeout: 15_000 })
   }
+  await saveFromPaperPage(page)
   // Two new workspaces, the second made last so it is the most recently opened: FIXTURE_ID in both, FIVE_ID in the second.
   const stamp = Date.now()
   const nameA = `[fixture] Library A ${stamp}`
@@ -1474,7 +1476,8 @@ test('the library groups papers by workspace and filters them by topic; both sta
   await expect(rowOf(FIXTURE_ID)).toHaveCount(0)
 
   // So does Back from a paper. Changing the sort or topic replaces the history entry instead of adding one.
-  await rowOf(FIVE_ID, groupB).getByRole('link').click()
+  // The title opens the paper (the row's workspace chips are links too).
+  await rowOf(FIVE_ID, groupB).getByRole('link', { name: FIXTURE_TITLE, exact: true }).click()
   await expect(page).toHaveURL(/\/p\/0000~00033$/)
   await page.goBack()
   await expect(page).toHaveURL(/\/library\?sort=workspace&topic=fixture-accuracy-metric$/)
@@ -1571,11 +1574,13 @@ test('the library constellation draws the filtered papers, selects cards to show
   await calm(maker)
   const failedId = await newFixtureId(maker, '77')
   await analyzeUntilFailed(maker, failedId, 'Fixture conversion failure')
+  // Opening a paper only lists it in Recent papers, so Bob saves each one into his Library.
   for (const id of [FIXTURE_ID, FIVE_ID, LONG_ID, failedId]) {
     const slug = id.replace('.', '~')
     await page.goto(`/p/${slug}`)
     await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', /ready|failed/, { timeout: 20_000 })
     await expect(page.getByTestId('sidebar-recent').locator(`a[href="/p/${slug}"]`)).toBeVisible({ timeout: 15_000 })
+    await saveFromPaperPage(page)
   }
 
   await page.goto('/library')
@@ -1738,6 +1743,467 @@ test('the library constellation draws the filtered papers, selects cards to show
   await expect(canvas).toHaveCount(0)
   await expect(page.getByRole('group', { name: 'Sort papers' })).toBeVisible()
   expect(errors).toEqual([])
+})
+
+/** Wait until the Library has its membership (roadmaps, workspaces and checkmarks) and shows rows or its empty state. */
+async function libraryLoaded(page: Page) {
+  await expect(page.getByTestId('library-page')).toBeVisible()
+  await expect(page.getByTestId('library-loading')).toHaveCount(0, { timeout: 15_000 })
+}
+
+/** Opens the paper page's placement popover. */
+async function openPlacement(page: Page) {
+  const trigger = page.getByTestId('placement-open')
+  await expect(trigger).toBeEnabled({ timeout: 15_000 })
+  await trigger.click()
+  const popover = page.getByTestId('placement-popover')
+  await expect(popover).toBeVisible()
+  return popover
+}
+
+/** Saves the open paper in the Library with the placement control, unless it is in it already. */
+async function saveFromPaperPage(page: Page) {
+  const trigger = page.getByTestId('placement-open')
+  await expect(trigger).toBeEnabled({ timeout: 15_000 })
+  if ((await trigger.getAttribute('data-member')) === 'true') return
+  const popover = await openPlacement(page)
+  await popover.getByRole('checkbox', { name: 'In my Library' }).click()
+  await expect(trigger).toHaveAttribute('data-member', 'true', { timeout: 15_000 })
+  await page.keyboard.press('Escape')
+  await expect(popover).toHaveCount(0)
+}
+
+/** Takes the open paper out of the Library and every workspace (Remove from Library), when it is in the Library. */
+async function removeFromLibrary(page: Page) {
+  const trigger = page.getByTestId('placement-open')
+  await expect(trigger).toBeEnabled({ timeout: 15_000 })
+  if ((await trigger.getAttribute('data-member')) !== 'true') return
+  const popover = await openPlacement(page)
+  await popover.getByTestId('placement-remove').click()
+  await page.getByTestId('placement-remove-confirm').click()
+  await expect(trigger).toHaveAttribute('data-member', 'false', { timeout: 15_000 })
+}
+
+/** Opens an analyzed paper's own page and waits for it, its placement control and its read state. */
+async function openPaperPage(page: Page, id: string) {
+  await page.goto(`/p/${id.replace('.', '~')}`)
+  await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', /ready|failed/, { timeout: 20_000 })
+  await expect(page.getByTestId('placement-open')).toBeEnabled({ timeout: 15_000 })
+}
+
+/**
+ * A fixture paper nobody had analyzed, requested now by the first of `pages`
+ * with a daily slot and ready, or null when they are all at the cap. Ids
+ * with a special fixture (33, 44, 55) are skipped.
+ */
+async function freshReadyPaper(pages: Page[]): Promise<string | null> {
+  for (const page of pages) {
+    if ((await allowanceLeft(page)) === 0) continue
+    await calm(page)
+    let id = await newFixtureId(page, '')
+    while (/(33|44|55)$/.test(id)) id = await newFixtureId(page, '')
+    await openFromHome(page, id)
+    await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'ready', { timeout: READY_TIMEOUT })
+    return id
+  }
+  return null
+}
+
+test('opening an analyzed paper leaves it out of the Library but lists it in Recent papers; checking a concept adds it', async ({ users }) => {
+  test.setTimeout(200_000)
+  // Cara or Ada (whoever has a slot) analyzes a paper Bob has never seen, so his state for it starts empty.
+  const [ada, bob, cara] = await users(['Schema ada', 'Schema bob', 'Schema cara'])
+  const id = await freshReadyPaper([cara.page, ada.page])
+  test.skip(!id, 'Cara and Ada are at the daily cap in this local state')
+  const slug = id!.replace('.', '~')
+  const page = bob.page
+  await calm(page)
+  await openPaperPage(page, id!)
+  await expect(page.getByTestId('placement-open')).toHaveText('Save')
+  await expect(page.getByTestId('sidebar-recent').locator(`a[href="/p/${slug}"]`)).toBeVisible({ timeout: 15_000 })
+
+  const rowOf = () => page.locator(`[data-testid="library-row"][data-arxiv="${id}"]`)
+  await page.goto('/library')
+  await libraryLoaded(page)
+  await expect(rowOf()).toHaveCount(0)
+  // Opened, so it is still in the history.
+  await expect(page.getByTestId('sidebar-recent').locator(`a[href="/p/${slug}"]`)).toBeVisible()
+
+  // Checking one concept puts it in the Library, filed nowhere.
+  await openPaperPage(page, id!)
+  await openBranch(page, 'foundations')
+  await ensureKnown(page, 'c1')
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('placement-open')).toHaveText('In Library')
+  await page.goto('/library')
+  await libraryLoaded(page)
+  await expect(rowOf()).toBeVisible()
+  await expect(rowOf().getByTestId('library-no-workspace')).toHaveText('No workspace')
+
+  // Unchecking it again leaves a paper the reader never saved: it drops out.
+  await openPaperPage(page, id!)
+  await openBranch(page, 'foundations')
+  await resetStatus(page, 'c1')
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('placement-open')).toHaveText('Save')
+  await page.goto('/library')
+  await libraryLoaded(page)
+  await expect(rowOf()).toHaveCount(0)
+})
+
+test('Save puts a paper in the Library and unsaving takes it out, checkmarks or not', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada, dana] = await users(['Schema ada', 'Schema dana'])
+  await openReadyFixturePaper(ada.page, SECOND_ID)
+  const page = dana.page
+  await calm(page)
+  await openPaperPage(page, SECOND_ID)
+  // Start from a paper outside the Library, whatever earlier runs left.
+  await removeFromLibrary(page)
+  const trigger = page.getByTestId('placement-open')
+  const rowOf = () => page.locator(`[data-testid="library-row"][data-arxiv="${SECOND_ID}"]`)
+  await expect(trigger).toHaveText('Save')
+
+  // The popover: In my Library, the workspaces, New workspace, and no Remove while the paper is out.
+  const popover = await openPlacement(page)
+  await expect(popover).toHaveAccessibleName(`Library and workspaces for ${FIXTURE_TITLE}`)
+  const box = popover.getByRole('checkbox', { name: 'In my Library' })
+  await expect(box).not.toBeChecked()
+  await expect(popover.getByRole('textbox', { name: 'New workspace name' })).toBeVisible()
+  await expect(popover.getByTestId('placement-remove')).toHaveCount(0)
+  await box.click()
+  await expect(box).toBeChecked()
+  await expect(trigger).toHaveText('In Library', { timeout: 15_000 })
+  await expect(popover.getByTestId('placement-remove')).toBeVisible()
+  // Esc closes it and gives focus back to the button.
+  await page.keyboard.press('Escape')
+  await expect(popover).toHaveCount(0)
+  await expect(trigger).toBeFocused()
+
+  await page.goto('/library')
+  await libraryLoaded(page)
+  await expect(rowOf()).toBeVisible()
+  await expect(rowOf()).toContainText(/Saved|Opened/)
+
+  // Unsave from the row's own control. The paper is in no workspace, so it leaves at once.
+  await rowOf().getByTestId('library-place').click()
+  const rowPopover = page.getByTestId('placement-popover')
+  await rowPopover.getByRole('checkbox', { name: 'In my Library' }).click()
+  await expect(rowOf()).toHaveCount(0, { timeout: 15_000 })
+
+  // Removed by the reader, a checkmark no longer brings it back.
+  await openPaperPage(page, SECOND_ID)
+  await expect(trigger).toHaveText('Save')
+  await openBranch(page, 'foundations')
+  await ensureKnown(page, 'c1')
+  await page.keyboard.press('Escape')
+  await expect(trigger).toHaveText('Save')
+  await page.goto('/library')
+  await libraryLoaded(page)
+  await expect(rowOf()).toHaveCount(0)
+  await openPaperPage(page, SECOND_ID)
+  await openBranch(page, 'foundations')
+  await resetStatus(page, 'c1')
+  await page.keyboard.press('Escape')
+})
+
+test('the paper page control files a paper in two workspaces, and its Library row links both', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada, dana] = await users(['Schema ada', 'Schema dana'])
+  await openReadyFixturePaper(ada.page, FIVE_ID)
+  const page = dana.page
+  await calm(page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await openPaperPage(page, FIVE_ID)
+  await removeFromLibrary(page)
+  const trigger = page.getByTestId('placement-open')
+  const stamp = Date.now()
+  const nameA = `[fixture] Filed A ${stamp}`
+  const nameB = `[fixture] Filed B ${stamp}`
+
+  // New workspace creates the workspace with the paper in it, and the button names it.
+  let popover = await openPlacement(page)
+  const field = popover.getByRole('textbox', { name: 'New workspace name' })
+  await field.fill(nameA)
+  await page.keyboard.press('Enter')
+  const rowA = popover.locator('[data-testid="placement-workspace"]').filter({ hasText: nameA })
+  await expect(rowA.getByRole('checkbox', { name: nameA })).toBeChecked({ timeout: 15_000 })
+  await expect(field).toHaveValue('')
+  await expect(trigger).toHaveText(`In ${nameA}`)
+  await expect(popover.getByRole('checkbox', { name: 'In my Library' })).toBeChecked()
+  await field.fill(nameB)
+  await popover.getByTestId('placement-new-create').click()
+  const rowB = popover.locator('[data-testid="placement-workspace"]').filter({ hasText: nameB })
+  await expect(rowB.getByRole('checkbox', { name: nameB })).toBeChecked({ timeout: 15_000 })
+  await expect(trigger).toHaveText(/^In \[fixture\] Filed [AB] \d+ \+1$/)
+
+  // Unchecking one workspace takes the paper out of that one only, and checking it puts it back.
+  await rowB.getByRole('checkbox', { name: nameB }).click()
+  await expect(rowB.getByRole('checkbox', { name: nameB })).not.toBeChecked()
+  await expect(trigger).toHaveText(`In ${nameA}`, { timeout: 15_000 })
+  await rowB.getByRole('checkbox', { name: nameB }).click()
+  await expect(trigger).toHaveText(/\+1$/, { timeout: 15_000 })
+  const idA = (await rowA.getAttribute('data-workspace-id'))!
+  const idB = (await rowB.getAttribute('data-workspace-id'))!
+  await page.keyboard.press('Escape')
+  await expect(popover).toHaveCount(0)
+
+  // The Library row names both workspaces as links, between the title and the counts.
+  await page.goto('/library')
+  await libraryLoaded(page)
+  const row = page.locator(`[data-testid="library-row"][data-arxiv="${FIVE_ID}"]`)
+  const chips = row.getByTestId('library-workspace-chip')
+  await expect(chips).toHaveCount(2)
+  await expect(row.locator(`[data-testid="library-workspace-chip"][data-workspace-id="${idA}"]`)).toHaveText(nameA)
+  await expect(row.locator(`[data-testid="library-workspace-chip"][data-workspace-id="${idB}"]`)).toHaveAttribute('href', `/w/${idB}`)
+  const [title, section, known, action] = await Promise.all(
+    [row.getByRole('link').first(), row.getByTestId('library-row-workspaces'), row.getByTestId('library-known'), row.getByTestId('library-finish')].map(async (l) => (await l.boundingBox())!),
+  )
+  expect(title.x + title.width).toBeLessThanOrEqual(section.x)
+  expect(section.x + section.width).toBeLessThanOrEqual(known.x)
+  expect(known.x + known.width).toBeLessThanOrEqual(action.x)
+  // The row's own control shows the same two workspaces checked.
+  await row.getByTestId('library-place').click()
+  popover = page.getByTestId('placement-popover')
+  await expect(popover.getByRole('checkbox', { name: nameA })).toBeChecked()
+  await expect(popover.getByRole('checkbox', { name: nameB })).toBeChecked()
+  await page.keyboard.press('Escape')
+  await expect(popover).toHaveCount(0)
+  await expect(row.getByTestId('library-place')).toBeFocused()
+
+  // At 390px the row stacks, the chips under the title, and nothing scrolls sideways.
+  await page.setViewportSize({ width: 390, height: 844 })
+  const [t2, s2] = await Promise.all([row.getByRole('link').first(), row.getByTestId('library-row-workspaces')].map(async (l) => (await l.boundingBox())!))
+  expect(s2.y).toBeGreaterThan(t2.y)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+  await page.setViewportSize({ width: 1440, height: 900 })
+
+  // A chip opens its workspace, which holds the paper.
+  await row.locator(`[data-testid="library-workspace-chip"][data-workspace-id="${idA}"]`).click()
+  await expect(page).toHaveURL(new RegExp(`/w/${idA}$`))
+  await expect(page.locator(`[data-testid="workspace-paper"][data-arxiv="${FIVE_ID}"]`)).toBeVisible({ timeout: 15_000 })
+})
+
+test('Remove from Library asks first, names the workspaces, keeps the checkmarks and empties those workspaces', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada, dana] = await users(['Schema ada', 'Schema dana'])
+  await openReadyFixturePaper(ada.page, LONG_ID)
+  const page = dana.page
+  await calm(page)
+  await openPaperPage(page, LONG_ID)
+  const trigger = page.getByTestId('placement-open')
+  const name = `[fixture] To remove ${Date.now()}`
+  const popover = await openPlacement(page)
+  await popover.getByRole('textbox', { name: 'New workspace name' }).fill(name)
+  await popover.getByTestId('placement-new-create').click()
+  const wsRow = popover.locator('[data-testid="placement-workspace"]').filter({ hasText: name })
+  await expect(wsRow.getByRole('checkbox', { name })).toBeChecked({ timeout: 15_000 })
+  const wsId = (await wsRow.getAttribute('data-workspace-id'))!
+  await page.keyboard.press('Escape')
+  await openBranch(page, 'foundations')
+  await ensureKnown(page, 'c1')
+  await page.keyboard.press('Escape')
+
+  // Unchecking In my Library while the paper is in a workspace asks the same question as Remove from Library.
+  await openPlacement(page)
+  await page.getByTestId('placement-popover').getByRole('checkbox', { name: 'In my Library' }).click()
+  const confirm = page.getByRole('dialog', { name: /^Remove .+ from your Library\?$/ })
+  await expect(confirm).toBeVisible()
+  await expect(confirm.getByTestId('placement-remove-text')).toContainText(name)
+  await expect(confirm.getByTestId('placement-remove-text')).toContainText('Your checkmarks stay, so your progress is kept if you add it again.')
+  await confirm.getByRole('button', { name: 'Cancel' }).click()
+  await expect(confirm).toHaveCount(0)
+  await expect(trigger).toBeFocused()
+  await expect(trigger).toHaveAttribute('data-member', 'true')
+
+  await openPlacement(page)
+  await page.getByTestId('placement-remove').click()
+  await expect(confirm).toBeVisible()
+  await confirm.getByTestId('placement-remove-confirm').click()
+  await expect(confirm).toHaveCount(0)
+  await expect(trigger).toHaveText('Save', { timeout: 15_000 })
+  await expect(trigger).toBeFocused()
+
+  // Out of the Library and the workspace, and the checkmark stays.
+  await page.goto('/library')
+  await libraryLoaded(page)
+  await expect(page.locator(`[data-testid="library-row"][data-arxiv="${LONG_ID}"]`)).toHaveCount(0)
+  await page.goto(`/w/${wsId}`)
+  await expect(page.getByTestId('workspace-name')).toHaveText(name, { timeout: 15_000 })
+  await expect(page.getByTestId('workspace-paper')).toHaveCount(0)
+  await openPaperPage(page, LONG_ID)
+  await openBranch(page, 'foundations')
+  await expect(card(page, 'c1')).toHaveAttribute('data-status', 'known')
+  await resetStatus(page, 'c1')
+  await page.keyboard.press('Escape')
+})
+
+test('the Workspace filter keeps ?ws= in the URL: none shows only unfiled papers, an id only that workspace', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada, dana] = await users(['Schema ada', 'Schema dana'])
+  for (const id of [FIXTURE_ID, SECOND_ID]) await openReadyFixturePaper(ada.page, id)
+  const page = dana.page
+  await calm(page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  // SECOND_ID is saved in no workspace, and FIXTURE_ID goes into a new one.
+  await openPaperPage(page, SECOND_ID)
+  await removeFromLibrary(page)
+  await saveFromPaperPage(page)
+  const name = `[fixture] Filter ${Date.now()}`
+  const added = await action(page, 'analyzePaper', { input: FIXTURE_ID, newWorkspace: { name } })
+  expect(added.success).toBe(true)
+  const wsId = added.data.workspaceId as string
+
+  await page.goto('/library?ws=none')
+  await libraryLoaded(page)
+  const rows = page.getByTestId('library-row')
+  const rowOf = (id: string) => page.locator(`[data-testid="library-row"][data-arxiv="${id}"]`)
+  await expect(rowOf(SECOND_ID)).toBeVisible()
+  await expect(rowOf(FIXTURE_ID)).toHaveCount(0)
+  for (const r of await rows.all()) await expect(r.getByTestId('library-no-workspace')).toBeVisible()
+  await expect(page.getByTestId('library-ws-chip')).toHaveText('Not in a workspace')
+
+  // The picker lists every workspace, then Not in a workspace, with counts. Picking one replaces ?ws=.
+  const wsButton = page.getByRole('button', { name: 'Filter by workspace' })
+  await wsButton.click()
+  const picker = page.getByTestId('library-ws-picker')
+  const search = picker.getByRole('combobox', { name: 'Search workspaces' })
+  await expect(search).toBeFocused()
+  await expect(picker.getByRole('option').last()).toHaveAccessibleName(/^Not in a workspace, \d+ papers?, current filter$/)
+  await search.fill(name)
+  await expect(picker.getByRole('option')).toHaveCount(1)
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Enter')
+  await expect(picker).toHaveCount(0)
+  await expect(page).toHaveURL(new RegExp(`/library\\?ws=${wsId}$`))
+  await expect(page.getByTestId('library-ws-chip')).toHaveText(`Workspace: ${name}`)
+  await expect(rowOf(FIXTURE_ID)).toBeVisible()
+  await expect(rows).toHaveCount(1)
+
+  // It combines with the status filter and the Workspace sort, and the empty state names it.
+  await page.getByRole('group', { name: 'Sort papers' }).getByRole('button', { name: 'Workspace' }).click()
+  await expect(page).toHaveURL(new RegExp(`/library\\?sort=workspace&ws=${wsId}$`))
+  await expect(page.locator(`[data-testid="library-group"][data-workspace-id="${wsId}"]`).getByTestId('library-row')).toHaveCount(1)
+  await page.getByRole('group', { name: 'Filter papers' }).getByRole('button', { name: 'Finished' }).click()
+  const empty = page.getByTestId('library-empty')
+  await expect(empty).toContainText(`No finished papers in ${name}.`)
+  await page.reload()
+  await expect(page).toHaveURL(new RegExp(`/library\\?sort=workspace&ws=${wsId}$`))
+  await expect(page.getByTestId('library-ws-chip')).toHaveText(`Workspace: ${name}`)
+  await page.goto('/library?ws=none&topic=fixture-accuracy-metric')
+  await libraryLoaded(page)
+  await expect(page.getByTestId('library-empty')).toContainText('No papers outside a workspace use the topic Accuracy metric (fixture).')
+  await page.getByTestId('library-empty').getByRole('button', { name: 'Clear filters' }).click()
+  await expect(page).toHaveURL(/\/library$/)
+  await page.goto('/library?ws=none')
+  await libraryLoaded(page)
+  await page.getByTestId('library-ws-clear').click()
+  await expect(page).toHaveURL(/\/library$/)
+  await expect(wsButton).toBeFocused()
+  await expect(rowOf(FIXTURE_ID)).toBeVisible()
+})
+
+test('the constellation adds the selected papers to a workspace and saves them', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada, dana] = await users(['Schema ada', 'Schema dana'])
+  for (const id of [FIXTURE_ID, SECOND_ID]) await openReadyFixturePaper(ada.page, id)
+  const page = dana.page
+  await calm(page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  for (const id of [FIXTURE_ID, SECOND_ID]) {
+    await openPaperPage(page, id)
+    await saveFromPaperPage(page)
+  }
+  await page.goto('/library?view=constellation')
+  await libraryLoaded(page)
+  const canvas = page.getByTestId('library-constellation')
+  await expect(canvas).toHaveAttribute('data-settled', 'true', { timeout: 15_000 })
+  const cardOf = (id: string) => page.locator(`[data-testid="constellation-card"][data-arxiv="${id}"]`)
+  const panel = page.getByTestId('constellation-selection')
+  await expect(panel.getByTestId('constellation-add')).toHaveCount(0)
+  await cardOf(FIXTURE_ID).getByTestId('constellation-select').click()
+  await cardOf(SECOND_ID).getByTestId('constellation-select').click()
+  await expect(panel).toHaveAttribute('data-count', '2')
+
+  // Add to workspace only adds: a new workspace takes both, and shows checked and read-only.
+  const add = panel.getByTestId('constellation-add')
+  await expect(add).toHaveText('Add to workspace')
+  await add.click()
+  const popover = page.getByTestId('placement-popover')
+  await expect(popover).toHaveAttribute('data-mode', 'add')
+  await expect(popover).toHaveAccessibleName('Add 2 papers to a workspace')
+  await expect(popover.getByRole('checkbox', { name: 'In my Library' })).toHaveCount(0)
+  await expect(popover.getByTestId('placement-remove')).toHaveCount(0)
+  const name = `[fixture] From the constellation ${Date.now()}`
+  await popover.getByRole('textbox', { name: 'New workspace name' }).fill(name)
+  await popover.getByTestId('placement-new-create').click()
+  await expect(popover.getByTestId('placement-note')).toHaveText(`Created ${name} with 2 papers.`, { timeout: 15_000 })
+  const wsRow = popover.locator('[data-testid="placement-workspace"]').filter({ hasText: name })
+  const box = wsRow.getByRole('checkbox', { name })
+  await expect(box).toBeChecked()
+  await expect(box).toHaveAttribute('aria-readonly', 'true')
+  const wsId = (await wsRow.getAttribute('data-workspace-id'))!
+
+  // An existing workspace holding one of them shows mixed, and checking it adds the other.
+  const other = `[fixture] Holds one ${Date.now()}`
+  const one = await action(page, 'analyzePaper', { input: FIXTURE_ID, newWorkspace: { name: other } })
+  expect(one.success).toBe(true)
+  const otherBox = popover.getByRole('checkbox', { name: other })
+  await expect(otherBox).toHaveAttribute('aria-checked', 'mixed', { timeout: 15_000 })
+  await otherBox.click()
+  await expect(otherBox).toBeChecked({ timeout: 15_000 })
+  await expect(popover.getByTestId('placement-note')).toHaveText(`Added 2 papers to ${other}.`)
+  await page.keyboard.press('Escape')
+  await expect(popover).toHaveCount(0)
+  await expect(add).toBeFocused()
+  // Esc in the popover left the selection alone.
+  await expect(panel).toHaveAttribute('data-count', '2')
+
+  for (const id of [wsId, one.data.workspaceId as string]) {
+    await page.goto(`/w/${id}`)
+    await expect(page.getByTestId('workspace-paper')).toHaveCount(2, { timeout: 15_000 })
+  }
+})
+
+test('a new workspace made with papers from the Library holds them and asks for next-step picks', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada, dana] = await users(['Schema ada', 'Schema dana'])
+  for (const id of [FIXTURE_ID, SECOND_ID]) await openReadyFixturePaper(ada.page, id)
+  const page = dana.page
+  await calm(page)
+  for (const id of [FIXTURE_ID, SECOND_ID]) {
+    await openPaperPage(page, id)
+    await saveFromPaperPage(page)
+  }
+  await page.goto('/home')
+  await page.getByTestId('add-open').first().click()
+  await page.getByTestId('add-choice-workspace').click()
+  const form = page.getByTestId('workspace-form')
+  const name = `[fixture] From my Library ${Date.now()}`
+  await form.getByLabel('Workspace name', { exact: true }).fill(name)
+  const picker = form.getByTestId('workspace-library-picker')
+  await expect(picker).toContainText('Add papers from your Library (optional)')
+  await expect(form.getByTestId('workspace-recommend-note')).toContainText('three starter papers')
+  // The search narrows the checklist by arXiv id or title. Checked papers stay checked while hidden.
+  const search = picker.getByRole('searchbox', { name: 'Search your Library' })
+  await search.fill(SECOND_ID)
+  await expect(picker.getByTestId('workspace-library-option')).toHaveCount(1)
+  await picker.locator(`[data-testid="workspace-library-option"][data-arxiv="${SECOND_ID}"]`).getByRole('checkbox').click()
+  await search.fill(FIXTURE_ID)
+  await picker.locator(`[data-testid="workspace-library-option"][data-arxiv="${FIXTURE_ID}"]`).getByRole('checkbox').click()
+  await search.fill('')
+  await expect(picker.locator(`[data-testid="workspace-library-option"][data-arxiv="${SECOND_ID}"]`).getByRole('checkbox')).toBeChecked()
+  await expect(picker.getByTestId('workspace-library-count')).toHaveText('2 papers will be added.')
+  await expect(form.getByTestId('workspace-recommend-note')).toContainText('follow on from the ones you add')
+
+  const recommended = page.waitForRequest((r) => r.url().endsWith('/api/actions/recommendPapers'))
+  await form.getByTestId('workspace-create').click()
+  await expect(page.getByTestId('workspace-name')).toHaveText(name, { timeout: 15_000 })
+  expect((await recommended).postDataJSON()).toMatchObject({ mode: 'next' })
+  await expect(page.locator(`[data-testid="workspace-paper"][data-arxiv="${FIXTURE_ID}"]`)).toBeVisible({ timeout: 15_000 })
+  await expect(page.locator(`[data-testid="workspace-paper"][data-arxiv="${SECOND_ID}"]`)).toBeVisible()
+  await expect(page.getByTestId('workspace-paper')).toHaveCount(2)
+  await expect(page.getByTestId('suggestion')).toHaveCount(2, { timeout: 15_000 })
 })
 
 test('Read again asks whether to uncheck what finishing checked, and reopens at once when finishing checked nothing', async ({ users }) => {
@@ -2178,6 +2644,21 @@ test('signed out, the sign-in window over a branch takes focus and Esc, then giv
   await expect(trigger).toBeFocused()
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('branch-panel')).toHaveCount(0)
+})
+
+test('signed out, Save on a paper page opens the sign-in window and gives focus back', async ({ page }) => {
+  await calm(page)
+  await page.goto(`/p/${FIXTURE_SLUG}`)
+  await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'ready', { timeout: 20_000 })
+  await expect(page.getByTestId('placement-open')).toHaveCount(0)
+  const save = page.getByTestId('placement-signin')
+  await expect(save).toHaveText('Save')
+  await save.click()
+  const signIn = page.getByTestId('sign-in-window')
+  await expect(signIn.getByTestId('auth-overlay')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(signIn).toHaveCount(0)
+  await expect(save).toBeFocused()
 })
 
 test('signed out, the demo page shows one Sign in, and the sign-in window names Schema', async ({ page }) => {
