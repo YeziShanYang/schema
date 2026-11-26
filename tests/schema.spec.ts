@@ -13,7 +13,7 @@
  * analyzed earlier is reused, and each spec resets the state it checks.
  */
 import { test, expect, loadAllTestAccounts } from 'deepspace/testing'
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 
 const usable = loadAllTestAccounts().length
 test.skip(usable < 2, `Needs 2 test accounts, found ${usable}. Create them with \`npx deepspace test accounts create\`.`)
@@ -1367,6 +1367,165 @@ test('each library filter has its own empty text', async ({ users }) => {
   await expect(page.getByTestId('library-page')).toBeVisible()
   await page.getByRole('button', { name: 'Finished', exact: true }).click()
   await expect(page.getByTestId('library-empty')).toHaveText('No finished papers yet. Papers you mark finished are listed here.')
+})
+
+/** The arXiv ids of the library rows in `scope`, top to bottom. */
+function libraryIds(scope: Locator): Promise<string[]> {
+  return scope.getByTestId('library-row').evaluateAll((els) => els.map((e) => e.getAttribute('data-arxiv') ?? ''))
+}
+
+test('the library groups papers by workspace and filters them by topic; both stay in the URL across a reload and Back', async ({ users }) => {
+  test.setTimeout(240_000)
+  // Bob only opens papers in these specs and never finishes one, so a topic combined with Finished matches nothing.
+  const [ada, bob] = await users(['Schema ada', 'Schema bob'])
+  const page = bob.page
+  await calm(page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  // Ada makes sure the papers exist (free when the earlier specs analyzed them). Only the five-branch fixture
+  // (ids ending in 33) has the topic "Accuracy metric (fixture)" (c10 in fiveBranchConcepts).
+  for (const id of [FIXTURE_ID, FIVE_ID, LONG_ID]) await openReadyFixturePaper(ada.page, id)
+  // Bob opens all three from their own pages, so none is filed by opening it. He never files LONG_ID anywhere.
+  for (const id of [FIXTURE_ID, FIVE_ID, LONG_ID]) {
+    const slug = id.replace('.', '~')
+    await page.goto(`/p/${slug}`)
+    await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'ready', { timeout: 20_000 })
+    await expect(page.getByTestId('sidebar-recent').locator(`a[href="/p/${slug}"]`)).toBeVisible({ timeout: 15_000 })
+  }
+  // Two new workspaces, the second made last so it is the most recently opened: FIXTURE_ID in both, FIVE_ID in the second.
+  const stamp = Date.now()
+  const nameA = `[fixture] Library A ${stamp}`
+  const nameB = `[fixture] Library B ${stamp}`
+  const wsA = await action(page, 'analyzePaper', { input: FIXTURE_ID, newWorkspace: { name: nameA } })
+  expect(wsA.success).toBe(true)
+  const wsB = await action(page, 'analyzePaper', { input: FIVE_ID, newWorkspace: { name: nameB } })
+  expect(wsB.success).toBe(true)
+  expect((await action(page, 'analyzePaper', { input: FIXTURE_ID, workspaceId: wsB.data.workspaceId })).success).toBe(true)
+
+  await page.goto('/library')
+  const list = page.getByTestId('library-page')
+  const rowOf = (id: string, scope: Locator = list) => scope.locator(`[data-testid="library-row"][data-arxiv="${id}"]`)
+  const sort = page.getByRole('group', { name: 'Sort papers' })
+  const status = page.getByRole('group', { name: 'Filter papers' })
+  const topicButton = page.getByRole('button', { name: 'Filter by topic' })
+  await expect(rowOf(LONG_ID)).toBeVisible({ timeout: 15_000 })
+  await expect(sort.getByRole('button', { name: 'Last opened' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('library-group')).toHaveCount(0)
+  const opened = await libraryIds(list)
+  expect(opened).toEqual(expect.arrayContaining([FIXTURE_ID, FIVE_ID, LONG_ID]))
+
+  // Workspace: groups in the sidebar's order (newest first), a paper in two workspaces under both, unfiled papers last.
+  await sort.getByRole('button', { name: 'Workspace' }).click()
+  await expect(page).toHaveURL(/\/library\?sort=workspace$/)
+  await expect(sort.getByRole('button', { name: 'Workspace' })).toHaveAttribute('aria-pressed', 'true')
+  const groups = page.getByTestId('library-group')
+  const groupA = page.locator(`[data-testid="library-group"][data-workspace-id="${wsA.data.workspaceId}"]`)
+  const groupB = page.locator(`[data-testid="library-group"][data-workspace-id="${wsB.data.workspaceId}"]`)
+  const loose = page.locator('[data-testid="library-group"][data-workspace-id=""]')
+  await expect(groups.nth(0)).toHaveAttribute('data-workspace-id', wsB.data.workspaceId, { timeout: 15_000 })
+  await expect(groups.nth(1)).toHaveAttribute('data-workspace-id', wsA.data.workspaceId)
+  await expect(groupB.getByRole('heading', { level: 2 })).toHaveText(nameB)
+  await expect(groupA.getByRole('heading', { level: 2 })).toHaveText(nameA)
+  expect(await libraryIds(groupA)).toEqual([FIXTURE_ID])
+  const inB = await libraryIds(groupB)
+  expect([...inB].sort()).toEqual([FIXTURE_ID, FIVE_ID].sort())
+  // Within a group the rows keep their last-opened order.
+  expect(inB).toEqual(opened.filter((id) => inB.includes(id)))
+  await expect(loose).toHaveCount(1)
+  await expect(groups.last()).toHaveAttribute('data-workspace-id', '')
+  await expect(loose.getByRole('heading', { level: 2 })).toHaveText('Not in a workspace')
+  await expect(rowOf(LONG_ID, loose)).toBeVisible()
+  // Every paper is listed under at least one heading.
+  const grouped = new Set<string>()
+  for (const g of await groups.all()) for (const id of await libraryIds(g)) grouped.add(id)
+  expect([...grouped].sort()).toEqual([...opened].sort())
+
+  // Topic: a searchable list of the topics in Bob's papers, most used first, picked with the keyboard.
+  await topicButton.click()
+  const picker = page.getByTestId('library-topic-picker')
+  const search = picker.getByRole('combobox', { name: 'Search topics' })
+  await expect(search).toBeFocused()
+  const options = picker.getByRole('option')
+  await expect(options.first()).toBeVisible()
+  const counts = await options.evaluateAll((els) => els.map((e) => Number(e.lastElementChild?.textContent)))
+  expect(counts).toEqual([...counts].sort((a, b) => b - a))
+  await page.keyboard.type('accuracy metric')
+  await expect(options).toHaveCount(1)
+  const label = (await options.first().getAttribute('aria-label')) ?? ''
+  expect(label).toMatch(/^Accuracy metric \(fixture\), \d+ papers?$/)
+  const usedBy = Number(/, (\d+) papers?$/.exec(label)![1])
+  await page.keyboard.press('Enter')
+  await expect(picker).toHaveCount(0)
+  await expect(page).toHaveURL(/\/library\?sort=workspace&topic=fixture-accuracy-metric$/)
+  const chip = page.getByTestId('library-topic-chip')
+  await expect(chip).toHaveText('Topic: Accuracy metric (fixture)')
+  // Only papers with the topic are left, still grouped: A's only paper is gone, B keeps FIVE_ID.
+  await expect(rowOf(FIXTURE_ID)).toHaveCount(0)
+  await expect(rowOf(LONG_ID)).toHaveCount(0)
+  await expect(groupA).toHaveCount(0)
+  expect(await libraryIds(groupB)).toEqual([FIVE_ID])
+  for (const id of await libraryIds(list)) expect(id).toMatch(/33$/)
+
+  // A reload keeps the sort and the topic.
+  await page.reload()
+  await expect(page).toHaveURL(/\/library\?sort=workspace&topic=fixture-accuracy-metric$/)
+  await expect(chip).toHaveText('Topic: Accuracy metric (fixture)')
+  await expect(sort.getByRole('button', { name: 'Workspace' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(rowOf(FIVE_ID, groupB)).toBeVisible({ timeout: 15_000 })
+  await expect(rowOf(FIXTURE_ID)).toHaveCount(0)
+
+  // So does Back from a paper. Changing the sort or topic replaces the history entry instead of adding one.
+  await rowOf(FIVE_ID, groupB).getByRole('link').click()
+  await expect(page).toHaveURL(/\/p\/0000~00033$/)
+  await page.goBack()
+  await expect(page).toHaveURL(/\/library\?sort=workspace&topic=fixture-accuracy-metric$/)
+  await expect(chip).toBeVisible()
+  await expect(rowOf(FIVE_ID, groupB)).toBeVisible({ timeout: 15_000 })
+
+  // The topic combines with the status filter: In progress keeps the paper, Finished leaves an empty state that clears both.
+  await status.getByRole('button', { name: 'In progress' }).click()
+  await expect(rowOf(FIVE_ID, groupB)).toBeVisible()
+  await status.getByRole('button', { name: 'Finished' }).click()
+  const empty = page.getByTestId('library-empty')
+  await expect(empty).toContainText('No finished papers use the topic Accuracy metric (fixture).')
+  await empty.getByRole('button', { name: 'Clear filters' }).click()
+  await expect(chip).toHaveCount(0)
+  await expect(page).toHaveURL(/\/library\?sort=workspace$/)
+  await expect(status.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(rowOf(FIXTURE_ID, groupA)).toBeVisible()
+  await expect(rowOf(LONG_ID, loose)).toBeVisible()
+
+  // In last-opened order the topic leaves exactly the papers its count names; the chip's clear button restores the list.
+  await sort.getByRole('button', { name: 'Last opened' }).click()
+  await expect(page).toHaveURL(/\/library$/)
+  await topicButton.click()
+  await picker.getByRole('option', { name: /^Accuracy metric \(fixture\),/ }).click()
+  await expect(page).toHaveURL(/\/library\?topic=fixture-accuracy-metric$/)
+  await expect(page.getByTestId('library-group')).toHaveCount(0)
+  await expect(page.getByTestId('library-row')).toHaveCount(usedBy)
+  await expect(rowOf(FIVE_ID)).toBeVisible()
+  await chip.getByRole('button', { name: 'Clear topic Accuracy metric (fixture)' }).click()
+  await expect(chip).toHaveCount(0)
+  await expect(page).toHaveURL(/\/library$/)
+  await expect(topicButton).toBeFocused()
+  expect(await libraryIds(list)).toEqual(opened)
+
+  // At 390px the controls wrap, with the chip, and nothing scrolls sideways.
+  await page.goto('/library?sort=workspace&topic=fixture-accuracy-metric')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(chip).toBeVisible({ timeout: 15_000 })
+  await expect(rowOf(FIVE_ID, groupB)).toBeVisible({ timeout: 15_000 })
+  const boxes = await Promise.all([status, sort, topicButton, chip].map(async (l) => (await l.boundingBox())!))
+  expect(boxes[1].y).toBeGreaterThan(boxes[0].y)
+  for (const b of boxes) expect(b.x + b.width).toBeLessThanOrEqual(390)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+  await topicButton.click()
+  await expect(picker).toBeVisible()
+  const pickerBox = (await picker.boundingBox())!
+  expect(pickerBox.x).toBeGreaterThanOrEqual(0)
+  expect(pickerBox.x + pickerBox.width).toBeLessThanOrEqual(390)
+  await page.keyboard.press('Escape')
+  await expect(picker).toHaveCount(0)
+  await expect(topicButton).toBeFocused()
 })
 
 test('Read again asks whether to uncheck what finishing checked, and reopens at once when finishing checked nothing', async ({ users }) => {
