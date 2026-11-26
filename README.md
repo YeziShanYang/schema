@@ -1,16 +1,70 @@
 # Schema
 
-Schema turns an arXiv paper into a learning roadmap. A reader creates a workspace for a subject (for example "CS 229"), adds papers to it from three recommendations or by pasting a link, and the app lists every concept each paper relies on. Concepts are grouped into 3 to 6 thematic branches and ordered by prerequisite. Each one comes with the passage where the paper uses it, explainers found on the web and an optional AI explanation. The reader checks off the concepts they know, paper by paper, and a concept they checked in another paper shows a hint instead of being checked for them.
+See every idea a research paper relies on, and learn the ones you're missing.
 
-Live at https://schema.app.space. Built on the [DeepSpace SDK](https://docs.deep.space) (Cloudflare Workers, Durable Objects).
+Live at https://schema.app.space. The [demo paper](https://schema.app.space/p/1706~03762) opens a real analysis of *Attention Is All You Need* without signing in.
 
-The frontend uses the Blueprint theme (IBM Plex, dot-grid canvas) in light and dark. Dark mode follows the system setting until the reader picks one with the sun/moon button, which sits in the sidebar footer, or in the top bar when signed out. The choice is stored in the browser, and an inline script in `index.html` applies it before first paint, on the prerendered landing too. The dark values in `src/themes.css` keep each light token's hue at a different lightness. The paper sheets on the landing and in the progress view stay paper-colored in dark mode, dimmed, with dark ink.
+## The problem
 
-Data access is in the hooks in `src/hooks` and the modules in `src/lib`, and views can be redesigned without touching the backend.
+A research paper is written for readers who already work in its field. *Attention Is All You Need*, the paper that introduced the Transformer, is 15 pages long. To follow it, a reader needs softmax, word embeddings, recurrent networks, residual connections, layer normalization, BLEU scores and the Adam optimizer, and the paper takes most of them as known. Each of those terms leads to an article that assumes a few more.
+
+A student in their first machine learning course, an engineer reading the paper behind a tool they use, or a researcher coming from a neighbouring field has no map of what a given paper requires. They can't tell which of those terms this paper depends on, or which to learn first. They end up spending hours on background that may not be what the paper needed, or reading to the end without following the argument.
+
+Summaries and chat assistants help with part of this. A summary says what the paper found, but the reader still can't follow the steps that got there. A chat assistant explains whatever it's asked about, so the reader has to already know what to ask and in what order. And when the reader moves on to the next paper in the same field, the assistant doesn't know what they learned from the last one.
+
+## What Schema does
+
+Schema reads the paper first and gives the reader that map. Paste an arXiv link, and within one to two minutes Schema lists the concepts the paper relies on, usually 16 to 18 of them, from the foundations a newcomer needs up to the paper's own ideas. It groups them into three to six branches and orders them so prerequisites come first.
+
+- The paper page shows the branches as cards floating around the paper, numbered in the recommended order. A step strip and a Next up button point to the first unchecked concept whose prerequisites are all checked.
+- Each concept card says why the paper needs the concept and quotes the passage where the paper uses it. Every quote is checked against the paper's text before it is shown, and formulas render as math.
+- Opening a branch loads explainer links found on the web for its concepts. Any concept can also get an AI explanation with a worked example, written from the paper's text around that concept.
+- An overview tells the paper's story in plain language and says where each concept fits in it. A second model call checks the overview against the paper and drops or rewrites what the paper doesn't support.
+- A walkthrough goes through the paper section by section.
+- The reader checks off what they already know. Checkmarks belong to one paper, but when a later paper uses the same idea, its card says "You checked this in …". The Knowledge page lists every checked concept by paper, and marking a paper finished can check its remaining concepts.
+- Workspaces group papers by subject, such as a course. A new workspace suggests three starter papers, and later suggestions also look at what the reader has checked. The Library lists every paper the reader has opened, in progress or finished.
+- Each paper is analyzed once for everyone. The next reader who opens it gets the roadmap at once and at no cost, and paper pages can be read and shared without an account.
+
+Schema works with arXiv papers only. Each account can start five new analyses per rolling 24 hours, and opening a paper someone already analyzed doesn't count toward that.
+
+## How it works
+
+Schema is a [DeepSpace](https://docs.deep.space) app. It runs as one Cloudflare Worker, deployed with `npx deepspace deploy`, and keeps its data in DeepSpace's Durable Objects. It uses these parts of the SDK:
+
+- Server actions (`src/actions/index.ts`, called at `POST /api/actions/:name`) do anything that costs credits or writes shared records. They run with RBAC off, and each one checks sign-in, ownership and the daily caps itself.
+- A background job (`JobRoom`, `src/jobs.ts`) runs the analysis, because it runs longer than one request should. The job works in short ticks and saves a checkpoint with `ctx.continue` after each one. After a restart it picks up from the last checkpoint. Readers start a job only through `analyzePaper`, and only the owner can enqueue one over the job room's socket.
+- Integrations go through `ctx.integrations.call` and are billed to the app owner. Schema calls `anthropic/chat-completion` with Claude Haiku 5.5, `exa/search` and `cloudconvert/convert-file`. The browser's integration proxy refuses owner-billed integrations, so paid calls can only come from the server.
+- Records (`RecordRoom`) hold everything else, with permissions per collection in `src/schemas/`. Analysis results are readable by everyone and written only by the server. A reader's checkmarks, workspaces and opened papers are visible only to that reader, and `userBound` with `uniqueOn` stops a client from writing someone else's rows or duplicates. `useQuery` keeps the views subscribed over a WebSocket, and the progress view redraws as the job writes concepts.
+- The job stores each paper's extracted text with app file storage (`appFiles`), and AI explanations read it back from there.
+- Sign-in uses DeepSpace auth in mixed mode. The landing page and paper pages work signed out, and checkmarks and workspaces need an account.
+- The owner can re-run an analysis with the `reanalyze_paper` agent tool (`src/ai/`) through `npx deepspace agent invoke`.
+- `npx deepspace test run` runs the Playwright and unit suites against a local runtime with two test accounts.
+
+### From link to roadmap
+
+| Step | Runs in | Outside calls | Stored in |
+| --- | --- | --- | --- |
+| Look up the link | `peekPaper` action | arXiv API (free) | nothing |
+| Start the analysis, or open the cached one | `analyzePaper` action, which checks the daily cap and enqueues the job | arXiv API (free) | `papers`, `usage_events` |
+| Get the text | job, `text` step | the arXiv HTML page (free). `cloudconvert/convert-file` only when a paper has no HTML | `appFiles` |
+| List the concepts | job, `concepts` step | one Haiku call. Server rules then clean the dependency graph, branches, topics and quotes | `concepts`, `topics`, `papers` |
+| Write the overview | job, `overview` step | one Haiku call | `papers`, `concepts` |
+| Write the walkthrough | job, `explain` step | one Haiku call | `sections` |
+| Check the overview | job, `verify` step | one Haiku call, plus a rewrite and a second check when too much fails | `papers`, `concepts` |
+| Move earlier checkmarks to the new concepts | job, `remap` step | none | `concept_knowledge` |
+| Show progress | `AnalysisProgress.tsx` in the browser | none | reads `papers` and `concepts` live |
+| Load explainer links | `loadBranchResources` action, when a branch opens | one `exa/search` per topic without links, then Haiku picks one or two results | `topics`, shared by every paper that uses the topic |
+| Explain a concept | `explainConcept` action | one Haiku call with the paper text around the quote | `concepts` |
+| Check off a concept | the browser, through `useMutations` | none | `concept_knowledge`, owner only |
+| Suggest papers | `recommendPapers` action | one `exa/search` limited to arxiv.org, one Haiku ranking call, then the arXiv API confirms each pick | `workspaces` |
+
+The job writes at most 20 records per tick to stay under the Worker's subrequest limit, and retries a failed step once before marking the paper failed. The ten papers analyzed in production took 52 to 120 seconds each. A new paper costs four Haiku calls, about 2.2 credits (100 credits are one US dollar). [Analysis pipeline in detail](#analysis-pipeline-in-detail) has the rules each step applies, and [Cost](#cost) has the full numbers.
+
+Output quality was scored on ten criteria for eight papers from eight fields. Five of the papers were posted after the model's training data. [docs/quality-evaluation.md](docs/quality-evaluation.md) has the rubric, the scores and what changed between evaluations, and [docs/build-and-verification.md](docs/build-and-verification.md) covers how the build was tested.
 
 ## Repository layout
 
-Two files are good places to start reading: `src/server/pipeline/run.ts` runs the analyze job step by step, and `src/components/paper/PaperWindow.tsx` draws the paper page.
+Two files are good places to start reading: `src/server/pipeline/run.ts` runs the analyze job step by step, and `src/components/paper/PaperWindow.tsx` draws the paper page. Data access is in the hooks in `src/hooks` and the modules in `src/lib`, and views can be redesigned without touching the backend.
 
 - `src/` is the app.
   - `src/actions/` has the server actions (`analyzePaper`, `loadBranchResources` and the others), called at `POST /api/actions/:name`.
@@ -45,7 +99,9 @@ A workspace page shows its papers as cards floating around the workspace name. R
 
 The Add button opens one window for papers and workspaces. For a paper, `peekPaper` looks up the link on arXiv and reports whether the paper is already analyzed. The reader then picks an existing workspace (the one opened last is preselected) or a new one, with a name suggested from the arXiv category. A paper that already exists can also open without a workspace, since that costs nothing. A new workspace is created only after the paper checks out. A workspace created from this window asks `recommendPapers` for starter papers once. Home's paper box runs the same look-up: a paper that exists opens at once and uses no daily slot, and a new one opens this window with the link and its look-up filled in.
 
-## How a paper is analyzed
+The frontend uses the Blueprint theme (IBM Plex, dot-grid canvas) in light and dark. Dark mode follows the system setting until the reader picks one with the sun/moon button, which sits in the sidebar footer, or in the top bar when signed out. The choice is stored in the browser, and an inline script in `index.html` applies it before first paint, on the prerendered landing too. The dark values in `src/themes.css` keep each light token's hue at a different lightness. The paper sheets on the landing and in the progress view stay paper-colored in dark mode, dimmed, with dark ink.
+
+## Analysis pipeline in detail
 
 `analyzePaper` (a server action) validates the arXiv id, returns the cached analysis if anyone has analyzed the paper before, checks the caller's daily cap, confirms the paper exists with the arXiv API, and enqueues an `analyze` background job. The job (`src/server/pipeline/run.ts`) runs in short checkpointed ticks:
 
@@ -111,8 +167,6 @@ The owner can start a re-analysis from the CLI, with `{"arxivId": "1706.03762"}`
 ```bash
 npx deepspace agent invoke schema reanalyze_paper --input-file input.json --json
 ```
-
-All integrations are billed to the app owner. Paid calls happen only in server actions and the analyze job: the browser proxy at `/api/integrations` refuses owner-billed integrations, and only the owner can enqueue jobs over the job-room socket.
 
 ## Development
 
