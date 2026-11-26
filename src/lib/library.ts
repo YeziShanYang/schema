@@ -1,8 +1,9 @@
 /**
  * The Library page's sorting and filtering, with no React in it: the sort,
- * topic and view kept in the URL query, the topics of the reader's papers with
- * their counts, the status and topic filters, the grouping by workspace, and
- * the empty-state text.
+ * topic, workspace and view kept in the URL query, the topics and workspaces
+ * of the reader's papers with their counts, the status, topic and workspace
+ * filters, the grouping by workspace, and the empty-state text. Which papers
+ * are in the Library at all is src/lib/membership.ts.
  */
 
 import type { RoadmapStatus } from '../types'
@@ -11,32 +12,41 @@ export type LibrarySort = 'opened' | 'workspace'
 export type LibraryView = 'list' | 'constellation'
 export type StatusFilter = 'all' | RoadmapStatus
 
+/** The workspace filter's value for papers in no workspace (`?ws=none`). */
+export const UNFILED = 'none'
+
 export interface LibraryQuery {
   sort: LibrarySort
   /** A topic key, or null for every topic. */
   topic: string | null
+  /** A workspace id, UNFILED for papers in no workspace, or null for every paper. */
+  ws: string | null
   view: LibraryView
 }
 
+const OWN_PARAMS = new Set(['sort', 'topic', 'ws', 'view'])
+
 /**
- * Reads the sort, topic and view from a URL query. Anything other than
- * `sort=workspace` is the default sort, and anything other than
+ * Reads the sort, topic, workspace and view from a URL query. Anything other
+ * than `sort=workspace` is the default sort, and anything other than
  * `view=constellation` is the list.
  */
 export function parseLibraryQuery(search: string | URLSearchParams): LibraryQuery {
   const p = typeof search === 'string' ? new URLSearchParams(search) : search
   const topic = p.get('topic')?.trim() ?? ''
+  const ws = p.get('ws')?.trim() ?? ''
   return {
     sort: p.get('sort') === 'workspace' ? 'workspace' : 'opened',
     topic: topic || null,
+    ws: ws || null,
     view: p.get('view') === 'constellation' ? 'constellation' : 'list',
   }
 }
 
 /**
- * The query with `patch` applied: sort first, then topic, then view, then any
- * other parameters as they were. The default sort, an empty topic and the list
- * view are left out.
+ * The query with `patch` applied: sort first, then topic, workspace and view,
+ * then any other parameters as they were. The default sort, an empty topic or
+ * workspace and the list view are left out.
  */
 export function libraryQuery(search: string | URLSearchParams, patch: Partial<LibraryQuery>): URLSearchParams {
   const current = typeof search === 'string' ? new URLSearchParams(search) : search
@@ -44,8 +54,9 @@ export function libraryQuery(search: string | URLSearchParams, patch: Partial<Li
   const out = new URLSearchParams()
   if (next.sort === 'workspace') out.set('sort', 'workspace')
   if (next.topic) out.set('topic', next.topic)
+  if (next.ws) out.set('ws', next.ws)
   if (next.view === 'constellation') out.set('view', 'constellation')
-  for (const [k, v] of current) if (k !== 'sort' && k !== 'topic' && k !== 'view') out.append(k, v)
+  for (const [k, v] of current) if (!OWN_PARAMS.has(k)) out.append(k, v)
   return out
 }
 
@@ -69,7 +80,25 @@ export function topicCounts(papers: Iterable<{ topicKeys?: readonly string[] | n
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name) || a.key.localeCompare(b.key))
 }
 
-/** Topics whose name contains every word of `query`, ignoring case; all of them for an empty query. */
+/**
+ * The workspace filter's options: every workspace in the order given, each
+ * with how many papers it holds, then the papers in no workspace (key
+ * UNFILED).
+ */
+export function workspaceCounts(
+  papers: Iterable<{ workspaceIds: readonly string[] }>,
+  workspaces: readonly { id: string; name: string }[],
+): TopicCount[] {
+  const counts = new Map<string, number>()
+  let unfiled = 0
+  for (const p of papers) {
+    if (!p.workspaceIds.length) unfiled++
+    for (const id of new Set(p.workspaceIds)) counts.set(id, (counts.get(id) ?? 0) + 1)
+  }
+  return [...workspaces.map((w) => ({ key: w.id, name: w.name, count: counts.get(w.id) ?? 0 })), { key: UNFILED, name: NO_WORKSPACE, count: unfiled }]
+}
+
+/** Options whose name contains every word of `query`, ignoring case; all of them for an empty query. */
 export function matchTopics(topics: TopicCount[], query: string): TopicCount[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean)
   if (!words.length) return topics
@@ -82,15 +111,24 @@ export function matchTopics(topics: TopicCount[], query: string): TopicCount[] {
 type Row = { data: { paperId: string; status: RoadmapStatus } }
 
 /**
- * The rows that pass the status filter and, when a topic is set, use that
- * topic. Order is kept.
+ * The rows that pass the status filter and, when a topic or a workspace is
+ * set, use that topic and sit in that workspace (or, for UNFILED, in none).
+ * Order is kept.
  */
 export function filterRows<R extends Row>(
   rows: readonly R[],
-  { status, topic }: { status: StatusFilter; topic: string | null },
+  { status, topic, workspace = null }: { status: StatusFilter; topic: string | null; workspace?: string | null },
   topicKeysOf: (paperId: string) => readonly string[] | undefined,
+  workspaceIdsOf: (paperId: string) => readonly string[] = () => [],
 ): R[] {
-  return rows.filter((r) => (status === 'all' || r.data.status === status) && (!topic || (topicKeysOf(r.data.paperId) ?? []).includes(topic)))
+  const inWorkspace = (paperId: string) => {
+    if (!workspace) return true
+    const ids = workspaceIdsOf(paperId)
+    return workspace === UNFILED ? ids.length === 0 : ids.includes(workspace)
+  }
+  return rows.filter(
+    (r) => (status === 'all' || r.data.status === status) && (!topic || (topicKeysOf(r.data.paperId) ?? []).includes(topic)) && inWorkspace(r.data.paperId),
+  )
 }
 
 export interface WorkspaceGroup<R> {
@@ -125,8 +163,8 @@ export function groupByWorkspace<R extends { data: { paperId: string } }>(
 }
 
 const EMPTY: Record<StatusFilter, string> = {
-  all: 'No papers here yet. Papers you open are saved here automatically.',
-  reading: 'No papers in progress. A paper you open is listed here until you mark it finished.',
+  all: 'No papers here yet. A paper is listed here once you save it, add it to a workspace or check one of its concepts.',
+  reading: 'No papers in progress. A paper in your Library is listed here until you mark it finished.',
   finished: 'No finished papers yet. Papers you mark finished are listed here.',
 }
 
@@ -136,7 +174,15 @@ const WHICH: Record<StatusFilter, string> = {
   finished: 'No finished papers',
 }
 
-/** What the Library says when no row passes the filters; with a topic it names the status filter and the topic. */
-export function emptyText(status: StatusFilter, topicName: string | null): string {
-  return topicName ? `${WHICH[status]} use the topic ${topicName}.` : EMPTY[status]
+/** The workspace filter as the empty state names it: a workspace by name, or the papers in none. */
+export type WorkspaceWhere = { name: string } | 'unfiled' | null
+
+/**
+ * What the Library says when no row passes the filters. With a topic or a
+ * workspace it names the status filter and each of them.
+ */
+export function emptyText(status: StatusFilter, topicName: string | null, workspace: WorkspaceWhere = null): string {
+  if (!topicName && !workspace) return EMPTY[status]
+  const where = workspace === 'unfiled' ? ' outside a workspace' : workspace ? ` in ${workspace.name}` : ''
+  return `${WHICH[status]}${where}${topicName ? ` use the topic ${topicName}` : ''}.`
 }

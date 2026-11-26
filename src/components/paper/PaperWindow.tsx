@@ -9,6 +9,10 @@
  * Jumps come back: closing an overview opened by "See in overview" reopens
  * the card, and a "Learn first" chip leaves one "Back to" in the panel
  * header. The card a jump lands on is outlined for a moment.
+ * The header's placement button (PlacementControl) says where the paper is
+ * and saves it or files it in workspaces; opening the page only records it
+ * in the reader's history, never in their Library. Signed out, the button
+ * asks to sign in.
  * Used at /p/[arxivId] (also signed out, in demo mode) and at
  * /w/[id]/p/[arxivId] inside a workspace.
  */
@@ -25,6 +29,7 @@ import { useRoadmaps } from '../../hooks/useReader'
 import { useOverview } from '../../hooks/useOverview'
 import { useAllowance } from '../../hooks/useAllowance'
 import { useWorkspaces } from '../../hooks/useWorkspaces'
+import { useLibrary } from '../../hooks/useLibrary'
 import { actions } from '../../lib/actions-client'
 import { AnalyzeForm } from '../AnalyzeForm'
 import { AnalysisProgress, useAnalysisPhase } from './AnalysisProgress'
@@ -38,7 +43,8 @@ import { OverviewWindow, type OverviewConcept } from './OverviewWindow'
 import { SequenceStrip } from './SequenceStrip'
 import { ConceptName, MathText } from '../MathText'
 import { hintText } from '../../lib/knowledge/hints'
-import { BookIcon, CheckIcon, SparkIcon } from '../icons'
+import { BookIcon, BookmarkIcon, CheckIcon, SparkIcon } from '../icons'
+import { PlacementControl } from '../PlacementControl'
 import { SignInOverlay } from '../SignInOverlay'
 import { useHideTopSignIn } from '../AppShell'
 
@@ -63,6 +69,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const p = usePaper(arxivId, knowledge)
   const roadmaps = useRoadmaps()
   const workspaces = useWorkspaces()
+  const library = useLibrary()
   const navigate = useNavigate()
   const { allowance } = useAllowance()
   const ws = workspaceId ? workspaces.byId.get(workspaceId) : undefined
@@ -112,8 +119,9 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   const roadmap = paper ? roadmaps.byPaper.get(paper.recordId) : undefined
   const finished = roadmap?.data.status === 'finished'
 
-  // Remember this paper (library) and, inside a workspace, that it was opened last.
-  // Each is marked once, when its own data is ready (workspaces can load after roadmaps).
+  // Record the open in the reader's history (Recent papers; it does not put the paper in the Library) and,
+  // inside a workspace, that it was opened last. Each is marked once, when its own data is ready
+  // (workspaces can load after roadmaps).
   const touched = useRef('')
   const openedIn = useRef('')
   const { touch, ready: roadmapsReady } = roadmaps
@@ -414,6 +422,13 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
               Remove from workspace
             </Button>
           )}
+          {isSignedIn ? (
+            <PlacementControl papers={[{ paperId: paper.recordId, arxivId: d.arxivId, title: d.title }]} currentWorkspaceId={workspaceId} />
+          ) : (
+            <Button size="sm" title="Sign in to save this paper" onClick={(e) => openSignIn(e.currentTarget)} data-testid="placement-signin">
+              <BookmarkIcon size={14} /> Save
+            </Button>
+          )}
         </div>
       </header>
 
@@ -661,12 +676,12 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
           open={confirmRemove}
           onClose={() => setConfirmRemove(false)}
           onConfirm={async () => {
-            await workspaces.removePaper(ws.recordId, paper.recordId)
+            await library.removeFromWorkspace(ws.recordId, paper.recordId)
             setConfirmRemove(false)
             navigate(`/w/${ws.recordId}`)
           }}
           title="Remove this paper?"
-          description={`It leaves ${ws.data.name}. The paper stays in your library, and your checkmarks stay.`}
+          description={`It leaves ${ws.data.name}. The paper stays in your Library, and your checkmarks stay.`}
           confirmText="Remove paper"
         />
       )}

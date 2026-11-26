@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { emptyText, filterRows, groupByWorkspace, libraryQuery, matchTopics, NO_WORKSPACE, parseLibraryQuery, topicCounts } from './library'
+import { emptyText, filterRows, groupByWorkspace, libraryQuery, matchTopics, NO_WORKSPACE, parseLibraryQuery, topicCounts, UNFILED, workspaceCounts } from './library'
 import type { RoadmapStatus } from '../types'
 
 const row = (paperId: string, status: RoadmapStatus = 'reading') => ({ recordId: `r-${paperId}`, data: { paperId, status } })
@@ -7,14 +7,19 @@ const ids = (rows: { data: { paperId: string } }[]) => rows.map((r) => r.data.pa
 
 describe('parseLibraryQuery', () => {
   it('defaults to last opened, every topic and the list', () => {
-    expect(parseLibraryQuery('')).toEqual({ sort: 'opened', topic: null, view: 'list' })
-    expect(parseLibraryQuery('?sort=title&topic=&view=grid')).toEqual({ sort: 'opened', topic: null, view: 'list' })
+    expect(parseLibraryQuery('')).toEqual({ sort: 'opened', topic: null, ws: null, view: 'list' })
+    expect(parseLibraryQuery('?sort=title&topic=&ws=%20&view=grid')).toEqual({ sort: 'opened', topic: null, ws: null, view: 'list' })
   })
 
   it('reads the workspace sort, a topic key and the constellation view', () => {
-    expect(parseLibraryQuery('?sort=workspace&topic=softmax-function')).toEqual({ sort: 'workspace', topic: 'softmax-function', view: 'list' })
-    expect(parseLibraryQuery(new URLSearchParams('topic=gradient-descent'))).toEqual({ sort: 'opened', topic: 'gradient-descent', view: 'list' })
-    expect(parseLibraryQuery('?view=constellation')).toEqual({ sort: 'opened', topic: null, view: 'constellation' })
+    expect(parseLibraryQuery('?sort=workspace&topic=softmax-function')).toEqual({ sort: 'workspace', topic: 'softmax-function', ws: null, view: 'list' })
+    expect(parseLibraryQuery(new URLSearchParams('topic=gradient-descent'))).toEqual({ sort: 'opened', topic: 'gradient-descent', ws: null, view: 'list' })
+    expect(parseLibraryQuery('?view=constellation')).toEqual({ sort: 'opened', topic: null, ws: null, view: 'constellation' })
+  })
+
+  it('reads a workspace id or none', () => {
+    expect(parseLibraryQuery('?ws=w123').ws).toBe('w123')
+    expect(parseLibraryQuery('?ws=none').ws).toBe(UNFILED)
   })
 })
 
@@ -31,6 +36,12 @@ describe('libraryQuery', () => {
     expect(libraryQuery('?topic=a&view=constellation', { view: 'list' }).toString()).toBe('topic=a')
   })
 
+  it('writes the workspace after the topic and before the view', () => {
+    expect(libraryQuery('?view=constellation&topic=a', { ws: 'w1' }).toString()).toBe('topic=a&ws=w1&view=constellation')
+    expect(libraryQuery('?sort=workspace', { ws: UNFILED }).toString()).toBe('sort=workspace&ws=none')
+    expect(libraryQuery('?ws=w1&topic=a', { ws: null }).toString()).toBe('topic=a')
+  })
+
   it('keeps other parameters after its own', () => {
     expect(libraryQuery('?signin=1&topic=a', { sort: 'workspace' }).toString()).toBe('sort=workspace&topic=a&signin=1')
     expect(libraryQuery('?signin=1&view=constellation', { topic: 'a' }).toString()).toBe('topic=a&view=constellation&signin=1')
@@ -38,8 +49,9 @@ describe('libraryQuery', () => {
 
   it('round-trips through parseLibraryQuery', () => {
     for (const q of [
-      { sort: 'workspace', topic: 'scaled-dot-product-scores', view: 'list' },
-      { sort: 'opened', topic: null, view: 'constellation' },
+      { sort: 'workspace', topic: 'scaled-dot-product-scores', ws: null, view: 'list' },
+      { sort: 'opened', topic: null, ws: 'w1', view: 'constellation' },
+      { sort: 'workspace', topic: 'a', ws: UNFILED, view: 'list' },
     ] as const) {
       expect(parseLibraryQuery(libraryQuery('', q))).toEqual(q)
     }
@@ -73,6 +85,18 @@ describe('topicCounts', () => {
 
   it('lists a topic with no name under its key', () => {
     expect(topicCounts([{ topicKeys: ['unknown-topic'] }], names)).toEqual([{ key: 'unknown-topic', name: 'unknown-topic', count: 1 }])
+  })
+})
+
+describe('workspaceCounts', () => {
+  it('counts papers per workspace in the given order, then the papers in none', () => {
+    const papers = [{ workspaceIds: ['w1', 'w2'] }, { workspaceIds: ['w2'] }, { workspaceIds: [] }, { workspaceIds: ['w1', 'w1'] }]
+    expect(workspaceCounts(papers, [{ id: 'w2', name: 'CS 229' }, { id: 'w1', name: 'Climate' }, { id: 'w3', name: 'Empty' }])).toEqual([
+      { key: 'w2', name: 'CS 229', count: 2 },
+      { key: 'w1', name: 'Climate', count: 2 },
+      { key: 'w3', name: 'Empty', count: 0 },
+      { key: UNFILED, name: NO_WORKSPACE, count: 1 },
+    ])
   })
 })
 
@@ -111,6 +135,20 @@ describe('filterRows', () => {
 
   it('drops a paper whose topics are unknown when a topic is set', () => {
     expect(ids(filterRows(rows, { status: 'all', topic: 'g' }, of))).toEqual(['p1', 'p3'])
+  })
+
+  const workspaces: Record<string, string[]> = { p1: ['w1', 'w2'], p2: ['w2'], p3: [] }
+  const wsOf = (id: string) => workspaces[id] ?? []
+
+  it('keeps only papers in the workspace, or in none for UNFILED', () => {
+    expect(ids(filterRows(rows, { status: 'all', topic: null, workspace: 'w2' }, of, wsOf))).toEqual(['p1', 'p2'])
+    expect(ids(filterRows(rows, { status: 'all', topic: null, workspace: UNFILED }, of, wsOf))).toEqual(['p3', 'p4'])
+  })
+
+  it('combines the workspace with the status and the topic', () => {
+    expect(ids(filterRows(rows, { status: 'finished', topic: null, workspace: 'w2' }, of, wsOf))).toEqual(['p2'])
+    expect(ids(filterRows(rows, { status: 'all', topic: 'g', workspace: 'w2' }, of, wsOf))).toEqual(['p1'])
+    expect(ids(filterRows(rows, { status: 'all', topic: 'g', workspace: UNFILED }, of, wsOf))).toEqual(['p3'])
   })
 })
 
@@ -164,12 +202,20 @@ describe('groupByWorkspace', () => {
 describe('emptyText', () => {
   it('keeps the status texts when no topic is set', () => {
     expect(emptyText('finished', null)).toBe('No finished papers yet. Papers you mark finished are listed here.')
-    expect(emptyText('all', null)).toBe('No papers here yet. Papers you open are saved here automatically.')
+    expect(emptyText('all', null)).toBe('No papers here yet. A paper is listed here once you save it, add it to a workspace or check one of its concepts.')
   })
 
   it('names the status filter and the topic', () => {
     expect(emptyText('all', 'Softmax function')).toBe('No papers use the topic Softmax function.')
     expect(emptyText('reading', 'Softmax function')).toBe('No papers in progress use the topic Softmax function.')
     expect(emptyText('finished', 'Gradient descent')).toBe('No finished papers use the topic Gradient descent.')
+  })
+
+  it('names the workspace filter, alone or with the topic', () => {
+    expect(emptyText('all', null, { name: 'CS 229' })).toBe('No papers in CS 229.')
+    expect(emptyText('reading', null, { name: 'CS 229' })).toBe('No papers in progress in CS 229.')
+    expect(emptyText('finished', null, 'unfiled')).toBe('No finished papers outside a workspace.')
+    expect(emptyText('all', 'Softmax function', { name: 'CS 229' })).toBe('No papers in CS 229 use the topic Softmax function.')
+    expect(emptyText('all', 'Softmax function', 'unfiled')).toBe('No papers outside a workspace use the topic Softmax function.')
   })
 })

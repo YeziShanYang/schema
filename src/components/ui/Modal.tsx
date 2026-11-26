@@ -22,6 +22,8 @@ interface ModalProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'childre
   onClose: () => void
   children: ReactNode
   size?: 'sm' | 'md' | 'lg' | 'xl'
+  /** Where focus goes when it closes, when the control that opened it is gone (Base UI's finalFocus). */
+  finalFocus?: React.RefObject<HTMLElement | null>
 }
 
 // Always give a Modal an accessible name: render a <Modal.Title> (Base UI

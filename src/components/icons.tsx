@@ -101,6 +101,16 @@ export const SunIcon = (p: IconProps) => (
     <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" />
   </Svg>
 )
+export const BookmarkIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1z" />
+  </Svg>
+)
+export const FolderIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3.5 7a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" />
+  </Svg>
+)
 export const MoonIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M19.5 14.6A8 8 0 0 1 9.4 4.5a8 8 0 1 0 10.1 10.1z" />
