@@ -1,31 +1,42 @@
 /**
- * The Library page's sorting and filtering, with no React in it: the sort and
- * topic kept in the URL query, the topics of the reader's papers with their
- * counts, the status and topic filters, the grouping by workspace, and the
- * empty-state text.
+ * The Library page's sorting and filtering, with no React in it: the sort,
+ * topic and view kept in the URL query, the topics of the reader's papers with
+ * their counts, the status and topic filters, the grouping by workspace, and
+ * the empty-state text.
  */
 
 import type { RoadmapStatus } from '../types'
 
 export type LibrarySort = 'opened' | 'workspace'
+export type LibraryView = 'list' | 'constellation'
 export type StatusFilter = 'all' | RoadmapStatus
 
 export interface LibraryQuery {
   sort: LibrarySort
   /** A topic key, or null for every topic. */
   topic: string | null
-}
-
-/** Reads the sort and topic from a URL query. Anything other than `sort=workspace` is the default sort. */
-export function parseLibraryQuery(search: string | URLSearchParams): LibraryQuery {
-  const p = typeof search === 'string' ? new URLSearchParams(search) : search
-  const topic = p.get('topic')?.trim() ?? ''
-  return { sort: p.get('sort') === 'workspace' ? 'workspace' : 'opened', topic: topic || null }
+  view: LibraryView
 }
 
 /**
- * The query with `patch` applied: sort first, then topic, then any other
- * parameters as they were. The default sort and an empty topic are left out.
+ * Reads the sort, topic and view from a URL query. Anything other than
+ * `sort=workspace` is the default sort, and anything other than
+ * `view=constellation` is the list.
+ */
+export function parseLibraryQuery(search: string | URLSearchParams): LibraryQuery {
+  const p = typeof search === 'string' ? new URLSearchParams(search) : search
+  const topic = p.get('topic')?.trim() ?? ''
+  return {
+    sort: p.get('sort') === 'workspace' ? 'workspace' : 'opened',
+    topic: topic || null,
+    view: p.get('view') === 'constellation' ? 'constellation' : 'list',
+  }
+}
+
+/**
+ * The query with `patch` applied: sort first, then topic, then view, then any
+ * other parameters as they were. The default sort, an empty topic and the list
+ * view are left out.
  */
 export function libraryQuery(search: string | URLSearchParams, patch: Partial<LibraryQuery>): URLSearchParams {
   const current = typeof search === 'string' ? new URLSearchParams(search) : search
@@ -33,7 +44,8 @@ export function libraryQuery(search: string | URLSearchParams, patch: Partial<Li
   const out = new URLSearchParams()
   if (next.sort === 'workspace') out.set('sort', 'workspace')
   if (next.topic) out.set('topic', next.topic)
-  for (const [k, v] of current) if (k !== 'sort' && k !== 'topic') out.append(k, v)
+  if (next.view === 'constellation') out.set('view', 'constellation')
+  for (const [k, v] of current) if (k !== 'sort' && k !== 'topic' && k !== 'view') out.append(k, v)
   return out
 }
 

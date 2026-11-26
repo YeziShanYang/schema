@@ -6,14 +6,15 @@ const row = (paperId: string, status: RoadmapStatus = 'reading') => ({ recordId:
 const ids = (rows: { data: { paperId: string } }[]) => rows.map((r) => r.data.paperId)
 
 describe('parseLibraryQuery', () => {
-  it('defaults to last opened and every topic', () => {
-    expect(parseLibraryQuery('')).toEqual({ sort: 'opened', topic: null })
-    expect(parseLibraryQuery('?sort=title&topic=')).toEqual({ sort: 'opened', topic: null })
+  it('defaults to last opened, every topic and the list', () => {
+    expect(parseLibraryQuery('')).toEqual({ sort: 'opened', topic: null, view: 'list' })
+    expect(parseLibraryQuery('?sort=title&topic=&view=grid')).toEqual({ sort: 'opened', topic: null, view: 'list' })
   })
 
-  it('reads the workspace sort and a topic key', () => {
-    expect(parseLibraryQuery('?sort=workspace&topic=softmax-function')).toEqual({ sort: 'workspace', topic: 'softmax-function' })
-    expect(parseLibraryQuery(new URLSearchParams('topic=gradient-descent'))).toEqual({ sort: 'opened', topic: 'gradient-descent' })
+  it('reads the workspace sort, a topic key and the constellation view', () => {
+    expect(parseLibraryQuery('?sort=workspace&topic=softmax-function')).toEqual({ sort: 'workspace', topic: 'softmax-function', view: 'list' })
+    expect(parseLibraryQuery(new URLSearchParams('topic=gradient-descent'))).toEqual({ sort: 'opened', topic: 'gradient-descent', view: 'list' })
+    expect(parseLibraryQuery('?view=constellation')).toEqual({ sort: 'opened', topic: null, view: 'constellation' })
   })
 })
 
@@ -24,13 +25,24 @@ describe('libraryQuery', () => {
     expect(libraryQuery('?sort=workspace&topic=a', { topic: null }).toString()).toBe('sort=workspace')
   })
 
+  it('writes the constellation view after sort and topic, and leaves the list out', () => {
+    expect(libraryQuery('?view=constellation&topic=a', { sort: 'workspace' }).toString()).toBe('sort=workspace&topic=a&view=constellation')
+    expect(libraryQuery('', { view: 'constellation' }).toString()).toBe('view=constellation')
+    expect(libraryQuery('?topic=a&view=constellation', { view: 'list' }).toString()).toBe('topic=a')
+  })
+
   it('keeps other parameters after its own', () => {
     expect(libraryQuery('?signin=1&topic=a', { sort: 'workspace' }).toString()).toBe('sort=workspace&topic=a&signin=1')
+    expect(libraryQuery('?signin=1&view=constellation', { topic: 'a' }).toString()).toBe('topic=a&view=constellation&signin=1')
   })
 
   it('round-trips through parseLibraryQuery', () => {
-    const q = { sort: 'workspace', topic: 'scaled-dot-product-scores' } as const
-    expect(parseLibraryQuery(libraryQuery('', q))).toEqual(q)
+    for (const q of [
+      { sort: 'workspace', topic: 'scaled-dot-product-scores', view: 'list' },
+      { sort: 'opened', topic: null, view: 'constellation' },
+    ] as const) {
+      expect(parseLibraryQuery(libraryQuery('', q))).toEqual(q)
+    }
   })
 })
 
