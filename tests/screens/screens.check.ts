@@ -58,7 +58,7 @@ test('signed in', async ({ users }, info) => {
     await page.setViewportSize({ width: w, height: h })
     await page.goto('/home')
     await shot(page, '05-home', info.project.name, w)
-    // From md up the Add button is the sidebar's; on a phone it is in Home's header.
+    // From md up the Add button is the sidebar's; on a phone it sits at the top of Home.
     await page.getByTestId(w < 768 ? 'home-add-open' : 'add-open').click()
     await page.getByTestId('add-choice-paper').click()
     await page.getByTestId('add-paper-input').fill('1706.03762')

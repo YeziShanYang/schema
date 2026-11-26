@@ -1102,8 +1102,15 @@ test('page headers leave Add and the page name to the sidebar from md up', async
   const [ada] = await users(['Schema ada'])
   const page = ada.page
   await page.setViewportSize({ width: 1440, height: 900 })
+  // Home has no header bar, only one heading for screen readers.
+  await page.goto('/home')
+  const home = page.getByTestId('home-page')
+  await expect(home.locator('[data-testid="continue"], [data-testid="recently-analyzed"]').first()).toBeVisible({ timeout: 15_000 })
+  await expect(home.locator('header')).toHaveCount(0)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Home')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveClass(/\bsr-only\b/)
   for (const [path, testId, title] of [
-    ['/home', 'home-page', 'Learn the ideas a paper is built on'],
     ['/library', 'library-page', 'Your papers'],
     ['/knowledge', 'knowledge-page', 'What you know'],
   ] as const) {
@@ -1138,10 +1145,14 @@ test('page headers leave Add and the page name to the sidebar from md up', async
   await expect(page.getByTestId('add-open')).toBeVisible()
   await expect(page.getByTestId('home-add-open')).toBeHidden()
   await expect(page.getByRole('button', { name: /^Add paper or workspace$/ })).toHaveCount(1)
-  // On a phone the sidebar is behind the menu, so the header keeps its Add, and it opens the Add window.
+  // On a phone the sidebar is behind the menu, so Home keeps its own Add at the top of the page, and it opens the Add window.
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(page.getByTestId('home-add-open')).toBeVisible()
   await expect(page.getByTestId('add-open')).toBeHidden()
+  const addBox = (await page.getByTestId('home-add-open').boundingBox())!
+  for (const section of await page.getByTestId('home-page').locator('section').all()) {
+    expect(addBox.y + addBox.height).toBeLessThanOrEqual((await section.boundingBox())!.y)
+  }
   await page.getByTestId('home-add-open').click()
   await expect(page.getByTestId('add-dialog')).toBeVisible()
   await page.keyboard.press('Escape')
@@ -1876,7 +1887,7 @@ test('the account menu closes on Esc and on a click outside, and in the phone me
 
   await button.click()
   await expect(menu).toBeVisible()
-  await page.getByRole('heading', { level: 1 }).click()
+  await page.getByText('Recently analyzed', { exact: true }).click()
   await expect(menu).toHaveCount(0)
   // A click on the button itself still toggles it.
   await button.click()

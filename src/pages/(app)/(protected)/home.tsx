@@ -1,7 +1,8 @@
 /**
  * Home: continue where you left off, paste an arXiv link (an analyzed paper
  * opens at once, a new one goes through the Add window), recently analyzed
- * papers. Requires sign-in (it sits under (protected)).
+ * papers. It has no header bar, only a visually hidden heading, and on phones
+ * an Add button at the top. Requires sign-in (it sits under (protected)).
  */
 
 import { Link } from 'react-router-dom'
@@ -10,7 +11,6 @@ import { useQuery } from 'deepspace'
 import { AnalyzeForm } from '../../../components/AnalyzeForm'
 import { AddButton } from '../../../components/AddDialog'
 import { FirstRunPrompt } from '../../../components/FirstRunPrompt'
-import { PageHeader } from '../../../components/blueprint'
 import { useRoadmaps } from '../../../hooks/useReader'
 import { useWorkspaces } from '../../../hooks/useWorkspaces'
 import { arxivSlug } from '../../../lib/arxiv'
@@ -27,11 +27,11 @@ export default function HomePage() {
 
   return (
     <div className="min-h-full" data-testid="home-page">
-      <PageHeader title="Learn the ideas a paper is built on">
-        {/* From md up the sidebar's Add sits beside the header, so only phones get this one. */}
-        <AddButton testId="home-add-open" className="md:hidden" />
-      </PageHeader>
+      {/* Home has no header bar; the highlighted sidebar row names the page, and this heading names it for screen readers. */}
+      <h1 className="sr-only">Home</h1>
       <div className="grid max-w-5xl grid-cols-1 gap-5 px-5 py-6 md:px-7">
+        {/* From md up the sidebar's Add is beside the page; below that the sidebar is a drawer, so phones get this one. */}
+        <AddButton testId="home-add-open" className="justify-self-start md:hidden" />
         <FirstRunPrompt />
         {(lastWorkspace || lastPaper) && (
           <section className="surface enter p-4" style={{ ['--i' as string]: 0 }} data-testid="continue">

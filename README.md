@@ -88,7 +88,7 @@ At the repository root, `worker.ts` assembles the Worker's routes and Durable Ob
 
 ## Interface
 
-The sidebar starts with Add and links to Home, Library and Knowledge, and the Knowledge link shows how many concepts the reader has checked. Workspaces and recent papers follow. A page header carries only its title, because the highlighted sidebar link already names the page. Below 768px the sidebar opens from a menu button, so Home's header keeps its own Add button.
+The sidebar starts with Add and links to Home, Library and Knowledge, and the Knowledge link shows how many concepts the reader has checked. Workspaces and recent papers follow. A page header carries only its title, because the highlighted sidebar link already names the page. Home has no header bar, and its only heading is for screen readers. Below 768px the sidebar opens from a menu button, so Home shows its own Add button at the top of the page.
 
 A workspace page shows its papers as cards floating around the workspace name. Recommended papers appear as dashed cards with an Add button. A paper page shows its branches the same way, numbered in the recommended order. Clicking a branch opens a centered panel with that branch's concepts, and the branch's explainer links load when the panel opens. A toggle switches the paper page to the section walkthrough. Below 640px the cards stack in a list, and with reduced motion they hold still instead of drifting.
 
