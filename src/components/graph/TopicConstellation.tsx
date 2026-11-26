@@ -174,7 +174,7 @@ export default function TopicConstellation({ network, countsReady }: { network: 
   const byId = useMemo(() => new Map(network.papers.map((p) => [p.id, p])), [network])
   const nameOf = useMemo(() => new Map(network.shared.map((s) => [s.key, s.name])), [network])
 
-  // Selection is page state, never in the URL. A paper the filters no longer show leaves it.
+  // Selection is this component's state, never in the URL. A paper the filters no longer show leaves it.
   const [picked, setPicked] = useState<string[]>([])
   const selected = useMemo(() => keepShown(picked, network), [picked, network])
   useEffect(() => {
