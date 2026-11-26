@@ -1,16 +1,21 @@
 /**
  * Library: every paper the reader has opened, with progress and last opened,
  * filtered by in progress or finished and by a topic from the reader's own
- * papers, and sorted by last opened or grouped by workspace. The sort and the
- * topic are kept in the URL query (?sort=workspace&topic=<key>); the status
- * filter is not. Finished papers can be read again, and a failed analysis can
- * be retried from its row.
+ * papers, and sorted by last opened or grouped by workspace. The sort, the
+ * topic and the view are kept in the URL query
+ * (?sort=workspace&topic=<key>&view=constellation); the status filter is not.
+ * Finished papers can be read again, and a failed analysis can be retried from
+ * its row.
+ * The list is the default view. The constellation (TopicConstellation, loaded
+ * only when it is opened) draws the same filtered papers linked by the topics
+ * they share; Sort means nothing there and is hidden. Where the page's column
+ * is under 640px wide the toggle is hidden and the list always shows.
  * Finishing and reading again go through the same hooks and dialog as the
  * paper window, so the paper's workspace entries follow, and Read again
  * offers to uncheck what finishing checked.
  */
 
-import { useCallback, useId, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
+import { Suspense, lazy, useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from 'deepspace'
 import type { RecordData } from 'deepspace'
@@ -18,17 +23,24 @@ import { Button, Popover, PopoverContent, PopoverTrigger, SearchInput } from '@/
 import { cn, plural } from '@/lib/utils'
 import { Chip, Meter, PageHeader } from '../../../components/blueprint'
 import { CheckIcon, ChevronDownIcon, CloseIcon } from '../../../components/icons'
+import type { ConstellationPaper } from '../../../components/graph/TopicConstellation'
 import { FinishDialog, ReadAgainButton } from '../../../components/paper/FinishDialog'
 import { checkedPerPaper, useConceptKnowledge, useRoadmaps, useTopics } from '../../../hooks/useReader'
 import { useRetryPaper } from '../../../hooks/useRetryPaper'
 import { useWorkspaces } from '../../../hooks/useWorkspaces'
 import { arxivSlug } from '../../../lib/arxiv'
 import { emptyText, filterRows, groupByWorkspace, libraryQuery, matchTopics, parseLibraryQuery, topicCounts } from '../../../lib/library'
-import type { LibraryQuery, LibrarySort, StatusFilter, TopicCount } from '../../../lib/library'
+import type { LibraryQuery, LibrarySort, LibraryView, StatusFilter, TopicCount } from '../../../lib/library'
+import { constellationHeight, libraryNetwork } from '../../../lib/library-network'
 import type { PaperData, RoadmapData } from '../../../types'
 
 const STATUS_LABEL: Record<StatusFilter, string> = { all: 'All', reading: 'In progress', finished: 'Finished' }
 const SORT_LABEL: Record<LibrarySort, string> = { opened: 'Last opened', workspace: 'Workspace' }
+const VIEW_LABEL: Record<LibraryView, string> = { list: 'List', constellation: 'Constellation' }
+/** The constellation needs a column at least this wide; below it the list shows, as the floating graphs stack. */
+const CONSTELLATION_MIN_WIDTH = 640
+
+const TopicConstellation = lazy(() => import('../../../components/graph/TopicConstellation'))
 
 export default function LibraryPage() {
   const roadmaps = useRoadmaps()
@@ -43,9 +55,9 @@ export default function LibraryPage() {
   const [filter, setFilter] = useState<StatusFilter>('all')
   const [finishing, setFinishing] = useState<RecordData<PaperData> | null>(null)
 
-  // Sort and topic live in the URL. Changes replace the entry, so Back leaves the Library instead of undoing a filter.
+  // Sort, topic and view live in the URL. Changes replace the entry, so Back leaves the Library instead of undoing a filter.
   const [searchParams, setSearchParams] = useSearchParams()
-  const { sort, topic } = parseLibraryQuery(searchParams)
+  const { sort, topic, view } = parseLibraryQuery(searchParams)
   const updateQuery = useCallback(
     (patch: Partial<LibraryQuery>) => setSearchParams((prev) => libraryQuery(prev, patch), { replace: true }),
     [setSearchParams],
@@ -59,20 +71,60 @@ export default function LibraryPage() {
   )
   const topicName = topic ? topicNames.get(topic) || topic : null
 
+  // The column's content width decides whether the constellation can show. Measured before paint, so there is no flash.
+  const column = useRef<HTMLDivElement>(null)
+  const [wide, setWide] = useState(false)
+  useLayoutEffect(() => {
+    const el = column.current
+    if (!el) return
+    const measure = () => {
+      const cs = getComputedStyle(el)
+      const next = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) >= CONSTELLATION_MIN_WIDTH
+      setWide((w) => (w === next ? w : next))
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  const constellation = wide && view === 'constellation'
+
   const rows = useMemo(() => filterRows(roadmaps.rows, { status: filter, topic }, topicKeysOf), [roadmaps.rows, filter, topic, topicKeysOf])
   const { rows: workspaceRows, papersOf } = workspaces
   const groups = useMemo(
     () =>
-      sort === 'workspace'
+      sort === 'workspace' && !constellation
         ? groupByWorkspace(
             rows,
             workspaceRows.map((w) => ({ id: w.recordId, name: w.data.name, paperIds: papersOf(w.recordId).map((p) => p.paperId) })),
           )
         : null,
-    [sort, rows, workspaceRows, papersOf],
+    [sort, constellation, rows, workspaceRows, papersOf],
   )
   // A topic needs the papers' topic keys, and the grouping needs the workspaces, before the list can be trusted.
-  const loading = (!!topic && papers.status === 'loading') || (sort === 'workspace' && !workspaces.ready && workspaces.status !== 'error')
+  // The constellation draws topics, so it waits for the papers too.
+  const loading =
+    ((!!topic || constellation) && papers.status === 'loading') ||
+    (!constellation && sort === 'workspace' && !workspaces.ready && workspaces.status !== 'error')
+
+  const network = useMemo(() => {
+    if (!constellation) return null
+    const shown: ConstellationPaper[] = rows.map((r) => {
+      const paper = paperById.get(r.data.paperId)
+      const total = paper?.data.conceptCount || 0
+      const status = paper?.data.status
+      return {
+        id: r.data.paperId,
+        arxivId: r.data.arxivId,
+        title: r.data.title || r.data.arxivId,
+        topicKeys: paper?.data.topicKeys ?? [],
+        known: Math.min(checked.get(r.data.paperId) ?? 0, total),
+        total,
+        state: status === 'failed' ? 'failed' : status === 'queued' || status === 'processing' ? 'analyzing' : 'ready',
+      }
+    })
+    return libraryNetwork(shown, knowledge.rows.map((k) => k.data), topicNames)
+  }, [constellation, rows, paperById, checked, knowledge.rows, topicNames])
 
   const topicButton = useRef<HTMLButtonElement>(null)
   const clearTopic = () => {
@@ -104,14 +156,28 @@ export default function LibraryPage() {
 
   return (
     <div className="min-h-full" data-testid="library-page">
-      <PageHeader title="Your papers" />
-      <div className="grid max-w-4xl gap-4 px-5 py-6 md:px-7">
+      <PageHeader title="Your papers">
+        {wide && (
+          <Segmented
+            label="Library view"
+            options={['list', 'constellation'] as const}
+            labels={VIEW_LABEL}
+            value={view}
+            onChange={(v) => updateQuery({ view: v })}
+            testId="library-view"
+          />
+        )}
+      </PageHeader>
+      {/* The constellation gets the page's full width (to 1280px); the list keeps its narrower column. */}
+      <div ref={column} className={cn('grid gap-4 px-5 py-6 md:px-7', network && rows.length > 0 && !loading ? 'max-w-7xl' : 'max-w-4xl')}>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2" data-testid="library-controls">
           <Segmented label="Filter papers" options={['all', 'reading', 'finished'] as const} labels={STATUS_LABEL} value={filter} onChange={setFilter} />
-          <div className="flex items-center gap-2">
-            <span className="label" aria-hidden="true">Sort</span>
-            <Segmented label="Sort papers" options={['opened', 'workspace'] as const} labels={SORT_LABEL} value={sort} onChange={(s) => updateQuery({ sort: s })} testId="library-sort" />
-          </div>
+          {!constellation && (
+            <div className="flex items-center gap-2">
+              <span className="label" aria-hidden="true">Sort</span>
+              <Segmented label="Sort papers" options={['opened', 'workspace'] as const} labels={SORT_LABEL} value={sort} onChange={(s) => updateQuery({ sort: s })} testId="library-sort" />
+            </div>
+          )}
           <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
             <TopicPicker topics={topics} value={topic} loading={papers.status === 'loading'} onChange={(key) => updateQuery({ topic: key })} triggerRef={topicButton} />
             {topic && (
@@ -147,6 +213,20 @@ export default function LibraryPage() {
           ) : (
             <p className="surface p-5 text-sm text-muted-foreground" data-testid="library-empty">{emptyText(filter, null)}</p>
           )
+        ) : network ? (
+          <Suspense
+            fallback={
+              <div
+                className="dot-grid grid place-items-center rounded-lg border border-border text-sm text-muted-foreground"
+                style={{ height: constellationHeight(network.papers.length) }}
+                data-testid="library-constellation-loading"
+              >
+                Loading…
+              </div>
+            }
+          >
+            <TopicConstellation network={network} countsReady={countsReady} />
+          </Suspense>
         ) : groups ? (
           <div className="grid gap-5">
             {groups.map((g, i) => (

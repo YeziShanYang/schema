@@ -1528,6 +1528,218 @@ test('the library groups papers by workspace and filters them by topic; both sta
   await expect(topicButton).toBeFocused()
 })
 
+/** Cards, own-topic dots and topic nodes (with their labels) of the constellation that leave its canvas. */
+async function constellationFits(page: Page) {
+  return page.getByTestId('library-constellation').evaluate((frame) => {
+    const box = frame.getBoundingClientRect()
+    const outside: string[] = []
+    const check = (el: Element, name: string) => {
+      const r = el.getBoundingClientRect()
+      if (r.top < box.top - 1 || r.bottom > box.bottom + 1 || r.left < box.left - 1 || r.right > box.right + 1) outside.push(name)
+    }
+    frame.querySelectorAll('[data-testid="constellation-card"]').forEach((el) => check(el, `card ${el.getAttribute('data-arxiv')}`))
+    frame.querySelectorAll('[data-testid="constellation-dot"]').forEach((el, i) => check(el, `dot ${i}`))
+    frame.querySelectorAll('[data-testid="constellation-topic"]').forEach((el) => {
+      check(el.querySelector('.cl-node')!, `topic ${el.getAttribute('data-topic-key')}`)
+      check(el.querySelector('text')!, `label ${el.getAttribute('data-topic-key')}`)
+    })
+    return outside
+  })
+}
+
+/** The arXiv ids of the constellation's cards, sorted. */
+function constellationIds(page: Page): Promise<string[]> {
+  return page
+    .getByTestId('constellation-card')
+    .evaluateAll((els) => els.map((e) => e.getAttribute('data-arxiv') ?? '').sort())
+}
+
+test('the library constellation draws the filtered papers, selects cards to show what they share, and gives way to the list at 390px', async ({ users }) => {
+  test.setTimeout(300_000)
+  // Bob only opens papers in these specs and never finishes one. Cara or Ada (whoever has a slot) makes a paper
+  // whose conversion fails: it has no topics, so it shares none with the fixture papers. The slot is given back.
+  const [ada, bob, cara] = await users(['Schema ada', 'Schema bob', 'Schema cara'])
+  const page = bob.page
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await calm(page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  for (const id of [FIXTURE_ID, FIVE_ID, LONG_ID]) await openReadyFixturePaper(ada.page, id)
+  let maker = cara.page
+  if ((await allowanceLeft(maker)) === 0) maker = ada.page
+  test.skip((await allowanceLeft(maker)) === 0, 'Cara and Ada are at the daily cap in this local state')
+  await calm(maker)
+  const failedId = await newFixtureId(maker, '77')
+  await analyzeUntilFailed(maker, failedId, 'Fixture conversion failure')
+  for (const id of [FIXTURE_ID, FIVE_ID, LONG_ID, failedId]) {
+    const slug = id.replace('.', '~')
+    await page.goto(`/p/${slug}`)
+    await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', /ready|failed/, { timeout: 20_000 })
+    await expect(page.getByTestId('sidebar-recent').locator(`a[href="/p/${slug}"]`)).toBeVisible({ timeout: 15_000 })
+  }
+
+  await page.goto('/library')
+  const rowOf = (id: string) => page.locator(`[data-testid="library-row"][data-arxiv="${id}"]`)
+  const viewToggle = page.getByRole('group', { name: 'Library view' })
+  const status = page.getByRole('group', { name: 'Filter papers' })
+  const canvas = page.getByTestId('library-constellation')
+  const cardOf = (id: string) => page.locator(`[data-testid="constellation-card"][data-arxiv="${id}"]`)
+  const topicNode = (key: string) => page.locator(`[data-testid="constellation-topic"][data-topic-key="${key}"]`)
+  const panel = page.getByTestId('constellation-selection')
+  const panelStatus = page.getByTestId('constellation-selection-status')
+  await expect(rowOf(failedId)).toBeVisible({ timeout: 15_000 })
+  await expect(rowOf(FIXTURE_ID).getByTestId('library-known')).toContainText(/\d+ \/ \d+/, { timeout: 15_000 })
+  const listed = (await libraryIds(page.getByTestId('library-page'))).sort()
+  const [known, total] = (await rowOf(FIXTURE_ID).getByTestId('library-known').locator('b').innerText()).split(' / ')
+
+  // List is the default and leaves the URL alone. Constellation adds ?view=constellation and hides Sort.
+  await expect(viewToggle.getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(canvas).toHaveCount(0)
+  await viewToggle.getByRole('button', { name: 'Constellation' }).click()
+  await expect(page).toHaveURL(/\/library\?view=constellation$/)
+  await expect(canvas).toHaveAttribute('data-settled', 'true', { timeout: 15_000 })
+  await expect(page.getByTestId('library-row')).toHaveCount(0)
+  await expect(page.getByRole('group', { name: 'Sort papers' })).toHaveCount(0)
+  // One card per listed paper, with the list's counts.
+  expect(await constellationIds(page)).toEqual(listed)
+  await expect(cardOf(FIXTURE_ID).getByTestId('constellation-known')).toHaveText(`${known} of ${total} known`)
+  await expect(cardOf(failedId).getByTestId('constellation-known')).toHaveText('Analysis failed')
+  // The fixture papers share their topics, so each is a node; FIVE_ID's extra topic is one of its own dots.
+  await expect(topicNode('softmax-function')).toBeVisible()
+  await expect(topicNode('fixture-accuracy-metric')).toHaveCount(0)
+  expect(await constellationFits(page)).toEqual([])
+
+  // A reload keeps the view.
+  await page.reload()
+  await expect(page).toHaveURL(/\/library\?view=constellation$/)
+  await expect(viewToggle.getByRole('button', { name: 'Constellation' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(canvas).toHaveAttribute('data-settled', 'true', { timeout: 15_000 })
+  expect(await constellationIds(page)).toEqual(listed)
+
+  // Hovering a card highlights its links and names what it shares.
+  await cardOf(FIVE_ID).hover()
+  const tip = page.getByTestId('constellation-tip')
+  await expect(tip).toHaveAttribute('data-on', 'true')
+  await expect(tip).toContainText('Shares topics with')
+  await expect(page.locator(`[data-link$="${await cardOf(FIVE_ID).getAttribute('data-paper-id')}"]`).first()).toHaveAttribute('data-hi')
+  await expect(cardOf(failedId)).toHaveAttribute('data-dim')
+  await page.mouse.move(2, 2)
+  await expect(cardOf(failedId)).not.toHaveAttribute('data-dim')
+
+  // One selected card keeps its topics at full strength after the pointer leaves, and shows an Open link.
+  await cardOf(FIVE_ID).getByTestId('constellation-select').click()
+  await page.mouse.move(2, 2)
+  await expect(cardOf(FIVE_ID)).toHaveAttribute('data-selected', 'true')
+  await expect(cardOf(FIVE_ID).getByTestId('constellation-select')).toHaveAttribute('aria-pressed', 'true')
+  await expect(topicNode('softmax-function')).not.toHaveAttribute('data-dim')
+  await expect(cardOf(failedId)).toHaveAttribute('data-dim')
+  await expect(panel).toHaveAttribute('data-count', '1')
+  await expect(panelStatus).toHaveText(/^1 paper selected\. It shares \d+ topics with other papers here\.$/)
+  await expect(cardOf(FIVE_ID).getByTestId('constellation-open')).toBeVisible()
+  await expect(cardOf(FIXTURE_ID).getByTestId('constellation-open')).toHaveCount(0)
+
+  // Two papers that share topics: the panel lists them, and a topic both use stays at full strength.
+  await cardOf(FIXTURE_ID).getByTestId('constellation-select').click()
+  await page.mouse.move(2, 2)
+  await expect(panel).toHaveAttribute('data-count', '2')
+  await expect(panelStatus).toHaveText(/^2 papers selected\. They share \d+ topics\.$/)
+  await expect(panel.locator('[data-testid="constellation-selection-topic"][data-topic-key="softmax-function"]')).toContainText('Softmax function')
+  await expect(panel.getByTestId('constellation-selection-paper')).toHaveCount(2)
+  await expect(topicNode('softmax-function')).toHaveAttribute('data-all')
+  await expect(topicNode('softmax-function')).not.toHaveAttribute('data-dim')
+  // Esc clears the selection.
+  await page.keyboard.press('Escape')
+  await expect(panel).toHaveAttribute('data-count', '0')
+  await expect(page.locator('[data-testid="constellation-card"][data-selected]')).toHaveCount(0)
+
+  // Two papers with no shared topic say so. Space and Enter on a focused card toggle it too.
+  await cardOf(FIXTURE_ID).getByTestId('constellation-select').focus()
+  await page.keyboard.press('Space')
+  await cardOf(failedId).getByTestId('constellation-select').focus()
+  await page.keyboard.press('Enter')
+  await expect(panel).toHaveAttribute('data-count', '2')
+  await expect(panelStatus).toHaveText('2 papers selected. These papers share no topics.')
+  await expect(panel.getByTestId('constellation-selection-topic')).toHaveCount(0)
+  // Clear clears it.
+  await panel.getByTestId('constellation-clear').click()
+  await expect(panel).toHaveAttribute('data-count', '0')
+
+  // A drag moves a card without selecting it; a click on empty canvas clears a selection, but the end of a drag doesn't.
+  await cardOf(LONG_ID).getByTestId('constellation-select').click()
+  await expect(panel).toHaveAttribute('data-count', '1')
+  const before = (await cardOf(FIXTURE_ID).boundingBox())!
+  const frameBox = (await canvas.boundingBox())!
+  // 50px toward the canvas center, so the canvas edge never stops the card.
+  const toward = Math.atan2(frameBox.y + frameBox.height / 2 - before.y, frameBox.x + frameBox.width / 2 - before.x)
+  await page.mouse.move(before.x + 20, before.y + 20)
+  await page.mouse.down()
+  await page.mouse.move(before.x + 20 + Math.cos(toward) * 50, before.y + 20 + Math.sin(toward) * 50, { steps: 6 })
+  await expect.poll(async () => {
+    const now = (await cardOf(FIXTURE_ID).boundingBox())!
+    return Math.round(Math.hypot(now.x - before.x, now.y - before.y))
+  }).toBeGreaterThan(30)
+  await page.mouse.up()
+  await expect(cardOf(FIXTURE_ID)).not.toHaveAttribute('data-selected', 'true')
+  await expect(panel).toHaveAttribute('data-count', '1')
+  await expect(page).toHaveURL(/\/library\?view=constellation$/)
+  // Under reduced motion the card returns to its place on release.
+  await expect.poll(async () => Math.round((await cardOf(FIXTURE_ID).boundingBox())!.y)).toBe(Math.round(before.y))
+  await canvas.click({ position: { x: 6, y: 6 } })
+  await expect(panel).toHaveAttribute('data-count', '0')
+
+  // With motion the cards drift and the rings turn, and everything stays inside the canvas.
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await expect(canvas).toHaveAttribute('data-settled', 'false')
+  await expect(canvas).toHaveAttribute('data-settled', 'true', { timeout: 30_000 })
+  for (let i = 0; i < 3; i++) {
+    expect(await constellationFits(page)).toEqual([])
+    await page.waitForTimeout(400)
+  }
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await expect(canvas).toHaveAttribute('data-settled', 'true')
+
+  // The Topic and status filters decide which cards appear.
+  await page.getByRole('button', { name: 'Filter by topic' }).click()
+  const picker = page.getByTestId('library-topic-picker')
+  await picker.getByRole('option', { name: /^Accuracy metric \(fixture\),/ }).click()
+  await expect(page).toHaveURL(/\/library\?topic=fixture-accuracy-metric&view=constellation$/)
+  await expect.poll(async () => (await constellationIds(page)).every((id) => id.endsWith('33'))).toBe(true)
+  await expect(cardOf(FIVE_ID)).toBeVisible()
+  await page.getByTestId('library-topic-clear').click()
+  await expect(page).toHaveURL(/\/library\?view=constellation$/)
+  await expect.poll(() => constellationIds(page)).toEqual(listed)
+  await status.getByRole('button', { name: 'Finished' }).click()
+  await expect(page.getByTestId('library-empty')).toHaveText('No finished papers yet. Papers you mark finished are listed here.')
+  await expect(canvas).toHaveCount(0)
+  await status.getByRole('button', { name: 'In progress' }).click()
+  await expect.poll(() => constellationIds(page)).toEqual(listed)
+
+  // A selected card's Open link opens its paper; Back returns to the constellation with nothing selected.
+  await cardOf(FIVE_ID).getByTestId('constellation-select').click()
+  await cardOf(FIVE_ID).getByTestId('constellation-open').click()
+  await expect(page).toHaveURL(/\/p\/0000~00033$/)
+  await page.goBack()
+  await expect(page).toHaveURL(/\/library\?view=constellation$/)
+  await expect(cardOf(FIVE_ID)).toBeVisible({ timeout: 15_000 })
+  await expect(panel).toHaveAttribute('data-count', '0')
+
+  // At 390px the toggle is gone and the list shows, though the URL still asks for the constellation.
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(viewToggle).toHaveCount(0)
+  await expect(canvas).toHaveCount(0)
+  await expect(rowOf(FIVE_ID)).toBeVisible()
+  await expect(page).toHaveURL(/\/library\?view=constellation$/)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+  // Back at 1440 the constellation returns; List drops the parameter.
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await expect(canvas).toBeVisible()
+  await viewToggle.getByRole('button', { name: 'List' }).click()
+  await expect(page).toHaveURL(/\/library$/)
+  await expect(canvas).toHaveCount(0)
+  await expect(page.getByRole('group', { name: 'Sort papers' })).toBeVisible()
+  expect(errors).toEqual([])
+})
+
 test('Read again asks whether to uncheck what finishing checked, and reopens at once when finishing checked nothing', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada] = await users(['Schema ada'])

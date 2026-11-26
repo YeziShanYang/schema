@@ -1,7 +1,8 @@
 /**
  * The Library's topic constellation as data, with no React in it: the topics
  * that two or more of the shown papers share, each paper's own topics, which
- * of them the reader has checked, and which papers share which topics.
+ * of them the reader has checked, which papers share which topics, and which
+ * topics connect the papers the reader selects.
  */
 
 export interface NetworkPaperInput {
@@ -110,6 +111,64 @@ export function libraryNetwork<P extends NetworkPaperInput>(
 /** The papers that share topics with `paperId`, each with the shared topic keys, in the order of `network.pairs`. */
 export function sharedWith(network: Pick<LibraryNetwork, 'pairs'>, paperId: string): { id: string; keys: string[] }[] {
   return network.pairs.filter((p) => p.a === paperId || p.b === paperId).map((p) => ({ id: p.a === paperId ? p.b : p.a, keys: p.keys }))
+}
+
+export interface Connection {
+  key: string
+  name: string
+  checked: boolean
+  /** The selected papers that use the topic, in the order of the topic's papers. */
+  selected: string[]
+  /** The other shown papers that use it. */
+  others: string[]
+  /** Every selected paper uses it. Only set with two or more papers selected. */
+  all: boolean
+}
+
+/**
+ * The shared topics that connect a selection of papers. With one paper
+ * selected, that is every shared topic the paper uses. With two or more, it is
+ * every shared topic that at least two of them use, with `all` set on those
+ * that every one of them uses. Topics used by all come first, then those used
+ * by more of the selection, then the order of `network.shared`. Ids that are
+ * not in the network are ignored.
+ */
+export function selectionConnections(network: Pick<LibraryNetwork, 'papers' | 'shared'>, selected: Iterable<string>): Connection[] {
+  const shown = new Set(network.papers.map((p) => p.id))
+  const sel = new Set([...selected].filter((id) => shown.has(id)))
+  if (!sel.size) return []
+  const need = sel.size === 1 ? 1 : 2
+  return network.shared
+    .map((s, i) => {
+      const mine = s.paperIds.filter((id) => sel.has(id))
+      return {
+        i,
+        c: {
+          key: s.key,
+          name: s.name,
+          checked: s.checked,
+          selected: mine,
+          others: s.paperIds.filter((id) => !sel.has(id)),
+          all: sel.size > 1 && mine.length === sel.size,
+        },
+      }
+    })
+    .filter(({ c }) => c.selected.length >= need)
+    .sort((a, b) => Number(b.c.all) - Number(a.c.all) || b.c.selected.length - a.c.selected.length || a.i - b.i)
+    .map(({ c }) => c)
+}
+
+/** The keys of the shared topics that every selected paper uses; empty unless two or more are selected. */
+export function sharedByAll(network: Pick<LibraryNetwork, 'papers' | 'shared'>, selected: Iterable<string>): string[] {
+  return selectionConnections(network, selected)
+    .filter((c) => c.all)
+    .map((c) => c.key)
+}
+
+/** The selected ids still among the shown papers, in their order. */
+export function keepShown(selected: readonly string[], network: Pick<LibraryNetwork, 'papers'>): string[] {
+  const shown = new Set(network.papers.map((p) => p.id))
+  return selected.filter((id) => shown.has(id))
 }
 
 /**

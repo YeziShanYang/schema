@@ -630,6 +630,73 @@
 .graph-links path.hot { stroke: var(--color-primary); }
 .graph-node[data-dragging="true"] { cursor: grabbing; }
 
+/* ---------- Library topic constellation (TopicConstellation.tsx) ----------
+   Links are dashed like the floating graph's. Shared topics are outlined in
+   the accent, or filled green once checked, and a paper's own topics are
+   small dots, green when checked. Whatever the hover or the selection doesn't
+   reach fades to 22%, and its links turn solid accent. With a selection,
+   hovering something else lifts it to 60% (data-preview). Selected cards keep
+   a 2px accent outline, and a topic every selected paper uses gets a second
+   ring. */
+.cl-card {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--cl-card-w, 184px);
+  height: 46px;
+  color: var(--color-foreground);
+  background-color: var(--color-card);
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-ring);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  will-change: transform;
+  transition-property: opacity, box-shadow, background-color;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+.cl-card[data-hi] { z-index: 5; box-shadow: 0 0 0 1.5px var(--color-primary); }
+.cl-card[data-selected] {
+  z-index: 4;
+  box-shadow: 0 0 0 2px var(--color-primary);
+  background-color: color-mix(in oklab, var(--color-primary) 6%, var(--color-card));
+}
+.cl-card[data-selected][data-hi] { z-index: 5; }
+.cl-card[data-dragging] { z-index: 10; cursor: grabbing; }
+.cl-card[data-dragging] button { cursor: grabbing; }
+.cl-link {
+  fill: none;
+  stroke: var(--color-link);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  transition-property: opacity, stroke;
+  transition-duration: 150ms;
+}
+.cl-link[data-hi] { stroke: var(--color-primary); stroke-dasharray: none; stroke-width: 1.5; }
+.cl-dot { fill: var(--color-faint); opacity: 0.55; transition: opacity 150ms; }
+.cl-dot[data-checked] { fill: var(--color-known); opacity: 0.9; }
+.cl-topic { pointer-events: auto; transition: opacity 150ms; }
+.cl-topic .cl-hit { fill: transparent; stroke: none; }
+.cl-topic .cl-node { fill: var(--color-card); stroke: var(--color-primary); stroke-width: 1.5; }
+.cl-topic[data-checked] .cl-node { fill: var(--color-known); stroke: var(--color-known); }
+.cl-topic .cl-ring { fill: none; stroke: var(--color-primary); stroke-width: 1.5; opacity: 0; transition: opacity 150ms; }
+.cl-topic[data-checked] .cl-ring { stroke: var(--color-known); }
+.cl-topic[data-all] .cl-ring { opacity: 1; }
+.cl-topic[data-hi] .cl-node { stroke-width: 2.5; }
+.cl-topic text {
+  font-size: 11.5px;
+  fill: var(--color-foreground);
+  paint-order: stroke;
+  stroke: var(--color-background);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+.cl-topic[data-all] text { font-weight: 600; }
+.cl-card[data-dim], .cl-link[data-dim], .cl-dot[data-dim], .cl-topic[data-dim] { opacity: 0.22; }
+.cl-card[data-dim][data-preview], .cl-link[data-dim][data-preview], .cl-dot[data-dim][data-preview], .cl-topic[data-dim][data-preview] { opacity: 0.6; }
+
 /* ---------- Sequence strip ----------
    Steps never wrap; an overflowing row fades out at the edge that has more. */
 .strip-scroll { scrollbar-width: none; }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { constellationHeight, libraryNetwork, networkShape, sharedWith } from './library-network'
+import { constellationHeight, keepShown, libraryNetwork, networkShape, selectionConnections, sharedByAll, sharedWith } from './library-network'
 
 const names = new Map([
   ['sm', 'Softmax function'],
@@ -101,6 +101,55 @@ describe('libraryNetwork', () => {
 
   it('is empty for no papers', () => {
     expect(libraryNetwork([], [], names)).toEqual({ papers: [], shared: [], pairs: [] })
+  })
+})
+
+describe('selectionConnections', () => {
+  const n = libraryNetwork(papers, [{ paperId: 'x', topicKey: 'gd' }], names)
+  const keys = (sel: string[]) => selectionConnections(n, sel).map((c) => c.key)
+
+  it('is empty with nothing selected', () => {
+    expect(selectionConnections(n, [])).toEqual([])
+    expect(selectionConnections(n, ['gone'])).toEqual([])
+  })
+
+  it('gives one selected paper every shared topic it uses, with the papers it shares each with', () => {
+    expect(selectionConnections(n, ['p3'])).toEqual([
+      { key: 'sm', name: 'Softmax function', checked: false, selected: ['p3'], others: ['p1', 'p2'], all: false },
+      { key: 'gd', name: 'Gradient descent', checked: true, selected: ['p3'], others: ['p1'], all: false },
+    ])
+    expect(keys(['p4'])).toEqual([])
+  })
+
+  it('keeps, for two or more, the topics at least two of them use, all-shared first', () => {
+    expect(keys(['p1', 'p2'])).toEqual(['sm', 'att'])
+    expect(keys(['p2', 'p3'])).toEqual(['sm'])
+    const three = selectionConnections(n, ['p1', 'p2', 'p3'])
+    expect(three.map((c) => [c.key, c.selected, c.all])).toEqual([
+      ['sm', ['p1', 'p2', 'p3'], true],
+      ['att', ['p1', 'p2'], false],
+      ['gd', ['p1', 'p3'], false],
+    ])
+    expect(three[1].others).toEqual([])
+  })
+
+  it('finds no connection between papers that share nothing', () => {
+    expect(keys(['p2', 'p4'])).toEqual([])
+    expect(keys(['p1', 'gone'])).toEqual(['sm', 'att', 'gd'])
+  })
+
+  it('names the topics every selected paper uses', () => {
+    expect(sharedByAll(n, ['p1', 'p2'])).toEqual(['sm', 'att'])
+    expect(sharedByAll(n, ['p1', 'p2', 'p3'])).toEqual(['sm'])
+    expect(sharedByAll(n, ['p1', 'p2', 'p3', 'p4'])).toEqual([])
+    expect(sharedByAll(n, ['p1'])).toEqual([])
+  })
+})
+
+describe('keepShown', () => {
+  it('drops selected papers that are no longer shown, keeping the order', () => {
+    const n = libraryNetwork(papers.slice(0, 2), [], names)
+    expect(keepShown(['p2', 'p3', 'p1'], n)).toEqual(['p2', 'p1'])
   })
 })
 
