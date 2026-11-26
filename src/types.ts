@@ -207,6 +207,8 @@ export interface RoadmapData {
   finishedAt: number
   /** When the reader marked the overview read; 0 or missing when unread. */
   overviewReadAt?: number
+  /** Library save state: missing when never decided, a time when saved, 0 when the reader removed it (lib/membership). */
+  savedAt?: number | null
 }
 
 /** "current" and "previous" are legacy values from the single-target model and read as "active". */

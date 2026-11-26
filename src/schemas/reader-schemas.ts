@@ -1,6 +1,6 @@
 /**
- * Per-reader state: the knowledge profile and the papers each reader has
- * opened. Private to the owner. `userId` is userBound so a client cannot
+ * Per-reader state: the knowledge profile, checkmarks, the papers each reader
+ * has opened or saved, and workspaces. Private to the owner. `userId` is userBound so a client cannot
  * write a row for someone else, and uniqueOn keeps one row per topic (or
  * paper) per reader.
  */
@@ -77,6 +77,13 @@ export const conceptKnowledgeSchema: CollectionSchema = {
   permissions: ownOnly,
 }
 
+/**
+ * One row per (reader, paper): history (lastOpenedAt, written on every open),
+ * reading state (status, finishedAt, overviewReadAt) and the Library save
+ * state. `savedAt` is missing when the reader never decided, a time when they
+ * saved the paper and 0 when they removed it from their Library. Opening alone
+ * never puts a paper in the Library; src/lib/membership.ts has the rule.
+ */
 export const roadmapsSchema: CollectionSchema = {
   name: 'roadmaps',
   columns: [
@@ -99,6 +106,8 @@ export const roadmapsSchema: CollectionSchema = {
     { name: 'lastOpenedAt', storage: 'number', interpretation: 'plain' },
     { name: 'finishedAt', storage: 'number', interpretation: 'plain' },
     { name: 'overviewReadAt', storage: 'number', interpretation: 'plain' },
+    // Added after release: rows written before it read as missing (see src/lib/membership.ts).
+    { name: 'savedAt', storage: 'number', interpretation: 'plain' },
   ],
   ownerField: 'userId',
   uniqueOn: ['userId', 'paperId'],
