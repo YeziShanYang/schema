@@ -17,8 +17,10 @@
  * selected card shows an Open link to its paper. One selected card keeps the
  * hover emphasis. Two or more emphasize the topics that link at least two of
  * them, with a second ring on the topics all of them use. The panel under the
- * canvas names the selection and those topics. Clear, Esc or a click on empty
- * canvas clears it. A drag never selects.
+ * canvas names the selection and those topics, and its Add to workspace
+ * (PlacementControl in add mode) adds every selected paper to a workspace,
+ * or to a new one, and saves them. Clear, Esc or a click on empty canvas
+ * clears the selection. A drag never selects.
  *
  * Under prefers-reduced-motion the simulation runs to rest before the first
  * paint and the picture holds still: no drift, no turning rings, and a
@@ -37,6 +39,7 @@ import { arxivSlug } from '@/lib/arxiv'
 import { constellationHeight, keepShown, networkShape, selectionConnections, sharedWith, type Connection, type LibraryNetwork } from '@/lib/library-network'
 import { cn, plural } from '@/lib/utils'
 import { ArrowRightIcon } from '../icons'
+import { PlacementControl } from '../PlacementControl'
 
 export interface ConstellationPaper {
   /** The paper's record id. */
@@ -748,6 +751,10 @@ function SelectionPanel({
   const some = connections.filter((c) => !c.all)
   const title = (id: string) => byId.get(id)?.title ?? ''
   const titles = (ids: string[]) => ids.map((id) => cut(title(id), 40)).join(', ')
+  const papers = useMemo(
+    () => selected.map((id) => ({ paperId: id, arxivId: byId.get(id)?.arxivId ?? '', title: byId.get(id)?.title ?? '' })),
+    [selected, byId],
+  )
 
   const status =
     k === 0
@@ -774,9 +781,12 @@ function SelectionPanel({
           {status}
         </p>
         {k > 0 && (
-          <Button size="sm" variant="outline" onClick={onClear} data-testid="constellation-clear">
-            Clear
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <PlacementControl mode="add" papers={papers} testId="constellation-add" />
+            <Button size="sm" variant="outline" onClick={onClear} data-testid="constellation-clear">
+              Clear
+            </Button>
+          </div>
         )}
       </div>
       {k > 0 && (
