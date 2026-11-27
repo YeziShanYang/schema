@@ -1939,6 +1939,39 @@ test('opening an analyzed paper leaves it out of the Library but lists it in Rec
   await expect(rowOf()).toHaveCount(0)
 })
 
+test('a paper the reader starts analyzing goes in their Library without a workspace; another reader opening it does not get it', async ({ users }) => {
+  test.setTimeout(200_000)
+  // Bob requests it: the daily-cap spec uses up his papers anyway, which leaves Cara's and Ada's to the failure specs.
+  const [, bob, dana] = await users(['Schema ada', 'Schema bob', 'Schema dana'])
+  test.skip((await allowanceLeft(bob.page)) === 0, 'Bob is at the daily cap in this local state')
+  let id = await newFixtureId(bob.page, '')
+  while (/(33|44|55)$/.test(id)) id = await newFixtureId(bob.page, '')
+  const slug = id.replace('.', '~')
+  const started = await action(bob.page, 'analyzePaper', { input: id })
+  expect(started.success).toBe(true)
+  expect(started.data).toMatchObject({ arxivId: id, existing: false })
+  expect(started.data.workspaceId).toBeUndefined()
+
+  // In Bob's Library at once, filed nowhere, and still out of his Recent papers, since he has not opened it.
+  const bobRow = bob.page.locator(`[data-testid="library-row"][data-arxiv="${id}"]`)
+  await bob.page.goto('/library')
+  await libraryLoaded(bob.page)
+  await expect(bobRow).toBeVisible({ timeout: 15_000 })
+  await expect(bobRow.getByTestId('library-no-workspace')).toHaveText('No workspace')
+  await expect(bob.page.getByTestId('sidebar-recent').locator(`a[href="/p/${slug}"]`)).toHaveCount(0)
+  await expect(bobRow).toHaveAttribute('data-paper-status', 'ready', { timeout: READY_TIMEOUT })
+
+  // Dana only opens it: it joins her Recent papers, not her Library.
+  const page = dana.page
+  await calm(page)
+  await openPaperPage(page, id)
+  await expect(page.getByTestId('placement-open')).toHaveText('Save')
+  await expect(page.getByTestId('sidebar-recent').locator(`a[href="/p/${slug}"]`)).toBeVisible({ timeout: 15_000 })
+  await page.goto('/library')
+  await libraryLoaded(page)
+  await expect(page.locator(`[data-testid="library-row"][data-arxiv="${id}"]`)).toHaveCount(0)
+})
+
 test('Save puts a paper in the Library and unsaving takes it out, checkmarks or not', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada, dana] = await users(['Schema ada', 'Schema dana'])
@@ -2532,6 +2565,10 @@ test('a failure before anything is billed gives the slot back; after conversion 
   await expect(retrier.page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', /queued|processing/, { timeout: 15_000 })
   await expect(retrier.page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'failed', { timeout: READY_TIMEOUT })
   expect(await allowanceLeft(retrier.page)).toBe(retrierBefore - 1)
+  // Retrying started the analysis again, so the paper is now in the retrier's Library too.
+  await retrier.page.goto('/library')
+  await libraryLoaded(retrier.page)
+  await expect(retrier.page.locator(`[data-testid="library-row"][data-arxiv="${scanned}"]`)).toBeVisible({ timeout: 15_000 })
 })
 
 test('the library shows a failed paper as failed, with Retry and no Mark finished', async ({ users }) => {

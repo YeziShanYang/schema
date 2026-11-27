@@ -72,6 +72,19 @@ async function addToWorkspace(
   await tools.update('workspaces', ws.recordId, { currentPaperId: paper.paperId })
 }
 
+/**
+ * Save a paper in the Library of the reader who just started its analysis
+ * (a new paper or a retry), in a workspace or not. The analysis has started
+ * by then, so a failure here is only logged.
+ */
+async function saveStartedPaper(tools: ActionTools, userId: string, paper: { paperId: string; arxivId: string; title: string }, from: string) {
+  try {
+    await saveFiledPaper(tools, userId, paper)
+  } catch (e) {
+    console.warn(`[${from}] saving ${paper.arxivId} in the Library failed: ${e instanceof Error ? e.message : String(e)}`)
+  }
+}
+
 /** Look a paper up on arXiv before adding it. Free (public arXiv API), not capped, needs sign-in. */
 const peekPaper: ActionHandler<Env> = async ({ params, tools, env }) => {
   const ref = parseArxivId(typeof params.input === 'string' ? params.input : '')
@@ -129,6 +142,11 @@ interface AnalyzeResult {
   workspaceId?: string
 }
 
+/**
+ * Open a paper that exists, filing it in a workspace when one is given, or
+ * start a new analysis, which uses one of the caller's daily papers and
+ * saves the paper in their Library whether or not it goes in a workspace.
+ */
 const analyzePaper: ActionHandler<Env> = async ({ userId, params, tools, env }) => {
   const ref = parseArxivId(typeof params.input === 'string' ? params.input : '')
   if (!ref) return fail(INVALID_INPUT)
@@ -219,6 +237,7 @@ const analyzePaper: ActionHandler<Env> = async ({ userId, params, tools, env }) 
     })
     return fail('Could not start the analysis. Try again.')
   }
+  await saveStartedPaper(tools, userId, { paperId, arxivId: ref.id, title: m.title }, 'analyzePaper')
   if (workspace) await addToWorkspace(tools, workspace, { paperId, arxivId: ref.id, title: m.title })
   console.info(`[analyzePaper] queued ${ref.id} for ${userId} (${slot.state.used} in the last 24h)`)
   return { success: true, data: { paperId, arxivId: ref.id, existing: false, status: 'queued', workspaceId: workspace?.recordId } satisfies AnalyzeResult }
@@ -256,6 +275,7 @@ const retryPaper: ActionHandler<Env> = async ({ userId, params, tools, env }) =>
     await tools.update('papers', paperId, { status: 'failed', stage: 'failed', error: 'Could not restart the analysis.' })
     return fail('Could not restart the analysis. Try again.')
   }
+  await saveStartedPaper(tools, userId, { paperId, arxivId: paper.data.arxivId, title: paper.data.title }, 'retryPaper')
   return { success: true, data: { paperId } }
 }
 
