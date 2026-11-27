@@ -104,9 +104,11 @@ test('failure states: bad input and a paper that does not exist', async ({ users
   const [ada] = await users(['Schema ada'])
   const page = ada.page
   await page.goto('/home')
-  await page.getByTestId('analyze-input').fill('hello world')
+  // Words are a search of analyzed papers; with no match the box says how to analyze one.
+  await page.getByTestId('analyze-input').fill('hello world zzqx')
+  await expect(page.getByTestId('paper-search-empty')).toBeVisible({ timeout: 15_000 })
   await page.getByTestId('analyze-submit').click()
-  await expect(page.getByTestId('analyze-error')).toContainText('does not look like an arXiv link')
+  await expect(page.getByTestId('analyze-error')).toHaveText('No analyzed paper matches. Paste its arXiv link to analyze it.')
   await page.getByTestId('analyze-input').fill('2611.99999')
   await page.getByTestId('analyze-submit').click()
   await expect(page.getByTestId('analyze-error')).toContainText('arXiv has no paper', { timeout: 30_000 })

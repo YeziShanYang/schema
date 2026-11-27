@@ -938,6 +938,15 @@ test("Home's paper box finds analyzed papers by name, opens a pick from the keyb
   await input.press('ArrowDown')
   await expect(list).toBeVisible()
   await expect(options.first()).toHaveAttribute('aria-selected', 'true')
+  // Enter with nothing highlighted asks for a pick and keeps the list open; typing clears the message.
+  await input.press('Escape')
+  await input.press('Enter')
+  await expect(page.getByTestId('analyze-error')).toHaveText('Pick a paper from the list, or paste an arXiv link.')
+  await expect(list).toBeVisible()
+  await expect(page).toHaveURL(/\/home$/)
+  await input.press('End')
+  await input.pressSequentially(' ')
+  await expect(page.getByTestId('analyze-error')).toHaveCount(0)
   // A click outside closes it too.
   await page.getByText('Open a paper', { exact: true }).click()
   await expect(list).toBeHidden()
@@ -2828,7 +2837,13 @@ test('landing shows the bundled example graph and a branch panel', async ({ page
 test('bad input shows a clear error', async ({ users }) => {
   const [ada] = await users(['Schema ada'])
   await ada.page.goto('/home')
-  await ada.page.getByTestId('analyze-input').fill('not a paper')
+  // Words that match no analyzed paper say so, and a single character goes to the server's check.
+  await ada.page.getByTestId('analyze-input').fill('zzqx not a paper')
+  await expect(ada.page.getByTestId('paper-search-empty')).toBeVisible({ timeout: 15_000 })
+  await ada.page.getByTestId('analyze-submit').click()
+  await expect(ada.page.getByTestId('analyze-error')).toHaveText('No analyzed paper matches. Paste its arXiv link to analyze it.')
+  await ada.page.getByTestId('analyze-input').fill('x')
+  await expect(ada.page.getByTestId('analyze-error')).toHaveCount(0)
   await ada.page.getByTestId('analyze-submit').click()
   await expect(ada.page.getByTestId('analyze-error')).toContainText('does not look like an arXiv link')
 })

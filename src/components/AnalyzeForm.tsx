@@ -10,7 +10,8 @@
  * Text that is not a link or id searches the analyzed papers by title,
  * author and id (lib/paper-search) and lists the best matches under the box,
  * as an ARIA combobox. Picking one submits its arXiv id, exactly as if the
- * reader had pasted it.
+ * reader had pasted it. Submitting the words themselves asks the reader to
+ * pick a result, or says nothing matches, without calling the server.
  */
 
 import { useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
@@ -84,6 +85,16 @@ export function AnalyzeForm({
 
   function submit(e: FormEvent) {
     e.preventDefault()
+    // Words, not a link: only a picked result can open, so say what to do instead of asking the server.
+    // While the papers are still loading, the list will show the results or say nothing matches.
+    if (nameSearch) {
+      if (loading || matches.length) {
+        setListOpen(true)
+        return setError('Pick a paper from the list, or paste an arXiv link.')
+      }
+      closeList()
+      return setError('No analyzed paper matches. Paste its arXiv link to analyze it.')
+    }
     closeList()
     void open(input)
   }
@@ -134,6 +145,7 @@ export function AnalyzeForm({
               value={input}
               onChange={(e) => {
                 setInput(e.target.value)
+                setError('')
                 setListOpen(true)
                 setActive(-1)
               }}
