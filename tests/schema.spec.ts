@@ -2425,6 +2425,17 @@ test('the Workspace filter keeps ?ws= in the URL: none shows only unfiled papers
   const page = dana.page
   await calm(page)
   await page.setViewportSize({ width: 1440, height: 900 })
+  // Analyzing a paper saves it, so the daily-cap spec leaves random fixture papers of Dana's outside any workspace.
+  // Those that use the topic this spec filters by leave the Library first, so the empty state below is this spec's own.
+  await page.goto('/library?ws=none&topic=fixture-accuracy-metric')
+  await libraryLoaded(page)
+  const stray = page.getByTestId('library-row')
+  for (let n = await stray.count(); n > 0; n = await stray.count()) {
+    await stray.first().getByTestId('library-place').click()
+    await page.getByTestId('placement-popover').getByRole('checkbox', { name: 'In my Library' }).click()
+    await expect(stray).toHaveCount(n - 1)
+    await page.keyboard.press('Escape')
+  }
   // SECOND_ID is saved in no workspace, and FIXTURE_ID goes into a new one.
   await openPaperPage(page, SECOND_ID)
   await removeFromLibrary(page)
