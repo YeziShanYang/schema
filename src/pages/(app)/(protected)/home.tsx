@@ -1,7 +1,7 @@
 /**
- * Home: continue where you left off, paste an arXiv link (an analyzed paper
- * opens at once, a new one goes through the Add window), recently analyzed
- * papers. It has no header bar, only a visually hidden heading, and on phones
+ * Home: continue where you left off, the paper box (search analyzed papers
+ * by name, or paste an arXiv link: an analyzed paper opens at once, a new one
+ * goes through the Add window), recently analyzed papers. It has no header bar, only a visually hidden heading, and on phones
  * an Add button at the top. Requires sign-in (it sits under (protected)).
  */
 
@@ -57,10 +57,11 @@ export default function HomePage() {
           </section>
         )}
 
-        <section className="surface enter p-4" style={{ ['--i' as string]: 1 }}>
+        {/* Stacked above the sections after it, so the paper box's search list is drawn over them. */}
+        <section className="surface enter relative z-10 p-4" style={{ ['--i' as string]: 1 }}>
           <div className="label">Open a paper</div>
           <p className="mb-3 mt-1 text-sm text-muted-foreground">
-            Paste an arXiv link or id. A paper already analyzed opens right away. A paper nobody has analyzed takes {ANALYSIS_TIME}, and you choose its workspace first.
+            Search analyzed papers by title or author, or paste an arXiv link or id. An analyzed paper opens right away and is free. A paper nobody has analyzed takes {ANALYSIS_TIME}, and you choose its workspace first.
           </p>
           <AnalyzeForm />
         </section>

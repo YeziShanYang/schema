@@ -879,6 +879,93 @@ test("Home's paper box opens an analyzed paper at once and sends a new one throu
   expect(await allowanceLeft(page)).toBe(before)
 })
 
+test("Home's paper box finds analyzed papers by name, opens a pick from the keyboard, and still takes a link", async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await openReadyFixturePaper(page)
+  const before = await allowanceLeft(page)
+  const input = page.getByTestId('analyze-input')
+  await expect(input).toHaveAttribute('role', 'combobox')
+  // The box controls the listbox, which stays in the page while it is hidden.
+  const list = page.locator(`[id="${await input.getAttribute('aria-controls')}"]`)
+  await expect(list).toHaveAttribute('role', 'listbox')
+  await expect(list).toHaveAttribute('aria-label', 'Analyzed papers')
+  const options = list.getByRole('option')
+
+  // One character is not a search yet.
+  await input.fill('c')
+  await expect(input).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByTestId('paper-search')).toBeHidden()
+
+  // Every word must match somewhere: a title word and part of the arXiv id leave only that paper.
+  await input.fill('curvature 00001')
+  await expect(input).toHaveAttribute('aria-expanded', 'true')
+  await expect(options).toHaveCount(1, { timeout: 15_000 })
+  const only = options.first()
+  await expect(only).toHaveAttribute('data-arxiv', FIXTURE_ID)
+  await expect(only).toContainText(FIXTURE_TITLE)
+  await expect(only).toContainText(`Author et al. · ${FIXTURE_ID}`)
+  await expect(only).toContainText('Free')
+  expect((await only.boundingBox())!.height).toBeGreaterThanOrEqual(24)
+  // Down highlights it, and Enter opens it as if its id had been submitted: no slot used.
+  await input.press('ArrowDown')
+  await expect(only).toHaveAttribute('aria-selected', 'true')
+  await expect(input).toHaveAttribute('aria-activedescendant', (await only.getAttribute('id'))!)
+  await input.press('Enter')
+  await expect(page).toHaveURL(new RegExp(`/p/${FIXTURE_SLUG}$`), { timeout: 15_000 })
+  await expect(page.getByTestId('paper-page')).toHaveAttribute('data-paper-status', 'ready', { timeout: 20_000 })
+  expect(await allowanceLeft(page)).toBe(before)
+
+  // Title words in any case list analyzed papers, each marked Free; Up from the top wraps to the last.
+  await input.fill('ATTENTION curvature')
+  await expect(options.first()).toBeVisible({ timeout: 15_000 })
+  const count = await options.count()
+  expect(count).toBeLessThanOrEqual(6)
+  for (const o of await options.all()) await expect(o).toContainText('Free')
+  await input.press('ArrowDown')
+  await expect(options.first()).toHaveAttribute('aria-selected', 'true')
+  await input.press('ArrowUp')
+  await expect(input).toHaveAttribute('aria-activedescendant', (await options.last().getAttribute('id'))!)
+  await input.press('ArrowDown')
+  await expect(options.first()).toHaveAttribute('aria-selected', 'true')
+  // Esc closes the list and keeps the text; Down opens it again.
+  await input.press('Escape')
+  await expect(list).toBeHidden()
+  await expect(input).toHaveAttribute('aria-expanded', 'false')
+  await expect(input).not.toHaveAttribute('aria-activedescendant')
+  await expect(input).toHaveValue('ATTENTION curvature')
+  await input.press('ArrowDown')
+  await expect(list).toBeVisible()
+  await expect(options.first()).toHaveAttribute('aria-selected', 'true')
+  // A click outside closes it too.
+  await page.getByText('Open a paper', { exact: true }).click()
+  await expect(list).toBeHidden()
+  await expect(input).toHaveAttribute('aria-expanded', 'false')
+
+  // At 390px the list fits the screen.
+  await page.setViewportSize({ width: 390, height: 844 })
+  await input.fill('curvature attention')
+  await expect(options.first()).toBeVisible()
+  const box = (await page.getByTestId('paper-search').boundingBox())!
+  expect(box.x + box.width).toBeLessThanOrEqual(390)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+  await page.setViewportSize({ width: 1280, height: 800 })
+
+  // Nothing matches: the list says how to analyze it instead.
+  await input.fill('zzqx no such paper')
+  await expect(page.getByTestId('paper-search-empty')).toHaveText('No analyzed paper matches. Paste its arXiv link to analyze it.')
+  await expect(options).toHaveCount(0)
+
+  // A link is not a search: no list, and it opens the paper as before.
+  await input.fill(`https://arxiv.org/abs/${FIXTURE_ID}`)
+  await expect(input).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByTestId('paper-search')).toBeHidden()
+  await page.getByTestId('analyze-submit').click()
+  await expect(page).toHaveURL(new RegExp(`/p/${FIXTURE_SLUG}$`), { timeout: 15_000 })
+  expect(await allowanceLeft(page)).toBe(before)
+})
+
 test('the Add window preselects the workspace opened last, and an analyzed paper can open without one', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada] = await users(['Schema ada'])
