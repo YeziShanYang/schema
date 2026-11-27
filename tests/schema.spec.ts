@@ -2545,6 +2545,72 @@ test('the constellation adds the selected papers to a workspace and saves them',
   }
 })
 
+test('with motion, the constellation appears already at rest and glides to a new layout on a resize', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada, dana] = await users(['Schema ada', 'Schema dana'])
+  for (const id of [FIXTURE_ID, SECOND_ID]) await openReadyFixturePaper(ada.page, id)
+  const page = dana.page
+  await calm(page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  for (const id of [FIXTURE_ID, SECOND_ID]) {
+    await openPaperPage(page, id)
+    await saveFromPaperPage(page)
+  }
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  // Every animation frame from the first one that shows cards: each card's position and the canvas's settled flag.
+  await page.addInitScript(() => {
+    type Frame = { t: number; settled: string | undefined; pos: Record<string, [number, number]> }
+    const w = window as unknown as { __frames: Frame[]; __sample: (ms: number) => void }
+    w.__sample = (ms: number) => {
+      w.__frames = []
+      let start = 0
+      const loop = (t: number) => {
+        const cards = document.querySelectorAll<HTMLElement>('[data-testid="constellation-card"]')
+        if (cards.length) {
+          if (!start) start = t
+          const pos: Record<string, [number, number]> = {}
+          cards.forEach((c) => {
+            const r = c.getBoundingClientRect()
+            pos[c.getAttribute('data-arxiv') ?? ''] = [r.x, r.y]
+          })
+          const canvas = document.querySelector<HTMLElement>('[data-testid="library-constellation"]')
+          w.__frames.push({ t: t - start, settled: canvas?.dataset.settled, pos })
+        }
+        if (!start || t - start < ms) requestAnimationFrame(loop)
+      }
+      requestAnimationFrame(loop)
+    }
+    w.__sample(2500)
+  })
+  type Frame = { t: number; settled: string | undefined; pos: Record<string, [number, number]> }
+  const frames = () => page.evaluate(() => (window as unknown as { __frames: Frame[] }).__frames)
+  const travel = (fs: Frame[]) => {
+    const last = fs[fs.length - 1].pos
+    return Math.max(...Object.keys(last).map((id) => Math.hypot(fs[0].pos[id][0] - last[id][0], fs[0].pos[id][1] - last[id][1])))
+  }
+
+  await page.goto('/library?view=constellation')
+  await libraryLoaded(page)
+  const canvas = page.getByTestId('library-constellation')
+  await expect.poll(async () => (await frames()).at(-1)?.t ?? 0, { timeout: 15_000 }).toBeGreaterThanOrEqual(2400)
+  const mount = await frames()
+  // The first frame with cards is already the settled web: from there the cards only drift (5px and 4px each way).
+  expect(mount[0].settled).toBe('true')
+  expect(travel(mount)).toBeLessThanOrEqual(16)
+
+  // A narrower canvas: the web is laid out again and glides there, done well inside a second.
+  await page.evaluate(() => (window as unknown as { __sample: (ms: number) => void }).__sample(2000))
+  await page.setViewportSize({ width: 1100, height: 900 })
+  await expect(canvas).toHaveAttribute('data-settled', 'true', { timeout: 1_500 })
+  await expect.poll(async () => (await frames()).at(-1)?.t ?? 0, { timeout: 10_000 }).toBeGreaterThanOrEqual(1900)
+  const resize = await frames()
+  const moving = resize.findIndex((f) => f.settled === 'false')
+  expect(moving).toBeGreaterThanOrEqual(0)
+  const rest = resize.slice(moving).find((f) => f.settled === 'true')
+  expect(rest?.t ?? Infinity).toBeLessThan(1000)
+  expect(await constellationFits(page)).toEqual([])
+})
+
 test('a new workspace made with papers from the Library holds them and asks for next-step picks', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada, dana] = await users(['Schema ada', 'Schema dana'])

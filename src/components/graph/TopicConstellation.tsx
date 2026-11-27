@@ -4,13 +4,16 @@
  * and each paper's own topics are dots on two rings around its card. Green
  * marks what the reader has checked. The data comes from lib/library-network.
  *
- * A d3-force simulation places the nodes; it settles from the center. One
- * requestAnimationFrame loop ticks it and writes positions straight to the
- * DOM, so React renders the SVG and the cards once per data or selection
- * change and never per frame. Once the web settles, cards drift a few pixels
- * on slow sine offsets and the rings turn in opposite directions. A drag past
- * 4px moves a card, and on release it springs back into the web. Every card,
- * dot and topic stays inside the canvas.
+ * A d3-force simulation places the nodes. It runs to rest before the first
+ * paint, so the web never shows its settling, and the finished picture fades
+ * in. When the network or the canvas size changes, the web is settled again
+ * at once and each node glides from where it was drawn to its new place
+ * (GLIDE_MS, ease-out). One requestAnimationFrame loop writes positions
+ * straight to the DOM, so React renders the SVG and the cards once per data
+ * or selection change and never per frame. Cards drift a few pixels on slow
+ * sine offsets and the rings turn in opposite directions. A drag past 4px
+ * moves a card, the web follows it live, and on release the card springs
+ * back into the web. Every card, dot and topic stays inside the canvas.
  *
  * Hovering or focusing a card or topic highlights what it connects to.
  * Clicking a card (or Space or Enter on it) toggles its selection, and a
@@ -22,9 +25,9 @@
  * or to a new one, and saves them. Clear, Esc or a click on empty canvas
  * clears the selection. A drag never selects.
  *
- * Under prefers-reduced-motion the simulation runs to rest before the first
- * paint and the picture holds still: no drift, no turning rings, and a
- * dragged card returns to its place on release.
+ * Under prefers-reduced-motion the picture holds still: no drift, no turning
+ * rings, no glide (a new layout replaces the old one at once), and a dragged
+ * card returns to its place on release.
  *
  * This module is lazy-loaded by the Library page, so d3-force is only
  * downloaded by readers who open the constellation.
@@ -75,15 +78,26 @@ const CAPTION_H = 26
 /** The least gap between anything drawn and the canvas edge. */
 const EDGE = 4
 const DRAG_THRESHOLD = 4
+/** How long a node takes to glide to its place after a new layout. */
+const GLIDE_MS = 450
+const easeOutCubic = (p: number) => 1 - (1 - p) ** 3
+/** Ticks allowed to bring the web to rest before it is drawn. */
+const SETTLE_TICKS = 600
 
 interface SimNode extends SimulationNodeDatum {
   id: string
   kind: 'paper' | 'topic'
   x: number
   y: number
-  /** Where the card was last drawn, drift included. */
+  /** Where the node was last drawn, drift included. */
   drawX: number
   drawY: number
+  /** Where the node was last drawn without its drift: part way along a glide, or its place in the web. */
+  baseX: number
+  baseY: number
+  /** Where the current glide started. */
+  fromX: number
+  fromY: number
   phase: number
   /** How much of its drift a card shows, from 0 while dragged back up to 1. */
   drift: number
@@ -170,6 +184,8 @@ export default function TopicConstellation({ network, countsReady }: { network: 
   const tip = useRef<TipApi | null>(null)
   // Positions by node id, kept across re-layouts so a filter change moves the web instead of rebuilding it.
   const saved = useRef(new Map<string, { x: number; y: number }>())
+  // One clock for the drift and the rings across re-layouts, so neither jumps when the web is laid out again.
+  const epoch = useRef(0)
   const latest = useRef(network)
   latest.current = network
   const shape = useMemo(() => networkShape(network), [network])
@@ -212,19 +228,21 @@ export default function TopicConstellation({ network, countsReady }: { network: 
 
     // Layout order is by arXiv id, not last opened, so the same papers settle the same way on every visit.
     const order = [...net.papers].sort((a, b) => a.arxivId.localeCompare(b.arxivId) || a.id.localeCompare(b.id))
-    const blank = { drawX: 0, drawY: 0, drift: 1, label: '', labelW: 0, restX: 0, restY: 0 }
+    const blank = { drawX: 0, drawY: 0, baseX: 0, baseY: 0, fromX: 0, fromY: 0, drift: 1, label: '', labelW: 0, restX: 0, restY: 0 }
     const papers: SimNode[] = order.map((p, i) => {
       const old = prev.get(p.id)
       const x = old?.x ?? w / 2 + Math.cos(i) * 40
       const y = old?.y ?? h / 2 + Math.sin(i) * 40
-      return { ...blank, id: p.id, kind: 'paper', x, y, drawX: x, drawY: y, phase: seeded(p.id) * Math.PI * 2, el: cardEls.get(p.id) ?? null }
+      return { ...blank, id: p.id, kind: 'paper', x, y, drawX: x, drawY: y, baseX: x, baseY: y, phase: seeded(p.id) * Math.PI * 2, el: cardEls.get(p.id) ?? null }
     })
     const paperNode = new Map(papers.map((n) => [n.id, n]))
     const topics: SimNode[] = net.shared.map((s) => {
       const old = prev.get(`t:${s.key}`)
       const users = s.paperIds.map((id) => paperNode.get(id)!).filter(Boolean)
       const mean = (f: (n: SimNode) => number) => users.reduce((sum, n) => sum + f(n), 0) / Math.max(1, users.length)
-      return { ...blank, id: `t:${s.key}`, kind: 'topic', x: old?.x ?? mean((n) => n.x), y: old?.y ?? mean((n) => n.y), phase: 0, label: cut(s.name, LABEL_MAX), el: topicEls.get(s.key) ?? null }
+      const x = old?.x ?? mean((n) => n.x)
+      const y = old?.y ?? mean((n) => n.y)
+      return { ...blank, id: `t:${s.key}`, kind: 'topic', x, y, drawX: x, drawY: y, baseX: x, baseY: y, phase: 0, label: cut(s.name, LABEL_MAX), el: topicEls.get(s.key) ?? null }
     })
     const topicNode = new Map(topics.map((n) => [n.id, n]))
     const links: LinkDatum[] = net.shared.flatMap((s) =>
@@ -276,21 +294,35 @@ export default function TopicConstellation({ network, countsReady }: { network: 
     sim.alpha(relayout ? 0.5 : 1)
 
     const settleNow = () => {
-      for (let i = 0; i < 600 && sim.alpha() >= sim.alphaMin(); i++) {
+      for (let i = 0; i < SETTLE_TICKS && sim.alpha() >= sim.alphaMin(); i++) {
         sim.tick()
         clampAll()
       }
     }
 
+    // A glide in progress, timed on the same clock as draw(). A held (dragged) node is drawn where it is held.
+    let glide: { start: number } | null = null
+    const place = (n: SimNode, p: number) => {
+      const q = n.fx != null ? 1 : p
+      n.baseX = q < 1 ? n.fromX + (n.x - n.fromX) * q : n.x
+      n.baseY = q < 1 ? n.fromY + (n.y - n.fromY) * q : n.y
+    }
     const draw = (t: number) => {
+      const p = glide ? easeOutCubic(Math.min(1, (t - glide.start) / GLIDE_MS)) : 1
       for (const n of papers) {
+        place(n, p)
         const k = reduced ? 0 : n.drift
-        n.drawX = n.x + Math.sin(t * 0.00045 + n.phase) * DRIFT_X * k
-        n.drawY = n.y + Math.cos(t * 0.00035 + n.phase) * DRIFT_Y * k
+        n.drawX = n.baseX + Math.sin(t * 0.00045 + n.phase) * DRIFT_X * k
+        n.drawY = n.baseY + Math.cos(t * 0.00035 + n.phase) * DRIFT_Y * k
         if (n.el) n.el.style.transform = `translate(${n.drawX - cw / 2}px, ${n.drawY - CARD_H / 2}px)`
       }
-      for (const n of topics) n.el?.setAttribute('transform', `translate(${n.x},${n.y})`)
-      for (const l of links) l.el?.setAttribute('d', `M${l.source.drawX},${l.source.drawY}L${l.target.x},${l.target.y}`)
+      for (const n of topics) {
+        place(n, p)
+        n.drawX = n.baseX
+        n.drawY = n.baseY
+        n.el?.setAttribute('transform', `translate(${n.drawX},${n.drawY})`)
+      }
+      for (const l of links) l.el?.setAttribute('d', `M${l.source.drawX},${l.source.drawY}L${l.target.drawX},${l.target.drawY}`)
       const spin = reduced ? 0 : t * SPIN
       for (const d of dots) {
         if (!d.el) continue
@@ -302,29 +334,51 @@ export default function TopicConstellation({ network, countsReady }: { network: 
 
     let raf = 0
     let cancelled = false
-    const t0 = performance.now()
+    if (!epoch.current) epoch.current = performance.now()
+    const t0 = epoch.current
     const now = () => (reduced ? 0 : performance.now() - t0)
     const settled = (yes: boolean) => {
       if (frame.dataset.settled !== String(yes)) frame.dataset.settled = String(yes)
     }
     const running = () => sim.alpha() >= sim.alphaMin() || sim.alphaTarget() > 0
+    const all = [...papers, ...topics]
+    /** Brings the web to rest at once, and glides each node from where it is drawn to its new place. */
+    const settleAndGlide = (heat: number) => {
+      for (const n of all) {
+        n.fromX = n.baseX
+        n.fromY = n.baseY
+      }
+      sim.alpha(Math.max(sim.alpha(), heat))
+      settleNow()
+      glide = { start: now() }
+      settled(false)
+    }
 
     if (reduced) {
       settleNow()
       draw(0)
       settled(true)
     } else {
-      draw(0)
+      // The first layout is drawn at rest (the canvas fades in); a re-layout glides from the old one.
+      if (relayout) settleAndGlide(0.5)
+      else {
+        settleNow()
+        settled(true)
+      }
+      draw(now())
       let last = performance.now()
       const loop = (time: number) => {
         const dt = Math.min(0.05, (time - last) / 1000)
         last = time
+        const t = time - t0
         if (running()) {
           sim.tick()
           clampAll()
-        } else settled(true)
+        }
+        if (glide && t - glide.start >= GLIDE_MS) glide = null
+        if (!running() && !glide) settled(true)
         for (const n of papers) n.drift += ((n.fx == null ? 1 : 0) - n.drift) * Math.min(1, dt * 3)
-        draw(time - t0)
+        draw(t)
         raf = requestAnimationFrame(loop)
       }
       raf = requestAnimationFrame(loop)
@@ -341,13 +395,12 @@ export default function TopicConstellation({ network, countsReady }: { network: 
       frame.style.setProperty('--cl-card-w', `${cw}px`)
       fitForces()
       clampAll()
-      sim.alpha(Math.max(sim.alpha(), 0.3))
-      settled(false)
       if (reduced) {
+        sim.alpha(Math.max(sim.alpha(), 0.3))
         settleNow()
         draw(0)
         settled(true)
-      }
+      } else settleAndGlide(0.3)
     })
     ro.observe(frame)
     // Topic labels are measured for the bounds, and measured again once the web fonts have loaded.
@@ -497,7 +550,8 @@ export default function TopicConstellation({ network, countsReady }: { network: 
       cancelAnimationFrame(raf)
       sim.stop()
       ro.disconnect()
-      for (const n of [...papers, ...topics]) prev.set(n.id, { x: n.x, y: n.y })
+      // Where each node is drawn, so a re-layout that interrupts a glide starts from what is on screen.
+      for (const n of all) prev.set(n.id, { x: n.baseX, y: n.baseY })
       engine.current = null
     }
     // `shape` stands for the network's structure; names, counts and checkmarks don't need a new layout.
@@ -646,7 +700,7 @@ export default function TopicConstellation({ network, countsReady }: { network: 
           if (e.target === e.currentTarget && !fromDrag()) clearSelection()
         }}
       >
-        <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
+        <svg className="cl-enter pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
           <g>
             {links.map((id) => (
               <path key={id} className="cl-link" data-link={id} />
@@ -670,7 +724,7 @@ export default function TopicConstellation({ network, countsReady }: { network: 
             ))}
           </g>
         </svg>
-        <ul>
+        <ul className="cl-enter">
           {network.papers.map((p) => {
             const on = chosen.has(p.id)
             const shares = sharedWith(network, p.id)

@@ -638,6 +638,8 @@
    hovering something else lifts it to 60% (data-preview). Selected cards keep
    a 2px accent outline, and a topic every selected paper uses gets a second
    ring. */
+/* The constellation's drawing fades in once, already at rest: TopicConstellation settles it before the first paint. */
+.cl-enter { animation: schema-fade 300ms ease-out both; }
 .cl-card {
   position: absolute;
   left: 0;
