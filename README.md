@@ -19,7 +19,7 @@ Schema reads the paper first and gives the reader that map. Paste an arXiv link,
 - Each concept card says why the paper needs the concept and quotes the passage where the paper uses it. Every quote is checked against the paper's text before it is shown. (+ math support!)
 - Opening a branch loads explainer links found on the web for its concepts. Any concept can also get an AI explanation with a worked example, written from the paper's text around that concept (beta).
 - The reader checks off what they already know. Checkmarks belong to one paper, but when a later paper uses the same idea, its card says "You checked this in …". The Knowledge page lists every checked concept by paper, and marking a paper finished can check its remaining concepts.
-- To organize your papers, Workspaces group them by subject, class or topic (ex. CS 229, Climate Science). If you just want to get into a new topic, a new workspace suggests three starter papers, and later suggestions also look at what the reader has checked. The Library lists every paper the reader has opened, in progress or finished.
+- To organize your papers, Workspaces group them by subject, class or topic (ex. CS 229, Climate Science). If you just want to get into a new topic, a new workspace suggests three starter papers, and later suggestions also look at what the reader has checked. The Library holds the papers the reader saved, put in a workspace, started on or analyzed, and a paper can be in several workspaces.
 - Each paper is analyzed once for everyone. The next reader who opens it gets the roadmap at once and at no cost, and paper pages can be read and shared without an account.
 
 Schema works with arXiv papers only. Each account can start five new analyses per rolling 24 hours, and opening a paper someone already analyzed is free!
@@ -34,15 +34,16 @@ Schema is a [DeepSpace](https://docs.deep.space) app. It runs as one Cloudflare 
 - Records (`RecordRoom`) hold everything else, with permissions per collection in `src/schemas/`. Analysis results are readable by everyone and written only by the server. A reader's checkmarks, workspaces and opened papers are visible only to that reader, and `userBound` with `uniqueOn` stops a client from writing someone else's rows or duplicates. `useQuery` keeps the views subscribed over a WebSocket, and the progress view redraws as the job writes concepts.
 - The job stores each paper's extracted text with app file storage (`appFiles`), and AI explanations read it back from there.
 - Sign-in uses DeepSpace auth in mixed mode. The landing page and paper pages work signed out, and checkmarks and workspaces need an account.
-- The owner can re-run an analysis with the `reanalyze_paper` agent tool (`src/ai/`) through `npx deepspace agent invoke`.
+- The owner runs two agent tools (`src/ai/`) through `npx deepspace agent invoke`. `reanalyze_paper` re-runs an analysis, and `save_requested_papers` adds each paper a reader analyzed earlier to that reader's Library.
 - `npx deepspace test run` runs the Playwright and unit suites against a local runtime with two test accounts.
 
 ## Technical details below!
 
 | Step | Runs in | Outside calls | Stored in |
 | --- | --- | --- | --- |
+| Find an analyzed paper by name | the Open a paper box (`AnalyzeForm.tsx`) in the browser | none | reads `papers` |
 | Look up the link | `peekPaper` action | arXiv API (free) | nothing |
-| Start the analysis, or open the cached one | `analyzePaper` action, which checks the daily cap and enqueues the job | arXiv API (free) | `papers`, `usage_events` |
+| Start the analysis, or open the cached one | `analyzePaper` action, which checks the daily cap, enqueues the job and saves the paper in the requester's Library | arXiv API (free) | `papers`, `usage_events`, `roadmaps` |
 | Get the text | job, `text` step | the arXiv HTML page (free). `cloudconvert/convert-file` only when a paper has no HTML | `appFiles` |
 | List the concepts | job, `concepts` step | one Haiku call. Server rules then clean the dependency graph, branches, topics and quotes | `concepts`, `topics`, `papers` |
 | Write the overview | job, `overview` step | one Haiku call | `papers`, `concepts` |
