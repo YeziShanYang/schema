@@ -151,7 +151,7 @@ export function CandidateNode({
       </span>
       <span className="mt-1 line-clamp-2 block text-sm font-semibold leading-snug" data-testid="suggestion-title">{title}</span>
       <span className="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">{meta}</span>
-      <span className="mt-1.5 line-clamp-2 block text-xs text-muted-foreground" title={reason}>{reason}</span>
+      <span className="mt-1.5 line-clamp-2 text-xs text-muted-foreground" title={reason}>{reason}</span>
       <Button size="sm" variant="outline" className="mt-2" loading={busy} disabled={disabled} onClick={onAdd} data-testid="pick-suggestion">
         <PlusIcon size={13} /> Add
       </Button>
