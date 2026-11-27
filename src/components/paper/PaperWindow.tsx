@@ -23,6 +23,7 @@ import { useAuth } from 'deepspace'
 import { Button, ConfirmModal } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { arxivAbsUrl, parseArxivId } from '../../lib/arxiv'
+import { workspacePath } from '../../lib/workspace-return'
 import { usePaper } from '../../hooks/usePaper'
 import { useReaderKnowledge } from '../../hooks/useDemoKnowledge'
 import { useRoadmaps } from '../../hooks/useReader'
@@ -308,7 +309,8 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
   }
   if (p.loading) return <div className="p-6 text-muted-foreground">Loading…</div>
 
-  const backTo = ws ? { to: `/w/${ws.recordId}`, label: ws.data.name } : knowledge.isDemo ? { to: '/', label: 'Schema' } : { to: '/home', label: 'Home' }
+  // Back to the workspace in the view (graph or list) it was last shown in.
+  const backTo = ws ? { to: workspacePath(ws.recordId), label: ws.data.name } : knowledge.isDemo ? { to: '/', label: 'Schema' } : { to: '/home', label: 'Home' }
 
   if (!paper) {
     return (
@@ -678,7 +680,7 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
           onConfirm={async () => {
             await library.removeFromWorkspace(ws.recordId, paper.recordId)
             setConfirmRemove(false)
-            navigate(`/w/${ws.recordId}`)
+            navigate(workspacePath(ws.recordId))
           }}
           title="Remove this paper?"
           description={`It leaves ${ws.data.name}. The paper stays in your Library, and your checkmarks stay.`}

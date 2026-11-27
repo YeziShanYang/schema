@@ -6,7 +6,8 @@
  * papers and recommendations (WorkspaceList), with papers not finished
  * first and each group most recently opened first. The view is kept in the
  * URL query (`?view=list`, or the graph when it is absent), and a change
- * replaces the history entry. Dismissing takes the paper out of the
+ * replaces the history entry. The view is also remembered for the tab, so a
+ * paper's link back here opens the same one. Dismissing takes the paper out of the
  * workspace's suggestions (useWorkspaces dismissSuggestion) with no confirm,
  * and a later recommendation run may suggest it again. A bar at the top says
  * where to continue. Data comes from useWorkspaceGraph; clicking a paper
@@ -34,6 +35,7 @@ import { actions } from '../../../../../lib/actions-client'
 import { arxivSlug } from '../../../../../lib/arxiv'
 import { recommendedSequence } from '../../../../../lib/graph/sequence'
 import { listOrder, workspaceView, workspaceViewQuery, type WorkspaceView } from '../../../../../lib/workspace'
+import { rememberWorkspaceView } from '../../../../../lib/workspace-return'
 import type { ConceptData } from '../../../../../types'
 
 const VIEW_LABEL: Record<WorkspaceView, string> = { graph: 'Graph', list: 'List' }
@@ -63,6 +65,8 @@ export default function WorkspacePage() {
     (next: WorkspaceView) => setSearchParams((prev) => workspaceViewQuery(prev, next), { replace: true }),
     [setSearchParams],
   )
+  // Remembered for this tab, so a paper's link back to the workspace opens the same view (lib/workspace-return).
+  useEffect(() => rememberWorkspaceView(id, view), [id, view])
 
   const touched = useRef('')
   const { touch, ready } = g.workspaces

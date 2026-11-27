@@ -895,7 +895,7 @@ test('dismissing a recommendation in the graph removes it, updates the count and
   await expect(firstCard).toHaveCount(1)
 })
 
-test('the Graph | List toggle keeps ?view=list across a reload, replaces the history entry, and a row title opens the paper', async ({ users }) => {
+test('the Graph | List toggle keeps ?view=list across a reload, replaces the history entry, and a paper links back to the view it came from', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada] = await users(['Schema ada'])
   const page = ada.page
@@ -955,11 +955,25 @@ test('the Graph | List toggle keeps ?view=list across a reload, replaces the his
   await page.goBack()
   await expect(list).toBeVisible({ timeout: 15_000 })
 
+  // The paper's own link back to the workspace opens the list it came from.
+  await row.getByTestId('workspace-paper-title').click()
+  await expect(page.getByTestId('paper-page')).toBeVisible({ timeout: 15_000 })
+  await page.getByTestId('paper-back').click()
+  await expect(page).toHaveURL(new RegExp(`/w/${workspaceId}\\?view=list$`))
+  await expect(list).toBeVisible({ timeout: 15_000 })
+
   // Back to the graph: the parameter goes away.
   await graphButton.click()
   await expect(page).toHaveURL(new RegExp(`/w/${workspaceId}$`))
   await expect(page.getByTestId('workspace-graph')).toBeVisible()
   await expect(page.getByTestId('workspace-paper')).toHaveCount(2)
+
+  // Once the graph is shown again, the paper's link back opens the graph.
+  await page.locator(`[data-testid="workspace-paper"][data-arxiv="${FIVE_ID}"]`).click()
+  await expect(page.getByTestId('paper-page')).toBeVisible({ timeout: 15_000 })
+  await page.getByTestId('paper-back').click()
+  await expect(page).toHaveURL(new RegExp(`/w/${workspaceId}$`))
+  await expect(page.getByTestId('workspace-graph')).toBeVisible({ timeout: 15_000 })
 })
 
 test('Dismiss and Add work in the list view, which shows the empty-workspace guidance once nothing is left', async ({ users }) => {
