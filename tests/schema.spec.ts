@@ -1052,6 +1052,12 @@ test('the workspace header keeps the view toggle and wraps at 390px with no side
   expect(await pageWidth()).toBeLessThanOrEqual(390)
   expect(await outside()).toBe(0)
   await expectDismissHitAreas(page)
+
+  // Inside the workspace, the paper's placement button names it first. The button wraps and truncates instead of widening the page.
+  await page.goto(`/w/${workspaceId}/p/${LONG_SLUG}`)
+  await expect(page.getByTestId('placement-open')).toContainText('In [fixture] Reading list', { timeout: 15_000 })
+  expect(await pageWidth()).toBeLessThanOrEqual(390)
+  expect(await page.getByTestId('placement-open').evaluate((el) => el.getBoundingClientRect().right)).toBeLessThanOrEqual(390)
 })
 
 test('Add flow, paper path: look up, suggested workspace name, bad links leave nothing behind', async ({ users }) => {

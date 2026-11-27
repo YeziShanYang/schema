@@ -402,7 +402,8 @@ export function PaperWindow({ arxivId, workspaceId }: { arxivId: string; workspa
             <a href={arxivAbsUrl(d.arxivId)} target="_blank" rel="noreferrer" className="font-mono text-primary hover:underline">arXiv {d.arxivId}</a>
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Capped at the header's width, so a long workspace name wraps the placement button to its own row and truncates. */}
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           {p.concepts.length > 0 && !covered && (
             <nav className="flex w-fit gap-1 rounded-[7px] border border-border bg-surface-2 p-[3px]" aria-label="Paper view">
               {(['graph', 'walkthrough'] as const).map((v) => (
