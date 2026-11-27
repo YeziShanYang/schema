@@ -144,7 +144,8 @@ export function AnalyzeForm({
               placeholder={placeholder ?? 'Title or arXiv link'}
               aria-label="Paper title, or arXiv link or id"
               role="combobox"
-              aria-expanded={showList}
+              // The listbox is hidden when nothing matches; the live region below says so instead.
+              aria-expanded={showList && matches.length > 0}
               aria-controls={listId}
               aria-autocomplete="list"
               aria-activedescendant={showList && matches[active] ? optionId(active) : undefined}
@@ -158,7 +159,7 @@ export function AnalyzeForm({
           </div>
           <div
             hidden={!showList}
-            className="absolute inset-x-0 top-full z-30 mt-1 overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-md"
+            className="absolute inset-x-0 top-full z-30 mt-1 overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-lg"
             data-testid="paper-search"
             // Clicks inside the list leave focus in the box.
             onMouseDown={(e) => e.preventDefault()}

@@ -97,10 +97,11 @@ function roomToolExecutor(env: Env, userId: string) {
 export type RecordTools = Pick<ActionTools, 'create' | 'update' | 'remove' | 'deleteWhere' | 'get' | 'query'>
 
 /**
- * An action's record tools, acting as `userId`: what server code outside that
- * user's own request (an owner maintenance tool) uses to write their rows,
- * since a create stamps every userBound column with this id. RBAC is off, as
- * for actions, so the caller decides what may be written.
+ * The record tools an action gets, acting as `userId`. A create stamps every
+ * userBound column with this id, so server code that writes a reader's rows
+ * outside that reader's own request (an owner maintenance tool) passes the
+ * reader's id here. RBAC is off, as for actions, so the caller decides what
+ * may be written.
  */
 export function recordToolsAs(env: Env, userId: string): RecordTools {
   const execTool = roomToolExecutor(env, userId)

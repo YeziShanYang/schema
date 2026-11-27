@@ -956,6 +956,8 @@ test("Home's paper box finds analyzed papers by name, opens a pick from the keyb
   await input.fill('zzqx no such paper')
   await expect(page.getByTestId('paper-search-empty')).toHaveText('No analyzed paper matches. Paste its arXiv link to analyze it.')
   await expect(options).toHaveCount(0)
+  // The listbox it controls is hidden, so the box is not expanded.
+  await expect(input).toHaveAttribute('aria-expanded', 'false')
 
   // A link is not a search: no list, and it opens the paper as before.
   await input.fill(`https://arxiv.org/abs/${FIXTURE_ID}`)
