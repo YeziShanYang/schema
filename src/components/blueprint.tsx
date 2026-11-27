@@ -1,6 +1,6 @@
 /**
  * Small Blueprint building blocks shared by pages: page header, meter, chip,
- * and an inline-editable text field.
+ * segmented control and an inline-editable text field.
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
@@ -44,6 +44,39 @@ export function Chip({ children, tone = 'plain', className }: { children: ReactN
     >
       {children}
     </span>
+  )
+}
+
+/** A Blueprint segmented control: one pressed button per option. */
+export function Segmented<T extends string>({
+  label,
+  options,
+  labels,
+  value,
+  onChange,
+  testId,
+}: {
+  label: string
+  options: readonly T[]
+  labels: Record<T, string>
+  value: T
+  onChange: (next: T) => void
+  testId?: string
+}) {
+  return (
+    <div className="flex w-fit gap-1 rounded-[7px] border border-border bg-surface-2 p-[3px]" role="group" aria-label={label} data-testid={testId}>
+      {options.map((o) => (
+        <button
+          key={o}
+          type="button"
+          aria-pressed={value === o}
+          onClick={() => onChange(o)}
+          className={cn('press cursor-pointer rounded-[3px] border border-transparent px-3 py-1 text-sm font-medium', value === o ? 'border-transparent bg-card text-foreground shadow-[var(--shadow-ring)]' : 'text-muted-foreground hover:text-foreground')}
+        >
+          {labels[o]}
+        </button>
+      ))}
+    </div>
   )
 }
 

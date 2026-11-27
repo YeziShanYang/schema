@@ -26,7 +26,7 @@ import { useQuery } from 'deepspace'
 import type { RecordData } from 'deepspace'
 import { Button, Popover, PopoverContent, PopoverTrigger, SearchInput } from '@/components/ui'
 import { cn, plural } from '@/lib/utils'
-import { Chip, Meter, PageHeader } from '../../../components/blueprint'
+import { Chip, Meter, PageHeader, Segmented } from '../../../components/blueprint'
 import { CheckIcon, ChevronDownIcon, CloseIcon } from '../../../components/icons'
 import type { ConstellationPaper } from '../../../components/graph/TopicConstellation'
 import { FinishDialog, ReadAgainButton } from '../../../components/paper/FinishDialog'
@@ -288,39 +288,6 @@ export default function LibraryPage() {
         )}
       </div>
       <FinishDialog paper={finishing} open={!!finishing} onClose={() => setFinishing(null)} />
-    </div>
-  )
-}
-
-/** A Blueprint segmented control: one pressed button per option. */
-function Segmented<T extends string>({
-  label,
-  options,
-  labels,
-  value,
-  onChange,
-  testId,
-}: {
-  label: string
-  options: readonly T[]
-  labels: Record<T, string>
-  value: T
-  onChange: (next: T) => void
-  testId?: string
-}) {
-  return (
-    <div className="flex w-fit gap-1 rounded-[7px] border border-border bg-surface-2 p-[3px]" role="group" aria-label={label} data-testid={testId}>
-      {options.map((o) => (
-        <button
-          key={o}
-          type="button"
-          aria-pressed={value === o}
-          onClick={() => onChange(o)}
-          className={cn('press cursor-pointer rounded-[3px] border border-transparent px-3 py-1 text-sm font-medium', value === o ? 'border-transparent bg-card text-foreground shadow-[var(--shadow-ring)]' : 'text-muted-foreground hover:text-foreground')}
-        >
-          {labels[o]}
-        </button>
-      ))}
     </div>
   )
 }
