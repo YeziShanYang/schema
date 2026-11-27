@@ -69,12 +69,13 @@ export function registerActionRoutes(app: Hono<AppContext>, resolveAuth: Resolve
   })
 }
 
-function createActionTools(env: Env, userId: string, callerJwt: string): ActionTools {
+/** Runs record-room tools as `userId` with RBAC off (`X-App-Action`), as described above. */
+function roomToolExecutor(env: Env, userId: string) {
   const stub = env.RECORD_ROOMS.get(env.RECORD_ROOMS.idFromName(`app:${env.DEEPSPACE_APP_ID}`))
 
   // The DO returns ActionResult<unknown>; callers below supply the precise
   // operation result type fixed by the SDK tools-api wire contract.
-  async function execTool<TData>(
+  return async function execTool<TData>(
     tool: string,
     params: Record<string, unknown>,
   ): Promise<ActionResult<TData>> {
@@ -91,6 +92,33 @@ function createActionTools(env: Env, userId: string, callerJwt: string): ActionT
     )
     return res.json() as Promise<ActionResult<TData>>
   }
+}
+
+export type RecordTools = Pick<ActionTools, 'create' | 'update' | 'remove' | 'deleteWhere' | 'get' | 'query'>
+
+/**
+ * An action's record tools, acting as `userId`: what server code outside that
+ * user's own request (an owner maintenance tool) uses to write their rows,
+ * since a create stamps every userBound column with this id. RBAC is off, as
+ * for actions, so the caller decides what may be written.
+ */
+export function recordToolsAs(env: Env, userId: string): RecordTools {
+  const execTool = roomToolExecutor(env, userId)
+  return {
+    create: (collection, data, recordId) =>
+      execTool('records.create', { collection, data, recordId }),
+    update: (collection, recordId, data) =>
+      execTool('records.update', { collection, recordId, data }),
+    remove: (collection, recordId) => execTool('records.delete', { collection, recordId }),
+    deleteWhere: (collection, where, limit) =>
+      execTool('records.deleteWhere', { collection, where, limit }),
+    get: (collection, recordId) => execTool('records.get', { collection, recordId }),
+    query: (collection, options) => execTool('records.query', { collection, ...options }),
+  }
+}
+
+function createActionTools(env: Env, userId: string, callerJwt: string): ActionTools {
+  const execTool = roomToolExecutor(env, userId)
 
   async function callIntegration<T>(endpoint: string, data?: unknown): Promise<ActionResult<T>> {
     // "name/endpoint", both plain identifiers: anything else could reach
@@ -136,15 +164,7 @@ function createActionTools(env: Env, userId: string, callerJwt: string): ActionT
   }
 
   return {
-    create: (collection, data, recordId) =>
-      execTool('records.create', { collection, data, recordId }),
-    update: (collection, recordId, data) =>
-      execTool('records.update', { collection, recordId, data }),
-    remove: (collection, recordId) => execTool('records.delete', { collection, recordId }),
-    deleteWhere: (collection, where, limit) =>
-      execTool('records.deleteWhere', { collection, where, limit }),
-    get: (collection, recordId) => execTool('records.get', { collection, recordId }),
-    query: (collection, options) => execTool('records.query', { collection, ...options }),
+    ...recordToolsAs(env, userId),
     integration: callIntegration,
     registerUser: (options) => execTool('users.register', { ...options }),
   }
