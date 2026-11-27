@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { branchProgress, cleanBranches, OTHER_BRANCH, paperProgress } from '../lib/graph/branches'
-import { candidateSuggestions, paperStatus, withFinished, withoutPaper, withoutSuggestion, withPaper, withStatus } from '../lib/workspace'
+import { candidateSuggestions, listOrder, paperStatus, withFinished, withoutPaper, withoutSuggestion, withPaper, withStatus, workspaceView, workspaceViewQuery } from '../lib/workspace'
 import { extractCandidates, needsLoad, LOADING_STALE_MS } from './branch-resources'
 import { candidatesFromResults, searchQueryFor } from './recommend'
 import { excerptAround } from './explain-concept'
@@ -99,6 +99,45 @@ describe('workspace papers', () => {
     expect(withoutSuggestion(s, 'missing')).toEqual(s)
     expect(withoutSuggestion(withoutSuggestion(s, '7'), '9').map((x) => x.arxivId)).toEqual(['8'])
     expect(withoutSuggestion(null, '7')).toEqual([])
+  })
+})
+
+describe('workspace list view', () => {
+  it('reads the view from the query, with the graph as the default', () => {
+    expect(workspaceView('')).toBe('graph')
+    expect(workspaceView('?view=list')).toBe('list')
+    expect(workspaceView(new URLSearchParams('view=constellation'))).toBe('graph')
+    expect(workspaceView('?view=LIST')).toBe('graph')
+  })
+  it('writes the view into the query and keeps other parameters', () => {
+    expect(workspaceViewQuery('', 'list').toString()).toBe('view=list')
+    expect(workspaceViewQuery('?view=list', 'graph').toString()).toBe('')
+    expect(workspaceViewQuery('a=1&view=list&b=2', 'graph').toString()).toBe('a=1&b=2')
+    const prev = new URLSearchParams('a=1')
+    expect(workspaceViewQuery(prev, 'list').toString()).toBe('a=1&view=list')
+    expect(prev.toString()).toBe('a=1')
+  })
+  it('lists unfinished papers first, then finished, each most recently opened first', () => {
+    const papers: WorkspacePaper[] = [
+      { paperId: 'a', arxivId: '1', title: 'A', status: 'finished', addedAt: 10 },
+      { paperId: 'b', arxivId: '2', title: 'B', status: 'active', addedAt: 20 },
+      { paperId: 'c', arxivId: '3', title: 'C', status: 'current', addedAt: 30 },
+      { paperId: 'd', arxivId: '4', title: 'D', status: 'finished', addedAt: 40 },
+      { paperId: 'e', arxivId: '5', title: 'E', status: 'active', addedAt: 50 },
+    ]
+    // b was opened last; c and d were never opened, so they count from when they were added.
+    const opened: Record<string, number> = { a: 100, b: 200, e: 25 }
+    expect(listOrder(papers, (id) => opened[id]).map((p) => p.paperId)).toEqual(['b', 'c', 'e', 'a', 'd'])
+    expect(papers.map((p) => p.paperId)).toEqual(['a', 'b', 'c', 'd', 'e'])
+  })
+  it('falls back to the added time when a paper was never opened (0 or missing)', () => {
+    const papers: WorkspacePaper[] = [
+      { paperId: 'old', arxivId: '1', title: 'Old', status: 'active', addedAt: 1 },
+      { paperId: 'new', arxivId: '2', title: 'New', status: 'active', addedAt: 2 },
+    ]
+    expect(listOrder(papers, () => 0).map((p) => p.paperId)).toEqual(['new', 'old'])
+    expect(listOrder(papers, () => undefined).map((p) => p.paperId)).toEqual(['new', 'old'])
+    expect(listOrder([], () => 1)).toEqual([])
   })
 })
 

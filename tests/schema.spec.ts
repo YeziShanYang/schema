@@ -895,6 +895,151 @@ test('dismissing a recommendation in the graph removes it, updates the count and
   await expect(firstCard).toHaveCount(1)
 })
 
+test('the Graph | List toggle keeps ?view=list across a reload, replaces the history entry, and a row title opens the paper', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await calm(page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/home')
+  // Papers analyzed by earlier specs, so this costs no daily slot in a full run.
+  const made = await action(page, 'analyzePaper', { input: FIXTURE_ID, newWorkspace: { name: `[fixture] List view ${Date.now()}` } })
+  expect(made.success).toBe(true)
+  const workspaceId = made.data.workspaceId as string
+  expect((await action(page, 'analyzePaper', { input: FIVE_ID, workspaceId })).success).toBe(true)
+  expect((await action(page, 'recommendPapers', { workspaceId, mode: 'next' })).success).toBe(true)
+
+  await page.goto(`/w/${workspaceId}`)
+  const toggle = page.getByTestId('workspace-view')
+  const graphButton = toggle.getByRole('button', { name: 'Graph', exact: true })
+  const listButton = toggle.getByRole('button', { name: 'List', exact: true })
+  await expect(page.getByTestId('workspace-graph')).toBeVisible({ timeout: 15_000 })
+  await expect(graphButton).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('workspace-list')).toHaveCount(0)
+  // The toggle comes first in the header's right-hand group, before Recommend.
+  const header = page.getByTestId('workspace-page').locator('header').first()
+  const order = await header.locator('[data-testid="workspace-view"], [data-testid="recommend-button"], [data-testid="add-paper-open"]').evaluateAll((els) => els.map((el) => el.getAttribute('data-testid')))
+  expect(order).toEqual(['workspace-view', 'recommend-button', 'add-paper-open'])
+
+  await listButton.click()
+  await expect(page).toHaveURL(new RegExp(`/w/${workspaceId}\\?view=list$`))
+  await expect(listButton).toHaveAttribute('aria-pressed', 'true')
+  const list = page.getByTestId('workspace-list')
+  await expect(list).toBeVisible()
+  await expect(page.getByTestId('workspace-graph')).toHaveCount(0)
+  // The same selectors find the papers and recommendations in the list.
+  await expect(list.getByTestId('workspace-paper')).toHaveCount(2, { timeout: 15_000 })
+  await expect(list.getByTestId('suggestion')).toHaveCount(2, { timeout: 15_000 })
+  const row = list.locator(`[data-testid="workspace-paper"][data-arxiv="${FIVE_ID}"]`)
+  await expect(row).toHaveAttribute('data-status', 'active')
+  await expect(row).toContainText(`arXiv ${FIVE_ID}`)
+  await expect(row).toContainText(/\d+ of \d+ known|Analyzing · \d+%|Analysis failed\. Open to retry\./)
+  await expect(list.getByRole('heading', { name: 'Papers' })).toBeVisible()
+  await expect(list.getByRole('heading', { name: 'Recommended' })).toBeVisible()
+
+  await page.reload()
+  await expect(list).toBeVisible({ timeout: 15_000 })
+  await expect(listButton).toHaveAttribute('aria-pressed', 'true')
+  await expect(list.getByTestId('workspace-paper')).toHaveCount(2, { timeout: 15_000 })
+
+  // The toggle replaced the history entry, so Back leaves the workspace.
+  await page.goBack()
+  await expect(page).toHaveURL(/\/home$/)
+  await page.goForward()
+  await expect(list).toBeVisible({ timeout: 15_000 })
+
+  // A row's title is a link to the paper in this workspace.
+  await row.getByTestId('workspace-paper-title').click()
+  await expect(page).toHaveURL(new RegExp(`/w/${workspaceId}/p/${FIVE_ID.replace('.', '~')}$`))
+  await expect(page.getByTestId('paper-page')).toBeVisible({ timeout: 15_000 })
+  await page.goBack()
+  await expect(list).toBeVisible({ timeout: 15_000 })
+
+  // Back to the graph: the parameter goes away.
+  await graphButton.click()
+  await expect(page).toHaveURL(new RegExp(`/w/${workspaceId}$`))
+  await expect(page.getByTestId('workspace-graph')).toBeVisible()
+  await expect(page.getByTestId('workspace-paper')).toHaveCount(2)
+})
+
+test('Dismiss and Add work in the list view, which shows the empty-workspace guidance once nothing is left', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await calm(page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await newWorkspaceWithStarters(page, 'Dismiss in list')
+  await page.getByTestId('workspace-view').getByRole('button', { name: 'List', exact: true }).click()
+  const list = page.getByTestId('workspace-list')
+  const suggestions = list.getByTestId('suggestion')
+  await expect(suggestions).toHaveCount(2)
+  await expect(list.getByTestId('workspace-paper')).toHaveCount(0)
+  await expect(list.getByRole('heading', { name: 'Papers' })).toHaveCount(0)
+  await expectDismissHitAreas(page)
+
+  const [firstArxiv, secondArxiv] = await suggestions.evaluateAll((els) => els.map((el) => el.getAttribute('data-arxiv') ?? ''))
+  const firstRow = list.locator(`[data-testid="suggestion"][data-arxiv="${firstArxiv}"]`)
+  const secondRow = list.locator(`[data-testid="suggestion"][data-arxiv="${secondArxiv}"]`)
+  await firstRow.getByRole('button', { name: `Dismiss recommendation ${await suggestionTitle(firstRow)}`, exact: true }).click()
+  await expect(suggestions).toHaveCount(1)
+  await expect(firstRow).toHaveCount(0)
+  const secondDismiss = secondRow.getByTestId('dismiss-suggestion')
+  await expect(secondDismiss).toBeFocused()
+  // The graph's count follows the list.
+  await page.getByTestId('workspace-view').getByRole('button', { name: 'Graph', exact: true }).click()
+  await expect(page.getByTestId('workspace-graph')).toContainText('0 papers · 1 recommended')
+  await page.getByTestId('workspace-view').getByRole('button', { name: 'List', exact: true }).click()
+
+  await secondDismiss.click()
+  await expect(suggestions).toHaveCount(0)
+  await expect(list.getByTestId('workspace-list-empty')).toHaveText('Get recommendations or paste a link to add the first paper.')
+  await expect(page.getByTestId('workspace-continue')).toContainText('Pick a paper to start.')
+  await expect(page.getByTestId('recommend-button')).toBeFocused()
+
+  // A new run fills the list again, and Add turns a recommendation into a paper row.
+  await page.getByTestId('recommend-button').click()
+  await expect(suggestions).toHaveCount(2, { timeout: 15_000 })
+  await expect(page.getByTestId('workspace-continue')).toContainText('Add one of the recommended papers below, or paste a link.')
+  await firstRow.getByTestId('pick-suggestion').click()
+  await expect(list.locator(`[data-testid="workspace-paper"][data-arxiv="${firstArxiv}"]`)).toBeVisible({ timeout: 15_000 })
+  await expect(suggestions).toHaveCount(1)
+  await expect(secondRow).toHaveCount(1)
+  await expect(list.getByTestId('workspace-list-empty')).toHaveCount(0)
+})
+
+test('the workspace header keeps the view toggle and wraps at 390px with no sideways scroll in either view', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await calm(page)
+  await page.goto('/home')
+  // A long workspace name and a long paper title.
+  const made = await action(page, 'analyzePaper', { input: LONG_ID, newWorkspace: { name: `[fixture] Reading list for a narrow phone screen ${Date.now()}` } })
+  expect(made.success).toBe(true)
+  const workspaceId = made.data.workspaceId as string
+  expect((await action(page, 'recommendPapers', { workspaceId, mode: 'next' })).success).toBe(true)
+  await page.setViewportSize({ width: 390, height: 844 })
+  const pageWidth = () => page.evaluate(() => document.documentElement.scrollWidth)
+  const header = page.getByTestId('workspace-page').locator('header').first()
+  /** Header controls that run past the right edge of the screen. */
+  const outside = () => header.locator('button, a').evaluateAll((els) => els.filter((el) => el.getBoundingClientRect().right > window.innerWidth).length)
+
+  await page.goto(`/w/${workspaceId}`)
+  await expect(page.getByTestId('workspace-graph')).toHaveAttribute('data-mode', 'stack', { timeout: 15_000 })
+  await expect(page.getByTestId('suggestion')).toHaveCount(2, { timeout: 15_000 })
+  await expect(page.getByTestId('workspace-view')).toBeVisible()
+  expect(await pageWidth()).toBeLessThanOrEqual(390)
+  expect(await outside()).toBe(0)
+
+  await page.getByTestId('workspace-view').getByRole('button', { name: 'List', exact: true }).click()
+  await expect(page.getByTestId('workspace-list').getByTestId('workspace-paper')).toHaveCount(1, { timeout: 15_000 })
+  await expect(page.getByTestId('workspace-list').getByTestId('suggestion')).toHaveCount(2)
+  await expect(page.getByTestId('workspace-view')).toBeVisible()
+  expect(await pageWidth()).toBeLessThanOrEqual(390)
+  expect(await outside()).toBe(0)
+  await expectDismissHitAreas(page)
+})
+
 test('Add flow, paper path: look up, suggested workspace name, bad links leave nothing behind', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada] = await users(['Schema ada'])

@@ -2,7 +2,8 @@
  * Pure helpers for a workspace's paper list and its recommendations. A
  * workspace holds any number of papers, each active or finished. Used by the
  * analyzePaper action (adding a paper) and by the browser (finishing or
- * removing one, and dismissing a recommendation).
+ * removing one, dismissing a recommendation, and the workspace page's view
+ * query and list order).
  */
 
 import type { Suggestion, WorkspacePaper } from '../types'
@@ -38,7 +39,7 @@ export function withoutPaper(papers: WorkspacePaper[] | null | undefined, paperI
   return (papers ?? []).filter((p) => p.paperId !== paperId)
 }
 
-/** Suggestions that are not already papers in the workspace: the graph's candidate nodes. */
+/** Suggestions that are not already papers in the workspace: the graph's candidate nodes and the list's recommended rows. */
 export function candidateSuggestions(suggestions: Suggestion[] | null | undefined, papers: WorkspacePaper[] | null | undefined): Suggestion[] {
   const have = new Set((papers ?? []).map((p) => p.arxivId))
   return (suggestions ?? []).filter((s) => !have.has(s.arxivId))
@@ -47,4 +48,34 @@ export function candidateSuggestions(suggestions: Suggestion[] | null | undefine
 /** The suggestions without `arxivId`: dismissing a recommendation. A later recommendation run may suggest it again. */
 export function withoutSuggestion(suggestions: Suggestion[] | null | undefined, arxivId: string): Suggestion[] {
   return (suggestions ?? []).filter((s) => s.arxivId !== arxivId)
+}
+
+export type WorkspaceView = 'graph' | 'list'
+
+/** The workspace page's view from its URL query: `?view=list` is the list, anything else the graph. */
+export function workspaceView(search: string | URLSearchParams): WorkspaceView {
+  const p = typeof search === 'string' ? new URLSearchParams(search) : search
+  return p.get('view') === 'list' ? 'list' : 'graph'
+}
+
+/** The query with the view set. The graph is the default, so it leaves `view` out. Other parameters are kept. */
+export function workspaceViewQuery(search: string | URLSearchParams, view: WorkspaceView): URLSearchParams {
+  const out = new URLSearchParams(search)
+  if (view === 'list') out.set('view', 'list')
+  else out.delete('view')
+  return out
+}
+
+/**
+ * The list view's order: papers not finished, then finished ones, each most
+ * recently opened first. A paper the reader never opened counts from when it
+ * was added to the workspace.
+ */
+export function listOrder<T extends Pick<WorkspacePaper, 'paperId' | 'status' | 'addedAt'>>(
+  papers: readonly T[],
+  lastOpenedAt: (paperId: string) => number | null | undefined,
+): T[] {
+  const at = (p: T) => lastOpenedAt(p.paperId) || p.addedAt || 0
+  const finished = (p: T) => (paperStatus(p) === 'finished' ? 1 : 0)
+  return [...papers].sort((a, b) => finished(a) - finished(b) || at(b) - at(a))
 }

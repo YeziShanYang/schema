@@ -1,25 +1,31 @@
 /**
- * Workspace view: a floating graph of the workspace's papers around the
- * workspace name, with recommended papers as dashed candidate nodes that can
- * be added or dismissed. Dismissing takes the paper out of the workspace's
- * suggestions (useWorkspaces dismissSuggestion), with no confirm, and a later
- * recommendation run may suggest it again. A bar at the top says where to
- * continue. Data comes from useWorkspaceGraph; clicking a paper opens its
- * paper window. Removing the workspace keeps its papers in the Library
- * (useLibrary removeWorkspace).
+ * Workspace page. By default a floating graph of the workspace's papers
+ * around the workspace name, with recommended papers as dashed candidate
+ * nodes that can be added or dismissed. The Graph | List toggle in the
+ * header, shown at every width, swaps the graph for a list of the same
+ * papers and recommendations (WorkspaceList), with papers not finished
+ * first and each group most recently opened first. The view is kept in the
+ * URL query (`?view=list`, or the graph when it is absent), and a change
+ * replaces the history entry. Dismissing takes the paper out of the
+ * workspace's suggestions (useWorkspaces dismissSuggestion) with no confirm,
+ * and a later recommendation run may suggest it again. A bar at the top says
+ * where to continue. Data comes from useWorkspaceGraph; clicking a paper
+ * opens its paper window. Removing the workspace keeps its papers in the
+ * Library (useLibrary removeWorkspace).
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from 'deepspace'
 import { Button, ConfirmModal } from '@/components/ui'
 import { AddButton, type FirstRecommendation } from '../../../../../components/AddDialog'
 import { FirstRunPrompt } from '../../../../../components/FirstRunPrompt'
-import { InlineEdit } from '../../../../../components/blueprint'
+import { InlineEdit, Segmented } from '../../../../../components/blueprint'
 import { SparkIcon } from '../../../../../components/icons'
 import { ConceptName } from '../../../../../components/MathText'
 import { FloatingGraph } from '../../../../../components/graph/FloatingGraph'
 import { CandidateNode, CenterCard, PaperNode } from '../../../../../components/graph/nodes'
+import { analyzingText, paperMeta, suggestionMeta, WorkspaceList } from '../../../../../components/WorkspaceList'
 import { useWorkspaceGraph } from '../../../../../hooks/useWorkspaceGraph'
 import { useAllowance } from '../../../../../hooks/useAllowance'
 import { useLibrary } from '../../../../../hooks/useLibrary'
@@ -27,7 +33,11 @@ import { useConceptKnowledge, useRoadmaps } from '../../../../../hooks/useReader
 import { actions } from '../../../../../lib/actions-client'
 import { arxivSlug } from '../../../../../lib/arxiv'
 import { recommendedSequence } from '../../../../../lib/graph/sequence'
+import { listOrder, workspaceView, workspaceViewQuery, type WorkspaceView } from '../../../../../lib/workspace'
 import type { ConceptData } from '../../../../../types'
+
+const VIEW_LABEL: Record<WorkspaceView, string> = { graph: 'Graph', list: 'List' }
+const EMPTY_TEXT = 'Get recommendations or paste a link to add the first paper.'
 
 export default function WorkspacePage() {
   const { id = '' } = useParams()
@@ -46,6 +56,14 @@ export default function WorkspacePage() {
   const recommendButton = useRef<HTMLButtonElement>(null)
   const viewRegion = useRef<HTMLDivElement>(null)
 
+  // The view lives in the URL. A change replaces the entry, so Back leaves the workspace instead of undoing it.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const view = workspaceView(searchParams)
+  const setView = useCallback(
+    (next: WorkspaceView) => setSearchParams((prev) => workspaceViewQuery(prev, next), { replace: true }),
+    [setSearchParams],
+  )
+
   const touched = useRef('')
   const { touch, ready } = g.workspaces
   useEffect(() => {
@@ -61,7 +79,7 @@ export default function WorkspacePage() {
     const mode = (location.state as { recommend?: FirstRecommendation } | null)?.recommend
     if (!mode || starterRan.current || !ws) return
     starterRan.current = true
-    navigate(location.pathname, { replace: true, state: null })
+    navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null })
     if ((ws.data.suggestions?.length ?? 0) > 0 || (mode === 'starter' && g.papers.length > 0)) return
     void (async () => {
       setBusy(true)
@@ -78,6 +96,10 @@ export default function WorkspacePage() {
     const opened = (pid: string) => roadmaps.byPaper.get(pid)?.data.lastOpenedAt ?? 0
     return [...active].sort((a, b) => opened(b.paperId) - opened(a.paperId) || (b.isLastOpened ? 1 : 0) - (a.isLastOpened ? 1 : 0))[0] ?? null
   }, [g.active, roadmaps.byPaper])
+  const listed = useMemo(
+    () => (view === 'list' ? listOrder(g.papers, (pid) => roadmaps.byPaper.get(pid)?.data.lastOpenedAt) : []),
+    [view, g.papers, roadmaps.byPaper],
+  )
   const contConcepts = useQuery<ConceptData>('concepts', { where: { paperId: continuePaper?.paperId ?? '__none__' }, limit: 200 })
   const nextUp = useMemo(() => {
     if (!continuePaper?.paper) return null
@@ -151,7 +173,7 @@ export default function WorkspacePage() {
         {g.candidates.length > 0 && ` · ${g.candidates.length} recommended`}
       </p>
       {g.papers.length === 0 && g.candidates.length === 0 && (
-        <p className="mt-2 text-[13px] text-muted-foreground">Get recommendations or paste a link to add the first paper.</p>
+        <p className="mt-2 text-[13px] text-muted-foreground">{EMPTY_TEXT}</p>
       )}
     </CenterCard>
   )
@@ -164,11 +186,11 @@ export default function WorkspacePage() {
           arxivId={p.arxivId}
           status={p.status}
           title={p.title || p.arxivId}
-          meta={`${p.paper?.data.publishedAt?.slice(0, 4) ?? ''} · arXiv ${p.arxivId}`}
+          meta={paperMeta(p)}
           known={p.known}
           total={p.total}
           finished={p.status === 'finished'}
-          analyzing={p.analysis === 'queued' || p.analysis === 'processing' ? `Analyzing · ${Math.round(p.analysisProgress * 100)}%` : undefined}
+          analyzing={analyzingText(p)}
           failed={p.analysis === 'failed'}
           onOpen={() => open(p.arxivId)}
         />
@@ -182,7 +204,7 @@ export default function WorkspacePage() {
           arxivId={s.arxivId}
           title={s.title}
           reason={s.reason}
-          meta={`${s.authors?.[0]?.split(' ').slice(-1)[0] ?? ''}${(s.authors?.length ?? 0) > 1 ? ' et al.' : ''} · arXiv ${s.arxivId}`}
+          meta={suggestionMeta(s)}
           busy={adding === s.arxivId}
           disabled={!!adding && adding !== s.arxivId}
           dismissDisabled={!g.workspaces.ready || adding === s.arxivId}
@@ -205,6 +227,7 @@ export default function WorkspacePage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Segmented label="Workspace view" options={['graph', 'list'] as const} labels={VIEW_LABEL} value={view} onChange={setView} testId="workspace-view" />
           <Button ref={recommendButton} variant="outline" loading={busy} onClick={recommend} data-testid="recommend-button">
             <SparkIcon size={15} /> {g.papers.length ? 'Recommend next paper' : 'Recommend papers'}
           </Button>
@@ -236,7 +259,21 @@ export default function WorkspacePage() {
       <FirstRunPrompt className="mx-5 mt-4 md:mx-7" />
 
       <div ref={viewRegion} className="relative flex flex-1 flex-col">
-        <FloatingGraph label={`Papers in ${ws.data.name}`} testId="workspace-graph" className="min-h-[560px] flex-1" center={center} nodes={nodes} />
+        {view === 'list' ? (
+          <WorkspaceList
+            workspaceId={id}
+            papers={listed}
+            candidates={g.candidates}
+            loading={g.workspaces.papersStatus === 'loading'}
+            emptyText={EMPTY_TEXT}
+            adding={adding}
+            dismissDisabled={!g.workspaces.ready}
+            onAdd={add}
+            onDismiss={dismiss}
+          />
+        ) : (
+          <FloatingGraph label={`Papers in ${ws.data.name}`} testId="workspace-graph" className="min-h-[560px] flex-1" center={center} nodes={nodes} />
+        )}
       </div>
 
       <ConfirmModal
