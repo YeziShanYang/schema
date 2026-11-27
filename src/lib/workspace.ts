@@ -1,7 +1,8 @@
 /**
- * Pure helpers for a workspace's paper list. A workspace holds any number of
- * papers, each active or finished. Used by the analyzePaper action (adding a
- * paper) and by the browser (finishing or removing one).
+ * Pure helpers for a workspace's paper list and its recommendations. A
+ * workspace holds any number of papers, each active or finished. Used by the
+ * analyzePaper action (adding a paper) and by the browser (finishing or
+ * removing one, and dismissing a recommendation).
  */
 
 import type { Suggestion, WorkspacePaper } from '../types'
@@ -41,4 +42,9 @@ export function withoutPaper(papers: WorkspacePaper[] | null | undefined, paperI
 export function candidateSuggestions(suggestions: Suggestion[] | null | undefined, papers: WorkspacePaper[] | null | undefined): Suggestion[] {
   const have = new Set((papers ?? []).map((p) => p.arxivId))
   return (suggestions ?? []).filter((s) => !have.has(s.arxivId))
+}
+
+/** The suggestions without `arxivId`: dismissing a recommendation. A later recommendation run may suggest it again. */
+export function withoutSuggestion(suggestions: Suggestion[] | null | undefined, arxivId: string): Suggestion[] {
+  return (suggestions ?? []).filter((s) => s.arxivId !== arxivId)
 }

@@ -812,6 +812,89 @@ test('Add flow, workspace path: starter papers appear as candidates, added paper
   await expect(page.getByTestId('sidebar-workspaces')).toContainText(name)
 })
 
+/**
+ * A new empty fixture workspace made through the Add window, which runs the
+ * starter recommendations once: the fixture ranking keeps two papers.
+ */
+async function newWorkspaceWithStarters(page: Page, label: string) {
+  await page.goto('/home')
+  await page.getByTestId('add-open').first().click()
+  await page.getByTestId('add-choice-workspace').click()
+  await page.getByTestId('workspace-form').getByLabel('Workspace name', { exact: true }).fill(`[fixture] ${label} ${Date.now()}`)
+  await page.getByRole('button', { name: 'Create workspace' }).click()
+  await expect(page.getByTestId('workspace-page')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId('suggestion')).toHaveCount(2, { timeout: 15_000 })
+}
+
+/** The title shown on a recommendation card or row. */
+async function suggestionTitle(suggestion: Locator) {
+  return ((await suggestion.getByTestId('suggestion-title').textContent()) ?? '').trim()
+}
+
+/** Whether two boxes overlap. */
+function overlaps(a: { x: number; y: number; width: number; height: number }, b: typeof a) {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+}
+
+/** Each recommendation's dismiss button is at least 24px square and clear of its Add button. */
+async function expectDismissHitAreas(page: Page) {
+  for (const s of await page.getByTestId('suggestion').all()) {
+    const dismiss = (await s.getByTestId('dismiss-suggestion').boundingBox())!
+    const add = (await s.getByTestId('pick-suggestion').boundingBox())!
+    expect(dismiss.width).toBeGreaterThanOrEqual(24)
+    expect(dismiss.height).toBeGreaterThanOrEqual(24)
+    expect(overlaps(dismiss, add)).toBe(false)
+  }
+}
+
+test('dismissing a recommendation in the graph removes it, updates the count and lets a later run suggest it again', async ({ users }) => {
+  test.setTimeout(150_000)
+  const [ada] = await users(['Schema ada'])
+  const page = ada.page
+  await calm(page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await newWorkspaceWithStarters(page, 'Dismiss in graph')
+  const graph = page.getByTestId('workspace-graph')
+  await expect(graph).toHaveAttribute('data-mode', 'graph')
+  const suggestions = page.getByTestId('suggestion')
+  await expect(graph).toContainText('0 papers · 2 recommended')
+  await expect(page.getByTestId('workspace-continue')).toContainText('Add one of the recommended papers below, or paste a link.')
+  await expectDismissHitAreas(page)
+
+  // Fixture lookups give every paper the same title, so cards are told apart by arXiv id.
+  const [firstArxiv, secondArxiv] = await suggestions.evaluateAll((els) => els.map((el) => el.getAttribute('data-arxiv') ?? ''))
+  const firstCard = page.locator(`[data-testid="suggestion"][data-arxiv="${firstArxiv}"]`)
+  const secondCard = page.locator(`[data-testid="suggestion"][data-arxiv="${secondArxiv}"]`)
+  await firstCard.getByRole('button', { name: `Dismiss recommendation ${await suggestionTitle(firstCard)}`, exact: true }).click()
+  await expect(suggestions).toHaveCount(1)
+  await expect(firstCard).toHaveCount(0)
+  await expect(graph).toContainText('0 papers · 1 recommended')
+  // The removed button had focus, so focus moves to the dismiss button left in its place.
+  const secondDismiss = secondCard.getByRole('button', { name: `Dismiss recommendation ${await suggestionTitle(secondCard)}`, exact: true })
+  await expect(secondDismiss).toBeFocused()
+
+  // The dismissal is saved on the workspace.
+  await page.reload()
+  await expect(page.getByTestId('workspace-name')).toBeVisible({ timeout: 15_000 })
+  await expect(suggestions).toHaveCount(1, { timeout: 15_000 })
+  await expect(firstCard).toHaveCount(0)
+
+  // Dismissing the last one from the keyboard leaves the empty workspace's guidance, and focus goes to Recommend.
+  await expect(secondDismiss).toBeEnabled()
+  await secondDismiss.focus()
+  await page.keyboard.press('Enter')
+  await expect(suggestions).toHaveCount(0)
+  await expect(graph).not.toContainText('recommended')
+  await expect(graph).toContainText('Get recommendations or paste a link to add the first paper.')
+  await expect(page.getByTestId('workspace-continue')).toContainText('Pick a paper to start.')
+  await expect(page.getByTestId('recommend-button')).toBeFocused()
+
+  // Nothing is blocked: a new run may suggest the dismissed papers again.
+  await page.getByTestId('recommend-button').click()
+  await expect(suggestions).toHaveCount(2, { timeout: 15_000 })
+  await expect(firstCard).toHaveCount(1)
+})
+
 test('Add flow, paper path: look up, suggested workspace name, bad links leave nothing behind', async ({ users }) => {
   test.setTimeout(150_000)
   const [ada] = await users(['Schema ada'])

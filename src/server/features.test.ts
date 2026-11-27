@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { branchProgress, cleanBranches, OTHER_BRANCH, paperProgress } from '../lib/graph/branches'
-import { candidateSuggestions, paperStatus, withFinished, withoutPaper, withPaper, withStatus } from '../lib/workspace'
+import { candidateSuggestions, paperStatus, withFinished, withoutPaper, withoutSuggestion, withPaper, withStatus } from '../lib/workspace'
 import { extractCandidates, needsLoad, LOADING_STALE_MS } from './branch-resources'
 import { candidatesFromResults, searchQueryFor } from './recommend'
 import { excerptAround } from './explain-concept'
@@ -87,6 +87,18 @@ describe('workspace papers', () => {
       { arxivId: '9', title: 'Nine', authors: [], reason: '' },
     ]
     expect(candidateSuggestions(s, base).map((x) => x.arxivId)).toEqual(['9'])
+  })
+  it('dismissing a suggestion removes only that entry and keeps the order', () => {
+    const s = [
+      { arxivId: '7', title: 'Seven', authors: ['A'], reason: 'r7' },
+      { arxivId: '8', title: 'Eight', authors: [], reason: 'r8' },
+      { arxivId: '9', title: 'Nine', authors: [], reason: 'r9' },
+    ]
+    expect(withoutSuggestion(s, '8')).toEqual([s[0], s[2]])
+    expect(s).toHaveLength(3)
+    expect(withoutSuggestion(s, 'missing')).toEqual(s)
+    expect(withoutSuggestion(withoutSuggestion(s, '7'), '9').map((x) => x.arxivId)).toEqual(['8'])
+    expect(withoutSuggestion(null, '7')).toEqual([])
   })
 })
 

@@ -1,13 +1,14 @@
 /**
  * Node cards for the floating graphs: paper and branch nodes (buttons),
- * candidate paper nodes (dashed, with an Add action), and the center cards.
+ * candidate paper nodes (dashed, with Add and dismiss actions), and the
+ * center cards. The dismiss button is shared with the workspace list view.
  */
 
 import { forwardRef, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { Meter } from '../blueprint'
 import { Button } from '../ui'
-import { PlusIcon } from '../icons'
+import { CloseIcon, PlusIcon } from '../icons'
 
 const nodeBase = 'press block w-full cursor-pointer select-none rounded border border-transparent bg-card px-3.5 py-3 text-left'
 // Kept as separate whole strings so the ring and the resting shadow never compete in one class list.
@@ -116,20 +117,63 @@ export function PaperNode({
   )
 }
 
-export function CandidateNode({ title, reason, meta, busy, disabled, onAdd }: { title: string; reason: string; meta: string; busy?: boolean; disabled?: boolean; onAdd: () => void }) {
+export function CandidateNode({
+  arxivId,
+  title,
+  reason,
+  meta,
+  busy,
+  disabled,
+  dismissDisabled,
+  onAdd,
+  onDismiss,
+}: {
+  arxivId: string
+  title: string
+  reason: string
+  meta: string
+  busy?: boolean
+  disabled?: boolean
+  dismissDisabled?: boolean
+  onAdd: () => void
+  onDismiss: () => void
+}) {
   return (
     <div
       className="graph-w-paper rounded border border-dashed border-[color-mix(in_oklab,var(--color-primary)_45%,var(--color-border))] bg-[color-mix(in_oklab,var(--color-card)_85%,transparent)] px-3.5 py-3"
       data-testid="suggestion"
+      data-arxiv={arxivId}
     >
-      <span className="label block text-primary">Recommended</span>
-      <span className="mt-1 line-clamp-2 block text-sm font-semibold leading-snug">{title}</span>
+      {/* The negative margins keep the 30px button from making the label row taller. */}
+      <span className="flex items-center justify-between gap-2">
+        <span className="label block text-primary">Recommended</span>
+        <DismissSuggestionButton title={title} disabled={dismissDisabled} onDismiss={onDismiss} className="-my-[7px] -mr-2" />
+      </span>
+      <span className="mt-1 line-clamp-2 block text-sm font-semibold leading-snug" data-testid="suggestion-title">{title}</span>
       <span className="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">{meta}</span>
       <span className="mt-1.5 line-clamp-2 block text-xs text-muted-foreground" title={reason}>{reason}</span>
       <Button size="sm" variant="outline" className="mt-2" loading={busy} disabled={disabled} onClick={onAdd} data-testid="pick-suggestion">
         <PlusIcon size={13} /> Add
       </Button>
     </div>
+  )
+}
+
+/** Removes a recommendation from the workspace. Used by the graph's candidate cards and the list view's rows. */
+export function DismissSuggestionButton({ title, disabled, onDismiss, className }: { title: string; disabled?: boolean; onDismiss: () => void; className?: string }) {
+  return (
+    <Button
+      size="icon"
+      variant="ghost"
+      className={cn('flex-none text-muted-foreground hover:text-foreground', className)}
+      aria-label={`Dismiss recommendation ${title}`}
+      title="Dismiss"
+      disabled={disabled}
+      onClick={onDismiss}
+      data-testid="dismiss-suggestion"
+    >
+      <CloseIcon size={16} />
+    </Button>
   )
 }
 

@@ -2,14 +2,15 @@
  * The signed-in reader's workspaces (own-only collection) and the papers in
  * each, one `workspace_papers` row per paper. Workspaces from before the rows
  * existed keep a `papers` list; on first load it is copied into rows and
- * emptied, and until then both are read.
+ * emptied, and until then both are read. Dismissing a recommendation removes
+ * it from the workspace's `suggestions` list.
  */
 
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useAuth, useMutations, useQuery } from 'deepspace'
 import type { RecordData } from 'deepspace'
 import type { WorkspaceData, WorkspacePaper, WorkspacePaperData } from '../types'
-import { paperStatus } from '../lib/workspace'
+import { paperStatus, withoutSuggestion } from '../lib/workspace'
 
 export interface WorkspacesApi {
   ready: boolean
@@ -23,6 +24,8 @@ export interface WorkspacesApi {
   papersOf: (id: string) => WorkspacePaper[]
   create: (name: string, description: string) => Promise<string | null>
   update: (id: string, patch: Partial<Pick<WorkspaceData, 'name' | 'description'>>) => Promise<void>
+  /** Removes one recommendation from the workspace's suggestions. */
+  dismissSuggestion: (id: string, arxivId: string) => Promise<void>
   remove: (id: string) => Promise<void>
   touch: (id: string) => Promise<void>
   markFinished: (id: string, paperId: string) => Promise<void>
@@ -113,6 +116,37 @@ export function useWorkspaces(): WorkspacesApi {
   )
 
   const update = useCallback<WorkspacesApi['update']>((id, patch) => m.put(id, patch), [m])
+
+  // Dismissals sent but not yet back in the query, per workspace. A second dismissal made before the
+  // first one arrives would otherwise write the stale list and bring the first suggestion back.
+  const dismissing = useRef(new Map<string, Set<string>>())
+  const byIdRef = useRef(byId)
+  byIdRef.current = byId
+  useEffect(() => {
+    for (const [id, pending] of dismissing.current) {
+      const shown = new Set((byId.get(id)?.data.suggestions ?? []).map((s) => s.arxivId))
+      for (const arxivId of pending) if (!shown.has(arxivId)) pending.delete(arxivId)
+      if (!pending.size) dismissing.current.delete(id)
+    }
+  }, [byId])
+  const dismissSuggestion = useCallback<WorkspacesApi['dismissSuggestion']>(
+    async (id, arxivId) => {
+      const ws = byIdRef.current.get(id)
+      if (!ws) return
+      const pending = dismissing.current.get(id) ?? new Set<string>()
+      pending.add(arxivId)
+      dismissing.current.set(id, pending)
+      let next = ws.data.suggestions ?? []
+      for (const a of pending) next = withoutSuggestion(next, a)
+      try {
+        await m.put(id, { suggestions: next })
+      } catch (e) {
+        pending.delete(arxivId)
+        throw e
+      }
+    },
+    [m],
+  )
   const remove = useCallback(
     async (id: string) => {
       for (const r of paperRows.get(id)?.values() ?? []) await pm.remove(r.recordId)
@@ -189,6 +223,7 @@ export function useWorkspaces(): WorkspacesApi {
     papersOf,
     create,
     update,
+    dismissSuggestion,
     remove,
     touch,
     markFinished,

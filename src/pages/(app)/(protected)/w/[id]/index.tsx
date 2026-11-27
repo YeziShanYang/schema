@@ -1,9 +1,12 @@
 /**
  * Workspace view: a floating graph of the workspace's papers around the
  * workspace name, with recommended papers as dashed candidate nodes that can
- * be added. A bar at the top says where to continue. Data comes from
- * useWorkspaceGraph; clicking a paper opens its paper window. Removing the
- * workspace keeps its papers in the Library (useLibrary removeWorkspace).
+ * be added or dismissed. Dismissing takes the paper out of the workspace's
+ * suggestions (useWorkspaces dismissSuggestion), with no confirm, and a later
+ * recommendation run may suggest it again. A bar at the top says where to
+ * continue. Data comes from useWorkspaceGraph; clicking a paper opens its
+ * paper window. Removing the workspace keeps its papers in the Library
+ * (useLibrary removeWorkspace).
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -40,6 +43,8 @@ export default function WorkspacePage() {
   const [adding, setAdding] = useState('')
   const [confirmRemove, setConfirmRemove] = useState(false)
   const location = useLocation()
+  const recommendButton = useRef<HTMLButtonElement>(null)
+  const viewRegion = useRef<HTMLDivElement>(null)
 
   const touched = useRef('')
   const { touch, ready } = g.workspaces
@@ -83,6 +88,17 @@ export default function WorkspacePage() {
     ).nextUp
   }, [continuePaper, contConcepts.records, knowledge.statusOf])
 
+  // A dismissal removes the focused button with its card, so focus moves to the dismiss button now in the
+  // same place, or to Recommend when no recommendation is left.
+  const refocus = useRef<{ arxivId: string; index: number } | null>(null)
+  useEffect(() => {
+    const r = refocus.current
+    if (!r || g.candidates.some((s) => s.arxivId === r.arxivId)) return
+    refocus.current = null
+    const buttons = viewRegion.current?.querySelectorAll<HTMLButtonElement>('[data-testid="dismiss-suggestion"]') ?? []
+    ;(buttons[Math.min(r.index, buttons.length - 1)] ?? recommendButton.current)?.focus()
+  }, [g.candidates])
+
   if (g.loading) return <div className="p-6 text-muted-foreground">Loading…</div>
   if (!ws) {
     return (
@@ -106,6 +122,19 @@ export default function WorkspacePage() {
     const r = await actions.analyzePaper(arxivId, id)
     setAdding('')
     if (!r.success) setError(r.error)
+  }
+
+  async function dismiss(arxivId: string) {
+    setError('')
+    if (document.activeElement?.closest('[data-testid="dismiss-suggestion"]')) {
+      refocus.current = { arxivId, index: g.candidates.findIndex((s) => s.arxivId === arxivId) }
+    }
+    try {
+      await g.workspaces.dismissSuggestion(id, arxivId)
+    } catch {
+      refocus.current = null
+      setError('Could not dismiss the recommendation. Try again.')
+    }
   }
 
   const open = (arxivId: string) => navigate(`/w/${id}/p/${arxivSlug(arxivId)}`)
@@ -150,12 +179,15 @@ export default function WorkspacePage() {
       dashed: true,
       content: (
         <CandidateNode
+          arxivId={s.arxivId}
           title={s.title}
           reason={s.reason}
           meta={`${s.authors?.[0]?.split(' ').slice(-1)[0] ?? ''}${(s.authors?.length ?? 0) > 1 ? ' et al.' : ''} · arXiv ${s.arxivId}`}
           busy={adding === s.arxivId}
           disabled={!!adding && adding !== s.arxivId}
+          dismissDisabled={!g.workspaces.ready || adding === s.arxivId}
           onAdd={() => add(s.arxivId)}
+          onDismiss={() => dismiss(s.arxivId)}
         />
       ),
     })),
@@ -173,7 +205,7 @@ export default function WorkspacePage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" loading={busy} onClick={recommend} data-testid="recommend-button">
+          <Button ref={recommendButton} variant="outline" loading={busy} onClick={recommend} data-testid="recommend-button">
             <SparkIcon size={15} /> {g.papers.length ? 'Recommend next paper' : 'Recommend papers'}
           </Button>
           <AddButton workspaceId={id} label="Add paper" testId="add-paper-open" />
@@ -203,7 +235,7 @@ export default function WorkspacePage() {
 
       <FirstRunPrompt className="mx-5 mt-4 md:mx-7" />
 
-      <div className="relative flex flex-1 flex-col">
+      <div ref={viewRegion} className="relative flex flex-1 flex-col">
         <FloatingGraph label={`Papers in ${ws.data.name}`} testId="workspace-graph" className="min-h-[560px] flex-1" center={center} nodes={nodes} />
       </div>
 
